@@ -11,7 +11,7 @@
  *   - **1 gateway tool** (`yootheme_builder_advanced`) registered
  *     additionally by `registerAdvancedTool()`.
  *   - **24 tools total** dispatchable end-to-end (23 + gateway).
- *   - **11 entries in `tools/list`** (8 essential forwarded + 2 direct
+ *   - **16 entries in `tools.list`** (8 essential forwarded + 2 direct
  *     top-level + 1 gateway), keeping us well under the Cursor
  *     ≤ ~40-tool cap even when the catalogue grows.
  *
@@ -56,8 +56,8 @@ describe('tool-count consistency (Round-1 audit I8)', () => {
         expect(DOMAIN_TOOL_COUNT).toBe(23);
     });
 
-    it('exposes 11 entries in tools/list (8 essential + 2 direct + 1 gateway)', () => {
-        expect(TOOLS_LIST_COUNT).toBe(11);
+    it('exposes 16 entries in tools.list (8 essential + 2 direct + 1 gateway)', () => {
+        expect(TOOLS_LIST_COUNT).toBe(16);
     });
 
     it('totals 24 tools end-to-end (23 domain + 1 gateway)', () => {
@@ -71,10 +71,10 @@ describe('tool-count consistency (Round-1 audit I8)', () => {
         expect(text).toMatch(/\b23\b\s+(domain\s+)?tool/i);
     });
 
-    it('README mentions the 11 tools/list entries (gateway-model)', () => {
+    it('README mentions the 16 tools.list entries (gateway-model)', () => {
         const text = readFile('README.md');
         // The README must clarify the gateway model so users
-        // understand why their AI client only "sees" 11 tools.
+        // understand why their AI client only "sees" 16 tools.
         expect(text).toMatch(/\b11\b/);
     });
 

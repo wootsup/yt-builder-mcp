@@ -2,7 +2,7 @@
  * Pin-tests for the gateway essentials manifest.
  *
  * These pins enforce Wave G.1 design intent:
- *   - ESSENTIAL_TOOLS = the 8 L1 tools forwarded as first-class entries.
+ *   - ESSENTIAL_TOOLS = the 13 L1 tools forwarded as first-class entries.
  *   - DIRECT_TOP_LEVEL_TOOLS = the 2 L3 tools registered directly on the
  *     real McpServer (health + diagnose) — they bypass the CapturingServer.
  *   - The two sets are disjoint.
@@ -20,8 +20,8 @@ import {
 } from '../../src/gateway/essentials.js';
 
 describe('gateway essentials manifest', () => {
-    it('ESSENTIAL_TOOLS has exactly 8 entries (L1 forwarded surface)', () => {
-        expect(ESSENTIAL_TOOLS.length).toBe(8);
+    it('ESSENTIAL_TOOLS has exactly 13 entries (L1 forwarded surface)', () => {
+        expect(ESSENTIAL_TOOLS.length).toBe(13);
     });
 
     it('DIRECT_TOP_LEVEL_TOOLS has exactly 2 entries (L3 direct surface: health + diagnose)', () => {
@@ -30,7 +30,7 @@ describe('gateway essentials manifest', () => {
         expect(DIRECT_TOP_LEVEL_TOOLS).toContain('yootheme_builder_diagnose');
     });
 
-    it('ESSENTIAL_TOOLS contains the 8 expected canonical L1 names', () => {
+    it('ESSENTIAL_TOOLS contains the 13 expected canonical L1 names', () => {
         expect([...ESSENTIAL_TOOLS].sort()).toEqual(
             [
                 'yootheme_builder_pages_list',
@@ -41,6 +41,12 @@ describe('gateway essentials manifest', () => {
                 'yootheme_builder_sources_list',
                 'yootheme_builder_element_types_list',
                 'yootheme_builder_inspect_multi_items_binding',
+                // F-16 (Audit v2): 5 hot-path tools promoted to L1.
+                'yootheme_builder_element_get',
+                'yootheme_builder_element_delete',
+                'yootheme_builder_element_clone',
+                'yootheme_builder_element_move',
+                'yootheme_builder_page_get_layout',
             ].sort(),
         );
     });

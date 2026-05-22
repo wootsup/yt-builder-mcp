@@ -143,7 +143,7 @@ describe('CapturingServer', () => {
             async () => ({ content: [] }),
         );
         capturing.registerTool(
-            'yootheme_builder_element_delete',
+            'yootheme_builder_element_unbind_source',
             {
                 description: 'ed',
                 inputSchema: { id: z.string(), confirm: z.boolean() },
@@ -159,7 +159,7 @@ describe('CapturingServer', () => {
 
         const captured = [...capturing.getAdvancedRegistry().keys()].sort();
         expect(captured).toEqual([
-            'yootheme_builder_element_delete',
+            'yootheme_builder_element_unbind_source',
             'yootheme_builder_page_save',
         ]);
     });

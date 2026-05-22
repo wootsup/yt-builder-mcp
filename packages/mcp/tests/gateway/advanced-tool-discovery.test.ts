@@ -54,9 +54,9 @@ describe('yootheme_builder_advanced — discovery mode', () => {
         const all = collectAllRegisteredTools(mcp, capturing);
         const gateway = all.yootheme_builder_advanced!;
 
-        const result = await gateway.handler({ tool: 'yootheme_builder_element_delete' });
+        const result = await gateway.handler({ tool: 'yootheme_builder_element_unbind_source' });
         const text = result.content[0]!.text;
-        expect(text).toContain('Discovery for yootheme_builder_element_delete');
+        expect(text).toContain('Discovery for yootheme_builder_element_unbind_source');
         expect(text).toContain('Call yootheme_builder_advanced again');
     });
 });

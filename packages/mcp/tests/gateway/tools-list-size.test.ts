@@ -2,7 +2,7 @@
  * Pin-tests for the Cursor-cap-safe `tools/list` surface.
  *
  * After Wave G.1, an LLM-host enumerating `tools/list` MUST see exactly
- * 11 entries (8 L1 essentials + 2 L3 direct + 1 gateway). Every other
+ * 16 entries (13 L1 essentials + 2 L3 direct + 1 gateway). Every other
  * tool reachable through `yootheme_builder_advanced`. The total tool
  * count across BOTH surfaces is exactly 24.
  *
@@ -36,13 +36,13 @@ function realToolNames(server: ReturnType<typeof createServer>['mcp']): string[]
 }
 
 describe('tools/list surface (Cursor-cap-safe)', () => {
-    it('the real server exposes exactly 11 tools: 8 L1 + 2 L3 + 1 gateway', () => {
+    it('the real server exposes exactly 16 tools: 13 L1 + 2 L3 + 1 gateway', () => {
         const { mcp } = createServer({ client: makeClient() });
         const names = realToolNames(mcp).sort();
-        expect(names.length).toBe(11);
+        expect(names.length).toBe(16);
     });
 
-    it('the 8 L1 essentials are all on the real server', () => {
+    it('the 13 L1 essentials are all on the real server', () => {
         const { mcp } = createServer({ client: makeClient() });
         const names = realToolNames(mcp);
         for (const name of ESSENTIAL_TOOLS) {
@@ -69,10 +69,11 @@ describe('tools/list surface (Cursor-cap-safe)', () => {
         expect(Object.keys(all).length).toBe(24);
     });
 
-    it('the L2 advanced surface holds exactly 13 captured tools', () => {
-        // L2 = all tools - L1 (8 essentials) - L3 (2 direct) - gateway (1) = 13
+    it('the L2 advanced surface holds exactly 8 captured tools', () => {
+        // L2 = all tools - L1 (13 essentials) - L3 (2 direct) - gateway (1) = 8
+        // F-16 (Audit v2): 5 hot-path tools promoted L2 → L1, shrinking L2.
         const { capturing } = createServer({ client: makeClient() });
-        expect(capturing.getAdvancedRegistry().size).toBe(13);
+        expect(capturing.getAdvancedRegistry().size).toBe(8);
     });
 
     it('no L1 essential leaks into the advanced registry (lane disjoint)', () => {

@@ -33,9 +33,36 @@ describe('annotation pin tests (all lanes)', () => {
         for (const [name, tool] of Object.entries(all)) {
             const ann = tool.annotations ?? {};
             if (ann.destructiveHint === true) {
-                const schema = tool.inputSchema as Record<string, unknown> | undefined;
+                // F-16 (2026-05-22): destructive tools now span lanes. L2
+                // advanced tools carry the raw `defineTool`-shape map; L1
+                // tools registered via `mcp.registerTool` may surface a
+                // zod ZodObject. Accept both representations.
+                const schema = tool.inputSchema as unknown;
+                let hasConfirm = false;
+                if (schema && typeof schema === 'object') {
+                    const s = schema as Record<string, unknown>;
+                    if ('confirm' in s) {
+                        hasConfirm = true;
+                    } else if (
+                        'shape' in s &&
+                        s.shape &&
+                        typeof s.shape === 'object' &&
+                        'confirm' in (s.shape as Record<string, unknown>)
+                    ) {
+                        hasConfirm = true;
+                    } else if (
+                        '_def' in s &&
+                        s._def &&
+                        typeof s._def === 'object' &&
+                        'shape' in (s._def as Record<string, unknown>) &&
+                        typeof (s._def as { shape?: unknown }).shape === 'function'
+                    ) {
+                        const shapeFn = (s._def as { shape: () => Record<string, unknown> }).shape;
+                        hasConfirm = 'confirm' in shapeFn();
+                    }
+                }
                 expect(
-                    schema && 'confirm' in schema,
+                    hasConfirm,
                     `${name} marked destructive but has no \`confirm\` input field`,
                 ).toBe(true);
             }

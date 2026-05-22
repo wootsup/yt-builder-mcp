@@ -52,7 +52,7 @@ function makePopulatedCapturing(): { real: McpServer; capturing: CapturingServer
         }),
     );
     capturing.registerTool(
-        'yootheme_builder_element_delete',
+        'yootheme_builder_element_unbind_source',
         {
             description: 'Delete an element',
             inputSchema: {
@@ -80,7 +80,7 @@ describe('registerAdvancedTool', () => {
         registerAdvancedTool(real, capturing.getAdvancedRegistry());
         const t = getRealTool(real, 'yootheme_builder_advanced');
         expect(t.description).toContain('yootheme_builder_page_save');
-        expect(t.description).toContain('yootheme_builder_element_delete');
+        expect(t.description).toContain('yootheme_builder_element_unbind_source');
     });
 
     it('discovery mode: returns inputSchema + annotations for a known tool', async () => {
