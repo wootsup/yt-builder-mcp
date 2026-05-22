@@ -55,7 +55,17 @@ if (!function_exists('update_option')) {
      */
     function update_option(string $option, $value, ?bool $autoload = null): bool
     {
+        // Test sentinel: when `ytb_test_update_option_force_return` is set,
+        // the stub returns the configured value (typically false to emulate
+        // the "no-op" return path) WHILE still persisting the value. This
+        // lets LayoutWriter's T6 verify-read logic prove it does not throw
+        // on a no-op write that already holds the expected value.
         $GLOBALS['ytb_test_options'][$option] = $value;
+        if (array_key_exists('ytb_test_update_option_force_return', $GLOBALS)) {
+            /** @var bool $forced */
+            $forced = $GLOBALS['ytb_test_update_option_force_return'];
+            return $forced;
+        }
         return true;
     }
 }
@@ -66,6 +76,15 @@ if (!function_exists('add_option')) {
      */
     function add_option(string $option, $value = '', string $deprecated = '', ?bool $autoload = null): bool
     {
+        // Track add_option calls so T6 R-01 tests can pin "first-write uses
+        // add_option with explicit autoload=false".
+        if (!isset($GLOBALS['ytb_test_add_option_calls']) || !is_array($GLOBALS['ytb_test_add_option_calls'])) {
+            $GLOBALS['ytb_test_add_option_calls'] = [];
+        }
+        $GLOBALS['ytb_test_add_option_calls'][] = [
+            'option' => $option,
+            'autoload' => $autoload,
+        ];
         if (array_key_exists($option, $GLOBALS['ytb_test_options'])) {
             return false;
         }

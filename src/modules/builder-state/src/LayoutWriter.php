@@ -208,6 +208,19 @@ final class LayoutWriter
      * real failures), we re-read after the call and assert the option
      * holds the expected value.
      *
+     * T6 R-01 belt-and-braces (Maria-Audit 2026-05-22):
+     *   1) First write uses add_option(...,$value,'',autoload=false) so the
+     *      option is created with the documented autoload setting; subsequent
+     *      writes use update_option(...,null) which preserves it.
+     *   2) Before the verify-read, wp_cache_delete() invalidates both the
+     *      per-option cache key AND the `alloptions` bucket. Object-cache
+     *      backends (Redis/Memcached/W3TC) otherwise return stale values from
+     *      get_option() and the byte-equality assertion would spuriously fail.
+     *   3) update_option returning false is no longer interpreted as failure
+     *      on its own — the verify-read alone decides success. A no-op write
+     *      (state byte-equals current) returns false but is correct; a real
+     *      persistence failure surfaces as a verify-read mismatch.
+     *
      * @param array<string, mixed> $state
      *
      * @throws \RuntimeException When the option does not reflect the write
@@ -216,8 +229,27 @@ final class LayoutWriter
      */
     private function persist(array $state): void
     {
-        // Pass `null` for autoload to preserve the existing setting.
-        \update_option(LayoutReader::OPTION, $state, null);
+        // T6 R-01 (1): first-write uses add_option with explicit
+        // autoload=false. \get_option returns the documented WP default of
+        // `false` when the option is absent, but a real value can also be
+        // false-y. We therefore use the existence sentinel produced by
+        // passing a distinct default to detect "option does not exist yet".
+        $optionExists = \get_option(LayoutReader::OPTION, '__ytb_mcp_absent__') !== '__ytb_mcp_absent__';
+        if (!$optionExists) {
+            \add_option(LayoutReader::OPTION, $state, '', false);
+        } else {
+            // Pass `null` for autoload to preserve the existing setting.
+            \update_option(LayoutReader::OPTION, $state, null);
+        }
+
+        // T6 R-01 (2): invalidate object-cache before verify-read so a
+        // stale wp_object_cache backend doesn't fail us. Both the per-key
+        // entry and the alloptions bucket need flushing because autoload
+        // options live inside alloptions on a single cache key.
+        if (function_exists('wp_cache_delete')) {
+            \wp_cache_delete(LayoutReader::OPTION, 'options');
+            \wp_cache_delete('alloptions', 'options');
+        }
 
         /** @var mixed $verify */
         $verify = \get_option(LayoutReader::OPTION, null);

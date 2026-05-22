@@ -149,6 +149,81 @@ final class LayoutWriterTest extends TestCase
         self::assertNotSame($before, $after);
     }
 
+    // ------------------------------------------------------------------
+    // T6 / R-01 — belt-and-braces: cache-delete before verify-read; handle
+    // update_option no-op when verify byte-equals state; first-write uses
+    // add_option with explicit autoload=false.
+    // ------------------------------------------------------------------
+
+    public function test_persist_invalidates_object_cache_before_verify_read(): void
+    {
+        // T6 R-01: writes must invalidate the wp_object_cache entries for
+        // the option BEFORE the verify-read. Otherwise an object-cache
+        // backend (Redis/Memcached/W3TC) returns stale `get_option` and
+        // the write throws a spurious 500.
+        $GLOBALS['ytb_test_cache_delete_calls'] = [];
+        $writer = new LayoutWriter(new LayoutReader());
+        $writer->writeTemplate('tpl', [
+            'name' => 'After',
+            'layout' => ['type' => 'layout', 'children' => []],
+        ]);
+        $keys = array_map(
+            static fn (array $c): string => ($c['group'] ?? '') . ':' . $c['key'],
+            $GLOBALS['ytb_test_cache_delete_calls'],
+        );
+        // Both the per-option entry AND alloptions must be invalidated —
+        // alloptions is what holds autoloaded options in a single cache key.
+        self::assertContains('options:yootheme', $keys, 'expected wp_cache_delete(yootheme, options)');
+        self::assertContains('options:alloptions', $keys, 'expected wp_cache_delete(alloptions, options)');
+    }
+
+    public function test_persist_treats_update_option_noop_as_success(): void
+    {
+        // T6 R-01: when the state happens to byte-equal a previous state
+        // (no-op write), update_option returns false on real WP. The
+        // verify-read must succeed because the option already holds the
+        // expected value — we must NOT throw.
+        $writer = new LayoutWriter(new LayoutReader());
+        // Stamp the store with an identity state first.
+        $tree = ['name' => 'A', 'layout' => ['type' => 'layout', 'children' => []]];
+        $writer->writeTemplate('tpl', $tree);
+
+        // Simulate update_option returning false on the NEXT call (no-op).
+        $GLOBALS['ytb_test_update_option_force_return'] = false;
+        // The state-write itself is identity (we feed the same tree); the
+        // verify-read will see the persisted value. persist() should not throw.
+        $writer->writeTemplate('tpl', $tree);
+        unset($GLOBALS['ytb_test_update_option_force_return']);
+
+        // Survives — and the reader sees the expected value.
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        self::assertSame('A', $stored['name']);
+    }
+
+    public function test_persist_uses_add_option_with_autoload_false_on_first_write(): void
+    {
+        // T6 R-01: when wp_option('yootheme') does NOT yet exist, persist
+        // must use add_option(..., autoload=false). Subsequent writes via
+        // update_option(...,null) preserve the autoload=false setting.
+        unset($GLOBALS['ytb_test_options']['yootheme']);
+        $GLOBALS['ytb_test_add_option_calls'] = [];
+
+        $writer = new LayoutWriter(new LayoutReader());
+        $writer->writeTemplate('fresh', [
+            'name' => 'First',
+            'layout' => ['type' => 'layout', 'children' => []],
+        ]);
+
+        $matching = array_filter(
+            $GLOBALS['ytb_test_add_option_calls'],
+            static fn (array $c): bool => ($c['option'] ?? '') === 'yootheme',
+        );
+        self::assertNotEmpty($matching, 'expected add_option(yootheme, ...) on first write');
+        $first = array_values($matching)[0];
+        self::assertFalse($first['autoload'], 'expected autoload=false on first add_option');
+    }
+
     public function test_write_template_stamps_pages_meta_store(): void
     {
         // F-08 fix (Maria-Audit 2026-05-22): writeTemplate must touch the
