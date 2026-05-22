@@ -168,7 +168,16 @@ class YoothemeAdapter
         if (!$this->isLoaded()) {
             return null;
         }
-        if (!class_exists('\\YOOtheme\\Builder', false)) {
+        // F-05 v2 (2026-05-22): allow the composer-autoloader to resolve
+        // `\YOOtheme\Builder` on cold REST boots. Same bug-class as the
+        // F-04 fix for `\YOOtheme\Builder\Source` (see getSourceFields).
+        // YT lazy-loads its Builder class via the autoloader; probing
+        // with the second arg `false` (no autoload) returns false on
+        // a fresh request and the getBuilder() path silently bails →
+        // every downstream caller (getBuilderTypes, getBuilderTypesDetailed,
+        // getBuilderTypeConfig) returns null and Inspector falls back to
+        // the FALLBACK_CATALOG with empty per-type fields.
+        if (!class_exists('\\YOOtheme\\Builder')) {
             return null;
         }
         $appFn = '\\YOOtheme\\app';
@@ -358,21 +367,49 @@ class YoothemeAdapter
      * Return the live YOOtheme Builder element-type names. Null on any
      * failure — caller falls back to a static list.
      *
+     * F-05 (Maria-Audit v2 2026-05-22): YT 4.5.33 keeps the registry as
+     * an instance property `$builder->types` (an array of `ElementType`
+     * objects), with NO static accessor methods on `\YOOtheme\Builder`.
+     * The previous probe `Builder::getTypes()` is unreachable on YT 4.x
+     * (method_exists is always false) so the adapter silently returned
+     * null and downstream callers fell through to FALLBACK_CATALOG.
+     *
+     * Read the instance property first. Keep the static-method path as
+     * defense-in-depth for any future YT-5+ release that may expose a
+     * static accessor.
+     *
      * @return list<string>|null
      */
     public function getBuilderTypes(): ?array
     {
-        if (!class_exists('\\YOOtheme\\Builder', false)) {
+        // F-05 v2 (2026-05-22): allow autoload so the YT class-map can
+        // resolve `\YOOtheme\Builder` on cold REST boots. See getBuilder()
+        // for the full root-cause analysis (same lazy-load behaviour as
+        // `\YOOtheme\Builder\Source`).
+        if (!class_exists('\\YOOtheme\\Builder')) {
             return null;
         }
         try {
+            // 1. Instance access via YT DI container — canonical on YT 4.x.
+            $builder = $this->getBuilder();
+            if ($builder !== null && isset($builder->types) && is_array($builder->types)) {
+                /** @var array<int|string, mixed> $types */
+                $types = $builder->types;
+                $out = [];
+                foreach (array_keys($types) as $key) {
+                    $out[] = (string) $key;
+                }
+                return $out;
+            }
+            // 2. Defense-in-depth: static-accessor probe for future YT
+            //    versions that may expose Builder::getTypes().
             /** @var class-string $builderClass */
             $builderClass = 'YOOtheme\\Builder';
             if (!method_exists($builderClass, 'getTypes')) {
                 return null;
             }
             /** @var mixed $types */
-            $types = $builderClass::getTypes();
+            $types = $builderClass::getTypes(); // @phpstan-ignore-line
             if (!is_array($types)) {
                 return null;
             }
@@ -408,37 +445,126 @@ class YoothemeAdapter
      */
     public function getBuilderTypesDetailed(): ?array
     {
-        if (!class_exists('\\YOOtheme\\Builder', false)) {
+        // F-05 v2 (2026-05-22): allow autoload so the YT class-map can
+        // resolve `\YOOtheme\Builder` on cold REST boots. See getBuilder()
+        // for the full root-cause analysis (same lazy-load behaviour as
+        // `\YOOtheme\Builder\Source`).
+        if (!class_exists('\\YOOtheme\\Builder')) {
             return null;
         }
         try {
-            /** @var class-string $builderClass */
-            $builderClass = 'YOOtheme\\Builder';
-            if (!method_exists($builderClass, 'getTypes')) {
+            // F-05 v2 (2026-05-22): YT 4.5.33 keeps the registry on the
+            // Builder instance — $builder->types is an array<string,
+            // ElementType>. Instance-access first, static-accessor as
+            // defense for future YT versions.
+            $rawTypes = null;
+            $builder = $this->getBuilder();
+            if ($builder !== null && isset($builder->types) && is_array($builder->types)) {
+                $rawTypes = $builder->types;
+            } else {
+                /** @var class-string $builderClass */
+                $builderClass = 'YOOtheme\\Builder';
+                if (method_exists($builderClass, 'getTypes')) {
+                    /** @var mixed $maybe */
+                    $maybe = $builderClass::getTypes(); // @phpstan-ignore-line
+                    if (is_array($maybe)) {
+                        $rawTypes = $maybe;
+                    }
+                }
+            }
+            if ($rawTypes === null) {
                 return null;
             }
-            /** @var mixed $types */
-            $types = $builderClass::getTypes();
-            if (!is_array($types)) {
-                return null;
-            }
+
             $out = [];
-            foreach ($types as $name => $config) {
+            foreach ($rawTypes as $name => $config) {
                 if (!is_string($name) && !is_int($name)) {
                     continue;
                 }
                 $nameStr = (string) $name;
+                // ElementType wraps the raw config array under public ->data.
+                // self::extract* helpers accept array OR object; pass the
+                // unwrapped data when available so label/origin/has_children
+                // detection sees the actual fields.
+                $configForExtract = self::unwrapElementType($config);
                 $out[] = [
                     'name' => $nameStr,
-                    'label' => self::extractTypeLabel($nameStr, $config),
-                    'origin' => self::extractTypeOrigin($config),
-                    'has_children' => self::detectHasChildren($nameStr, $config),
+                    'label' => self::extractTypeLabel($nameStr, $configForExtract),
+                    'origin' => self::extractTypeOrigin($configForExtract),
+                    'has_children' => self::detectHasChildren($nameStr, $configForExtract),
                 ];
             }
             return $out;
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Unwrap a YT ElementType wrapper to its raw config array.
+     *
+     * YT 4.5.33 wraps each registered type in
+     * `\YOOtheme\Builder\ElementType` — a `\JsonSerializable` proxy whose
+     * `public array $data` carries the canonical type config (fields,
+     * fieldset, label, etc.). For internal projection we want the raw
+     * array. Caller passes ANY value (array / ElementType / unknown
+     * object); we return:
+     *   - the input itself if already an array,
+     *   - $object->data (when accessible) for ElementType-shaped objects,
+     *   - the result of ->getArrayCopy() / ->toArray() if available,
+     *   - the original input otherwise (callers handle non-array gracefully).
+     *
+     * @param mixed $config
+     * @return mixed
+     */
+    private static function unwrapElementType($config)
+    {
+        if (is_array($config)) {
+            return $config;
+        }
+        if (is_object($config)) {
+            // Direct public `data` property — YT 4.x ElementType shape.
+            if (isset($config->data) && is_array($config->data)) { // @phpstan-ignore-line
+                return $config->data; // @phpstan-ignore-line
+            }
+            if (method_exists($config, 'getArrayCopy')) {
+                try {
+                    /** @var mixed $copy */
+                    $copy = $config->getArrayCopy();
+                    if (is_array($copy)) {
+                        return $copy;
+                    }
+                } catch (\Throwable) {
+                    // fall through
+                }
+            }
+            if (method_exists($config, 'toArray')) {
+                try {
+                    /** @var mixed $arr */
+                    $arr = $config->toArray();
+                    if (is_array($arr)) {
+                        return $arr;
+                    }
+                } catch (\Throwable) {
+                    // fall through
+                }
+            }
+            // JsonSerializable fallback — ElementType implements it and
+            // strips render-only keys (templates/transforms/updates/path).
+            // That's exactly what we want for label/origin/has_children.
+            if ($config instanceof \JsonSerializable) {
+                try {
+                    /** @var mixed $serialized */
+                    $serialized = $config->jsonSerialize();
+                    if (is_array($serialized)) {
+                        return $serialized;
+                    }
+                } catch (\Throwable) {
+                    // fall through
+                }
+            }
+        }
+        return $config;
     }
 
     /**
@@ -457,10 +583,45 @@ class YoothemeAdapter
      */
     public function getBuilderTypeConfig(string $typeName): ?array
     {
-        if (!class_exists('\\YOOtheme\\Builder', false)) {
+        // F-05 v2 (2026-05-22): allow autoload so the YT class-map can
+        // resolve `\YOOtheme\Builder` on cold REST boots. See getBuilder()
+        // for the full root-cause analysis (same lazy-load behaviour as
+        // `\YOOtheme\Builder\Source`).
+        if (!class_exists('\\YOOtheme\\Builder')) {
             return null;
         }
         try {
+            // F-05 v2 (Maria-Audit 2026-05-22): YT 4.5.33 has NO static
+            // `Builder::getType()` method — the registry is the instance
+            // property `$builder->types[$name]` holding an `ElementType`
+            // wrapper whose public `->data` array is the canonical
+            // type-config (fields + fieldset).
+            //
+            // The previous probe `Builder::getType($name)` is unreachable
+            // on YT 4.x (method_exists is always false), so the adapter
+            // silently returned null and Inspector::schema() emitted
+            // `fields: []` for every type — AI clients had to guess props
+            // from layout examples. Reach for the instance property first;
+            // keep the static-method fallback for future YT-5+ releases.
+
+            // 1. Instance access via YT DI container.
+            $builder = $this->getBuilder();
+            if ($builder !== null && isset($builder->types) && is_array($builder->types)) {
+                /** @var array<string, mixed> $types */
+                $types = $builder->types;
+                if (!array_key_exists($typeName, $types)) {
+                    return null;
+                }
+                /** @var mixed $type */
+                $type = $types[$typeName];
+                $unwrapped = self::unwrapElementType($type);
+                if (is_array($unwrapped)) {
+                    /** @var array<string, mixed> $unwrapped */
+                    return $unwrapped;
+                }
+            }
+
+            // 2. Defense-in-depth: static-accessor probe for future YT.
             /** @var class-string $builderClass */
             $builderClass = 'YOOtheme\\Builder';
             if (!method_exists($builderClass, 'getType')) {
@@ -471,31 +632,8 @@ class YoothemeAdapter
             if ($type === null) {
                 return null;
             }
-            // YT::Builder::getType() returns a Type config object whose
-            // public properties / array-access carry the field-set. Two
-            // shapes are observed across YT versions: (a) plain array,
-            // (b) ArrayObject-ish wrapper exposing getArrayCopy(). Coerce
-            // to array defensively.
-            if (is_array($type)) {
-                /** @var array<string, mixed> $type */
-                return $type;
-            }
-            if (is_object($type)) {
-                if (method_exists($type, 'getArrayCopy')) {
-                    /** @var mixed $copy */
-                    $copy = $type->getArrayCopy();
-                    return is_array($copy) ? $copy : null;
-                }
-                if (method_exists($type, 'toArray')) {
-                    /** @var mixed $arr */
-                    $arr = $type->toArray();
-                    return is_array($arr) ? $arr : null;
-                }
-                // Best-effort: cast public properties.
-                $cast = (array) $type;
-                return $cast === [] ? null : $cast;
-            }
-            return null;
+            $unwrapped = self::unwrapElementType($type);
+            return is_array($unwrapped) ? $unwrapped : null;
         } catch (\Throwable) {
             return null;
         }
@@ -506,11 +644,28 @@ class YoothemeAdapter
      */
     private static function extractTypeLabel(string $name, $config): string
     {
-        if (is_array($config) && isset($config['label']) && is_string($config['label'])) {
-            return $config['label'];
+        // YT 4.5.33 stores the human-facing label under `title` in
+        // element.json; some configs/registrations also expose `label`.
+        // Probe both before falling back to the PascalCased type name.
+        if (is_array($config)) {
+            if (isset($config['title']) && is_string($config['title']) && $config['title'] !== '') {
+                return $config['title'];
+            }
+            if (isset($config['label']) && is_string($config['label']) && $config['label'] !== '') {
+                return $config['label'];
+            }
         }
-        if (is_object($config) && isset($config->label) && is_string($config->label)) { // @phpstan-ignore-line
-            return $config->label;
+        if (is_object($config)) {
+            /** @var mixed $title */
+            $title = $config->title ?? null; // @phpstan-ignore-line
+            if (is_string($title) && $title !== '') {
+                return $title;
+            }
+            /** @var mixed $label */
+            $label = $config->label ?? null; // @phpstan-ignore-line
+            if (is_string($label) && $label !== '') {
+                return $label;
+            }
         }
         return ucwords(str_replace(['_', '-'], ' ', $name));
     }
@@ -548,34 +703,57 @@ class YoothemeAdapter
      */
     private static function detectHasChildren(string $name, $config): bool
     {
-        // YT marks container types explicitly via `element: true` (the type
-        // accepts inner elements) OR via the `templates: { children: ... }`
-        // path. As a defensive default, the canonical container catalogue:
-        $knownContainers = [
-            'section', 'row', 'column', 'grid', 'grid_item',
-            'panel', 'switcher', 'switcher_item',
-            'tabs', 'tabs_item',
-            'modal', 'modal_item',
-            'lightbox', 'lightbox_item',
-            'slideshow', 'slideshow_item',
-            'slider', 'slider_item',
-            'gallery', 'gallery_item',
-            'accordion', 'accordion_item',
-            'social', 'social_item',
-            'button_group', 'button_group_item',
-            'map_marker',
-        ];
-        if (in_array($name, $knownContainers, true)) {
-            return true;
-        }
+        // F-05 v2 (Maria-Audit 2026-05-22): YT 4.5.33 signals "type holds
+        // child elements" via the explicit `container: true` flag on the
+        // type config (verified live: section/row/column/grid/switcher/
+        // accordion/button/panel are all flagged; *_item leaves are not).
+        // The old code probed `element: true` which is wrong — `element`
+        // means "is a renderable Builder element", a flag set on EVERY
+        // visible type (including leaves like headline / text / image).
+        //
+        // Order:
+        //   1. Explicit `container: true` flag from config.
+        //   2. Defensive known-container catalogue (covers cases where
+        //      type-config was unwrapped to a stripped JsonSerialize copy
+        //      that omitted `container`).
+        //   3. `templates.children` / `fieldset.children` shape hints.
         if (is_array($config)) {
-            if (isset($config['element']) && $config['element'] === true) {
+            if (isset($config['container']) && $config['container'] === true) {
                 return true;
             }
             // Some types declare children via fieldset.children.fields
             if (isset($config['fieldset']['children'])) {
                 return true;
             }
+            if (isset($config['templates']) && is_array($config['templates'])
+                && array_key_exists('children', $config['templates'])
+            ) {
+                return true;
+            }
+        }
+        // Defensive default — canonical YT 4.5.33 container catalogue.
+        // Source of truth:
+        //   • Structural containers (3): `section`, `row`, `column` —
+        //     always accept children (no `*_item` child type).
+        //   • Multi-item containers + items (16 pairs): the canonical
+        //     `WootsUp\BuilderMcp\Elements\ItemContainerMap::MAP`. Each
+        //     `*_item` child accepts arbitrary inner elements per the
+        //     YT-Pro 4.5.33 Multi-Items pattern (live-verified on
+        //     dev.wootsup.com 2026-05-22).
+        //
+        // The `_item` child types report `has_children=true` because
+        // they ARE the binding target for source-driven repeat blocks
+        // and MUST allow inner field-bindings (headlines, images, etc.)
+        // — the yootheme-development skill encodes this contract.
+        $structural = ['section', 'row', 'column'];
+        if (in_array($name, $structural, true)) {
+            return true;
+        }
+        if (\WootsUp\BuilderMcp\Elements\ItemContainerMap::isContainer($name)) {
+            return true;
+        }
+        if (\WootsUp\BuilderMcp\Elements\ItemContainerMap::isItem($name)) {
+            return true;
         }
         return false;
     }

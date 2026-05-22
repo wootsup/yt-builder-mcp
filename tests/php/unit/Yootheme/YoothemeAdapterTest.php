@@ -345,6 +345,336 @@ final class YoothemeAdapterTest extends TestCase
         self::assertNull($adapter->getBuilderTypes());
     }
 
+    public function test_get_builder_type_config_returns_null_when_yt_missing(): void
+    {
+        $adapter = new YoothemeAdapter();
+        self::assertNull($adapter->getBuilderTypeConfig('headline'));
+    }
+
+    public function test_get_builder_types_detailed_returns_null_when_yt_missing(): void
+    {
+        $adapter = new YoothemeAdapter();
+        self::assertNull($adapter->getBuilderTypesDetailed());
+    }
+
+    /**
+     * F-05 regression pin — YT 4.x access pattern.
+     *
+     * On YT 4.5.33 the canonical access pattern is instance-based:
+     *
+     *   $builder = \YOOtheme\app('YOOtheme\Builder');
+     *   $type    = $builder->types[$name];       // ElementType (->data array)
+     *   $config  = $type->data;                  // canonical fields/fieldset config
+     *
+     * Static accessors `Builder::getType()` / `Builder::getTypes()` do NOT
+     * exist on YT 4.x. Prior code probed them via method_exists() →
+     * fell through to null → Inspector::schema() always emitted fields=[].
+     *
+     * This pin instantiates a fake YT runtime where the Builder service
+     * exposes a `types` property carrying real ElementType-shaped data;
+     * the adapter must read fields from there.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function test_get_builder_type_config_reads_from_instance_types_property(): void
+    {
+        if (!class_exists('\\YOOtheme\\Application', false)) {
+            eval('namespace YOOtheme; class Application {}');
+        }
+        // Fake ElementType — matches YT 4's shape: public $data array,
+        // ArrayObject-ish: getArrayCopy() returns data.
+        if (!class_exists('\\YOOtheme\\Builder\\ElementType', false)) {
+            eval('
+                namespace YOOtheme\\Builder {
+                    class ElementType {
+                        /** @var array<string,mixed> */
+                        public array $data;
+                        /** @param array<string,mixed> $data */
+                        public function __construct(array $data) {
+                            $this->data = $data;
+                        }
+                        /** @return array<string,mixed> */
+                        public function getArrayCopy(): array {
+                            return $this->data;
+                        }
+                    }
+                }
+            ');
+        }
+        if (!class_exists('\\YOOtheme\\Builder', false)) {
+            eval('
+                namespace YOOtheme {
+                    class Builder {
+                        /** @var array<string, \YOOtheme\Builder\ElementType> */
+                        public array $types = [];
+                    }
+                }
+            ');
+        }
+        if (!function_exists('\\YOOtheme\\app')) {
+            eval('
+                namespace YOOtheme {
+                    function app($id = null) {
+                        static $builder = null;
+                        if ($id === "YOOtheme\\\\Builder") {
+                            if ($builder === null) {
+                                $builder = new \\YOOtheme\\Builder();
+                                $builder->types["headline"] = new \\YOOtheme\\Builder\\ElementType([
+                                    "name" => "headline",
+                                    "title" => "Headline",
+                                    "fields" => [
+                                        "content" => ["label" => "Content", "type" => "editor"],
+                                        "title_element" => ["label" => "Title element", "type" => "select", "default" => "h1"],
+                                        "text_align" => ["label" => "Text align", "type" => "text-align"],
+                                    ],
+                                ]);
+                            }
+                            return $builder;
+                        }
+                        return null;
+                    }
+                }
+            ');
+        }
+
+        $adapter = new YoothemeAdapter();
+        $config = $adapter->getBuilderTypeConfig('headline');
+
+        self::assertIsArray($config, 'Config must be reached via instance->types[$name]->data.');
+        self::assertSame('headline', $config['name']);
+        self::assertArrayHasKey('fields', $config);
+        self::assertIsArray($config['fields']);
+        self::assertArrayHasKey('content', $config['fields']);
+        self::assertArrayHasKey('title_element', $config['fields']);
+        self::assertArrayHasKey('text_align', $config['fields']);
+    }
+
+    /**
+     * F-05 pin — unknown type returns null cleanly (no fatal).
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function test_get_builder_type_config_returns_null_for_unknown_type(): void
+    {
+        if (!class_exists('\\YOOtheme\\Application', false)) {
+            eval('namespace YOOtheme; class Application {}');
+        }
+        if (!class_exists('\\YOOtheme\\Builder', false)) {
+            eval('
+                namespace YOOtheme {
+                    class Builder {
+                        /** @var array<string, mixed> */
+                        public array $types = [];
+                    }
+                }
+            ');
+        }
+        if (!function_exists('\\YOOtheme\\app')) {
+            eval('
+                namespace YOOtheme {
+                    function app($id = null) {
+                        if ($id === "YOOtheme\\\\Builder") {
+                            return new \\YOOtheme\\Builder();
+                        }
+                        return null;
+                    }
+                }
+            ');
+        }
+
+        $adapter = new YoothemeAdapter();
+        self::assertNull($adapter->getBuilderTypeConfig('definitely-not-a-real-type'));
+    }
+
+    /**
+     * F-05 pin — getBuilderTypesDetailed reads instance->types and projects
+     * the rich shape (name/label/origin/has_children).
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function test_get_builder_types_detailed_reads_from_instance_types_property(): void
+    {
+        if (!class_exists('\\YOOtheme\\Application', false)) {
+            eval('namespace YOOtheme; class Application {}');
+        }
+        if (!class_exists('\\YOOtheme\\Builder\\ElementType', false)) {
+            eval('
+                namespace YOOtheme\\Builder {
+                    class ElementType {
+                        /** @var array<string,mixed> */
+                        public array $data;
+                        /** @param array<string,mixed> $data */
+                        public function __construct(array $data) {
+                            $this->data = $data;
+                        }
+                    }
+                }
+            ');
+        }
+        if (!class_exists('\\YOOtheme\\Builder', false)) {
+            eval('
+                namespace YOOtheme {
+                    class Builder {
+                        /** @var array<string, \YOOtheme\Builder\ElementType> */
+                        public array $types = [];
+                    }
+                }
+            ');
+        }
+        if (!function_exists('\\YOOtheme\\app')) {
+            eval('
+                namespace YOOtheme {
+                    function app($id = null) {
+                        static $builder = null;
+                        if ($id === "YOOtheme\\\\Builder") {
+                            if ($builder === null) {
+                                $builder = new \\YOOtheme\\Builder();
+                                $builder->types["section"] = new \\YOOtheme\\Builder\\ElementType([
+                                    "name" => "section",
+                                    "title" => "Section",
+                                    "element" => true,
+                                    "container" => true,
+                                ]);
+                                $builder->types["headline"] = new \\YOOtheme\\Builder\\ElementType([
+                                    "name" => "headline",
+                                    "title" => "Headline",
+                                    "element" => true,
+                                ]);
+                            }
+                            return $builder;
+                        }
+                        return null;
+                    }
+                }
+            ');
+        }
+
+        $adapter = new YoothemeAdapter();
+        $detailed = $adapter->getBuilderTypesDetailed();
+
+        self::assertIsArray($detailed);
+        self::assertCount(2, $detailed);
+        $byName = [];
+        foreach ($detailed as $entry) {
+            $byName[$entry['name']] = $entry;
+        }
+        self::assertArrayHasKey('section', $byName);
+        self::assertSame('Section', $byName['section']['label']);
+        self::assertTrue($byName['section']['has_children']);
+        self::assertArrayHasKey('headline', $byName);
+        self::assertSame('Headline', $byName['headline']['label']);
+        self::assertFalse($byName['headline']['has_children']);
+    }
+
+    // -------------------------------------------------------------
+    // F-03 v2 (Maria-Audit Stream C2) — label/origin/has_children fidelity.
+    // -------------------------------------------------------------
+
+    /**
+     * Maria-Audit v2 F-03: YT 4.5.33 element.json uses key `title` for the
+     * human label (NOT `label`). Prior code probed for `label` only, which
+     * was always absent → fell through to PascalCase fallback. The audit
+     * surfaced "label: """ on the live REST. The adapter MUST read `title`
+     * before `label` so live entries surface the real label.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function test_get_builder_types_detailed_uses_yt_title_as_label(): void
+    {
+        if (!class_exists('\\YOOtheme\\Application', false)) {
+            eval('namespace YOOtheme; class Application {}');
+        }
+        if (!class_exists('\\YOOtheme\\Builder\\ElementType', false)) {
+            eval('
+                namespace YOOtheme\\Builder {
+                    class ElementType {
+                        /** @var array<string,mixed> */
+                        public array $data;
+                        /** @param array<string,mixed> $data */
+                        public function __construct(array $data) {
+                            $this->data = $data;
+                        }
+                    }
+                }
+            ');
+        }
+        if (!class_exists('\\YOOtheme\\Builder', false)) {
+            eval('
+                namespace YOOtheme {
+                    class Builder {
+                        /** @var array<string, \YOOtheme\Builder\ElementType> */
+                        public array $types = [];
+                    }
+                }
+            ');
+        }
+        if (!function_exists('\\YOOtheme\\app')) {
+            eval('
+                namespace YOOtheme {
+                    function app($id = null) {
+                        static $builder = null;
+                        if ($id === "YOOtheme\\\\Builder") {
+                            if ($builder === null) {
+                                $builder = new \\YOOtheme\\Builder();
+                                // YT element.json shape: uses `title` for label.
+                                $builder->types["headline"] = new \\YOOtheme\\Builder\\ElementType([
+                                    "name" => "headline",
+                                    "title" => "Headline",
+                                    "element" => true,
+                                ]);
+                                $builder->types["grid"] = new \\YOOtheme\\Builder\\ElementType([
+                                    "name" => "grid",
+                                    "title" => "Grid",
+                                    "element" => true,
+                                    "container" => true,
+                                ]);
+                                $builder->types["accordion_item"] = new \\YOOtheme\\Builder\\ElementType([
+                                    "name" => "accordion_item",
+                                    "title" => "Item",
+                                ]);
+                            }
+                            return $builder;
+                        }
+                        return null;
+                    }
+                }
+            ');
+        }
+
+        $adapter = new YoothemeAdapter();
+        $detailed = $adapter->getBuilderTypesDetailed();
+        self::assertIsArray($detailed);
+
+        $byName = [];
+        foreach ($detailed as $entry) {
+            $byName[$entry['name']] = $entry;
+        }
+
+        // F-03: label MUST come from `title` (YT convention), not from PascalCase fallback.
+        self::assertSame('Headline', $byName['headline']['label']);
+        self::assertSame('Grid', $byName['grid']['label']);
+        self::assertSame('Item', $byName['accordion_item']['label']);
+
+        // F-03: has_children must distinguish container types from leaf elements.
+        // headline has `element: true` only → leaf (has_children=false).
+        // grid has `container: true` → container (has_children=true).
+        // accordion_item is in the canonical container↔item map → has_children=true.
+        self::assertFalse(
+            $byName['headline']['has_children'],
+            'headline must be has_children=false — element:true alone does NOT imply children'
+        );
+        self::assertTrue($byName['grid']['has_children']);
+        self::assertTrue(
+            $byName['accordion_item']['has_children'],
+            'accordion_item is an item-child of accordion → must report has_children=true (Multi-Items pattern)'
+        );
+
+        // F-03: origin defaults to 'builtin' when no marker present.
+        foreach ($byName as $entry) {
+            self::assertNotSame('', $entry['origin']);
+        }
+    }
+
     public function test_load_with_context_returns_null_when_yt_missing(): void
     {
         $adapter = new YoothemeAdapter();

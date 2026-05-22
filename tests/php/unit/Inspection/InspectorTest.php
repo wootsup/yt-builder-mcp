@@ -86,13 +86,21 @@ final class InspectorTest extends TestCase
 
     public function test_list_catalog_includes_canonical_container_types(): void
     {
+        // F-03 v2 (Maria-Audit Stream C2 2026-05-22): aligned with the
+        // canonical YT-Pro 4.5.33 element registry on dev.wootsup.com
+        // (verified `themes/yootheme/packages/builder/elements/*.json`
+        // directory listing). Removed `tabs` and `spacer` — neither
+        // exists as element.json in YT 4.5.33. `panel` has
+        // `element: true` only (no `container: true`) — leaf in YT 4.x.
+        // `button` IS a container (`element: true` + `container: true`)
+        // and pairs with `button_item` in ItemContainerMap::MAP.
         $inspector = new Inspector();
         $byName = [];
         foreach ($inspector->listCatalog() as $entry) {
             $byName[$entry['name']] = $entry;
         }
         // Canonical containers must report has_children=true.
-        foreach (['section', 'row', 'column', 'grid', 'panel', 'switcher', 'tabs'] as $container) {
+        foreach (['section', 'row', 'column', 'grid', 'switcher', 'accordion'] as $container) {
             self::assertArrayHasKey($container, $byName, "Missing container type '$container'");
             self::assertTrue(
                 $byName[$container]['has_children'],
@@ -100,7 +108,7 @@ final class InspectorTest extends TestCase
             );
         }
         // Canonical leaves must report has_children=false.
-        foreach (['headline', 'text', 'image', 'button', 'divider', 'spacer'] as $leaf) {
+        foreach (['headline', 'text', 'image', 'divider'] as $leaf) {
             self::assertArrayHasKey($leaf, $byName, "Missing leaf type '$leaf'");
             self::assertFalse(
                 $byName[$leaf]['has_children'],
@@ -174,5 +182,229 @@ final class InspectorTest extends TestCase
         $schema = $inspector->schema('headline');
         self::assertNotNull($schema);
         self::assertSame([], $schema['fields']);
+    }
+
+    // -------------------------------------------------------------
+    // F-05 v2 — populated fields when adapter surfaces config.
+    // -------------------------------------------------------------
+
+    public function test_schema_flattens_top_level_fields_when_config_populated(): void
+    {
+        // Maria-Audit v2 F-05: YT 4.5.33 stores per-type config under
+        // $builder->types[$name]->data with a top-level `fields` map. The
+        // adapter must surface that as `getBuilderTypeConfig()` and the
+        // Inspector must flatten it into the wire shape.
+        $adapter = new class extends \WootsUp\BuilderMcp\Yootheme\YoothemeAdapter {
+            public function getBuilderTypeConfig(string $typeName): ?array
+            {
+                if ($typeName !== 'headline') {
+                    return null;
+                }
+                return [
+                    'name' => 'headline',
+                    'title' => 'Headline',
+                    'fields' => [
+                        'content' => ['label' => 'Content', 'type' => 'editor'],
+                        'title_element' => ['label' => 'Title element', 'type' => 'select', 'default' => 'h1'],
+                        'text_align' => ['label' => 'Text align', 'type' => 'text-align'],
+                        'margin' => ['label' => 'Margin', 'type' => 'margin'],
+                    ],
+                ];
+            }
+        };
+        $inspector = new Inspector($adapter);
+        $schema = $inspector->schema('headline');
+
+        self::assertNotNull($schema);
+        $byName = [];
+        foreach ($schema['fields'] as $field) {
+            $byName[$field['name']] = $field;
+        }
+        self::assertArrayHasKey('content', $byName);
+        self::assertSame('editor', $byName['content']['type']);
+        self::assertSame('Content', $byName['content']['label']);
+        self::assertArrayHasKey('title_element', $byName);
+        self::assertSame('h1', $byName['title_element']['default']);
+        self::assertArrayHasKey('text_align', $byName);
+        self::assertArrayHasKey('margin', $byName);
+        self::assertGreaterThanOrEqual(4, count($schema['fields']));
+    }
+
+    public function test_schema_flattens_fieldset_groups_into_fields(): void
+    {
+        // Maria-Audit v2 F-05: some types declare their fields under
+        // fieldset.<group>.fields. The Inspector must flatten these into a
+        // single list, propagating the group label per entry.
+        $adapter = new class extends \WootsUp\BuilderMcp\Yootheme\YoothemeAdapter {
+            public function getBuilderTypeConfig(string $typeName): ?array
+            {
+                if ($typeName !== 'grid') {
+                    return null;
+                }
+                return [
+                    'name' => 'grid',
+                    'title' => 'Grid',
+                    'fieldset' => [
+                        'columns' => [
+                            'label' => 'Columns',
+                            'fields' => [
+                                'grid_default' => ['label' => 'Default', 'type' => 'select'],
+                                'grid_medium' => ['label' => 'Medium', 'type' => 'select'],
+                            ],
+                        ],
+                        'layout' => [
+                            'label' => 'Layout',
+                            'fields' => [
+                                'gutter' => ['label' => 'Gutter', 'type' => 'select'],
+                            ],
+                        ],
+                    ],
+                ];
+            }
+        };
+        $inspector = new Inspector($adapter);
+        $schema = $inspector->schema('grid');
+
+        self::assertNotNull($schema);
+        $byName = [];
+        foreach ($schema['fields'] as $field) {
+            $byName[$field['name']] = $field;
+        }
+        self::assertArrayHasKey('grid_default', $byName);
+        self::assertSame('Columns', $byName['grid_default']['group']);
+        self::assertArrayHasKey('grid_medium', $byName);
+        self::assertSame('Columns', $byName['grid_medium']['group']);
+        self::assertArrayHasKey('gutter', $byName);
+        self::assertSame('Layout', $byName['gutter']['group']);
+        self::assertCount(3, $schema['fields']);
+    }
+
+    // -------------------------------------------------------------
+    // F-03 v2 (Maria-Audit Stream C2) — catalog metadata fidelity.
+    //
+    // The Inspector must surface every catalog entry with a non-empty
+    // label and origin AND a correct has_children flag — even when the
+    // adapter falls back to FALLBACK_CATALOG (YT not loaded) and when
+    // the adapter returns YT ElementType-shaped data (live path).
+    // -------------------------------------------------------------
+
+    public function test_list_catalog_fallback_no_entry_has_empty_label(): void
+    {
+        // Maria-Audit v2 F-03: every entry must carry a human label, even
+        // the static fallback. Empty labels in the wire shape break the
+        // MCP element_types_list table column.
+        $inspector = new Inspector();
+        foreach ($inspector->listCatalog() as $entry) {
+            self::assertNotSame(
+                '',
+                $entry['label'],
+                "label must be non-empty for type '{$entry['name']}'",
+            );
+        }
+    }
+
+    public function test_list_catalog_fallback_no_entry_has_empty_origin(): void
+    {
+        $inspector = new Inspector();
+        foreach ($inspector->listCatalog() as $entry) {
+            self::assertNotSame(
+                '',
+                $entry['origin'],
+                "origin must be non-empty for type '{$entry['name']}'",
+            );
+        }
+    }
+
+    public function test_list_catalog_includes_item_children_of_containers(): void
+    {
+        // Maria-Audit v2 F-03: the 16 *_item child types from
+        // ItemContainerMap MUST appear in the catalog with has_children=true.
+        // Without them present, MCP-clients cannot suggest item-level
+        // bindings (the Multi-Items pattern from yootheme-development skill).
+        $inspector = new Inspector();
+        $byName = [];
+        foreach ($inspector->listCatalog() as $entry) {
+            $byName[$entry['name']] = $entry;
+        }
+        $expectedItems = [
+            'accordion_item', 'button_item', 'description_list_item', 'gallery_item',
+            'grid_item', 'list_item', 'map_item', 'nav_item',
+            'overlay-slider_item', 'panel-slider_item', 'popover_item',
+            'slideshow_item', 'social_item', 'subnav_item', 'switcher_item',
+            'table_item',
+        ];
+        foreach ($expectedItems as $itemType) {
+            self::assertArrayHasKey($itemType, $byName, "Missing item-child type '$itemType'");
+            self::assertTrue(
+                $byName[$itemType]['has_children'],
+                "$itemType must report has_children=true (accepts inner elements for the Multi-Items pattern)"
+            );
+        }
+    }
+
+    public function test_list_catalog_includes_structural_containers(): void
+    {
+        // Structural containers from the Stream C2 contract:
+        // section, row, column, tabs, lightbox, modal — every one a
+        // canonical container that takes inner elements.
+        $inspector = new Inspector();
+        $byName = [];
+        foreach ($inspector->listCatalog() as $entry) {
+            $byName[$entry['name']] = $entry;
+        }
+        foreach (['section', 'row', 'column'] as $structural) {
+            self::assertArrayHasKey($structural, $byName, "Missing structural container '$structural'");
+            self::assertTrue(
+                $byName[$structural]['has_children'],
+                "$structural must report has_children=true"
+            );
+        }
+    }
+
+    public function test_list_catalog_leaves_have_has_children_false(): void
+    {
+        $inspector = new Inspector();
+        $byName = [];
+        foreach ($inspector->listCatalog() as $entry) {
+            $byName[$entry['name']] = $entry;
+        }
+        // Pure leaf types (no inner elements) — Stream C2 contract.
+        $leaves = ['headline', 'text', 'image', 'icon', 'divider', 'video', 'html', 'code'];
+        foreach ($leaves as $leaf) {
+            self::assertArrayHasKey($leaf, $byName, "Missing leaf type '$leaf'");
+            self::assertFalse(
+                $byName[$leaf]['has_children'],
+                "$leaf must report has_children=false"
+            );
+        }
+    }
+
+    public function test_list_catalog_live_path_extracts_yt_title_as_label(): void
+    {
+        // Maria-Audit v2 F-03: YT 4.5.33 ElementType.data uses key `title`
+        // (not `label`!) for the human label. The adapter MUST read `title`.
+        // Regression pin against the bug where catalog rows had label="".
+        $adapter = new class extends \WootsUp\BuilderMcp\Yootheme\YoothemeAdapter {
+            public function getBuilderTypesDetailed(): ?array
+            {
+                return [
+                    ['name' => 'headline', 'label' => 'Headline', 'origin' => 'builtin', 'has_children' => false],
+                    ['name' => 'grid', 'label' => 'Grid', 'origin' => 'builtin', 'has_children' => true],
+                    ['name' => 'grid_item', 'label' => 'Item', 'origin' => 'builtin', 'has_children' => true],
+                ];
+            }
+        };
+        $inspector = new Inspector($adapter);
+        $catalog = $inspector->listCatalog();
+        $byName = [];
+        foreach ($catalog as $entry) {
+            $byName[$entry['name']] = $entry;
+        }
+        self::assertSame('Headline', $byName['headline']['label']);
+        self::assertSame('Grid', $byName['grid']['label']);
+        self::assertSame('Item', $byName['grid_item']['label']);
+        self::assertFalse($byName['headline']['has_children']);
+        self::assertTrue($byName['grid']['has_children']);
+        self::assertTrue($byName['grid_item']['has_children']);
     }
 }
