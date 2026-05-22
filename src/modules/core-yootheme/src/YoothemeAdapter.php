@@ -59,6 +59,22 @@ class YoothemeAdapter
             return null;
         }
 
+        // 0. Theme-style.css header (canonical for YT 4.x bundled-as-theme).
+        //    F-09 follow-up: YT 4.5.33 dev ships YT as a Theme, not a Plugin,
+        //    so none of the YT constants/classes exposed `VERSION`. The theme
+        //    style.css `Version:` header is the single source of truth here.
+        if (function_exists('wp_get_theme')) {
+            try {
+                $theme = \wp_get_theme('yootheme');
+                $v = (string) $theme->get('Version');
+                if ($v !== '' && $v !== 'false') {
+                    return $v;
+                }
+            } catch (\Throwable) {
+                // Fall through.
+            }
+        }
+
         // 1. Plugin-bootstrap constant.
         if (defined('YOOTHEME_VERSION')) {
             $v = (string) \YOOTHEME_VERSION;
@@ -179,7 +195,11 @@ class YoothemeAdapter
         if (!$this->isLoaded()) {
             return null;
         }
-        if (!class_exists('\\YOOtheme\\Builder\\Source', false)) {
+        // F-04 fix (Maria-Audit re-verify 2026-05-22): YT lazy-loads
+        // `\YOOtheme\Builder\Source` via the composer autoloader. With
+        // autoload=false we got `false` on dev and bailed out → empty
+        // sources groups. Trigger autoload so YT's class-map resolves.
+        if (!class_exists('\\YOOtheme\\Builder\\Source')) {
             return null;
         }
         $appFn = '\\YOOtheme\\app';
@@ -194,11 +214,24 @@ class YoothemeAdapter
             }
             /** @var mixed $schema */
             $schema = $source->getSchema();
-            if (!is_object($schema) || !method_exists($schema, 'getType')) {
+            if (!is_object($schema)) {
                 return null;
             }
+            // F-04 fix (Maria-Audit re-verify 2026-05-22): YT 4.5.33's schema
+            // does NOT register the root query type under the name "Query" in
+            // its type-map — `$schema->getType('Query')` returns null. The
+            // canonical accessor is `getQueryType()` which returns the actual
+            // ObjectType (live-verified: 225 fields on dev). Prefer that, fall
+            // back to getType('Query') only when the canonical accessor is
+            // somehow absent (older webonyx/graphql-php builds).
             /** @var mixed $queryType */
-            $queryType = $schema->getType('Query');
+            $queryType = null;
+            if (method_exists($schema, 'getQueryType')) {
+                $queryType = $schema->getQueryType();
+            }
+            if (!is_object($queryType) && method_exists($schema, 'getType')) {
+                $queryType = $schema->getType('Query');
+            }
             if (!is_object($queryType) || !method_exists($queryType, 'getFields')) {
                 return null;
             }
