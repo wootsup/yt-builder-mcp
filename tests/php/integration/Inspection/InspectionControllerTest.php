@@ -78,4 +78,49 @@ final class InspectionControllerTest extends TestCase
         $data = $resp->get_data();
         self::assertContains('headline', $data['element_types']);
     }
+
+    // -------------------------------------------------------------
+    // F-03 — list_types emits structured items[] catalog.
+    // -------------------------------------------------------------
+
+    public function test_list_types_emits_structured_items_array(): void
+    {
+        $req = new \WP_REST_Request('GET', '/');
+        $resp = $this->controller()->list_types($req);
+        /** @var \WP_REST_Response $resp */
+        $data = $resp->get_data();
+        self::assertArrayHasKey('items', $data);
+        self::assertArrayHasKey('total', $data);
+        self::assertIsArray($data['items']);
+        self::assertNotEmpty($data['items']);
+        self::assertSame(count($data['items']), $data['total']);
+        // Every item carries the F-03 shape.
+        foreach ($data['items'] as $item) {
+            self::assertArrayHasKey('name', $item);
+            self::assertArrayHasKey('label', $item);
+            self::assertArrayHasKey('origin', $item);
+            self::assertArrayHasKey('has_children', $item);
+        }
+    }
+
+    // -------------------------------------------------------------
+    // F-05 — get_schema emits structured fields[] payload.
+    // -------------------------------------------------------------
+
+    public function test_get_schema_emits_structured_payload(): void
+    {
+        $req = new \WP_REST_Request('GET', '/');
+        $req['type_name'] = 'section';
+        $resp = $this->controller()->get_schema($req);
+        /** @var \WP_REST_Response $resp */
+        $data = $resp->get_data();
+        self::assertSame('section', $data['type_name']);
+        self::assertArrayHasKey('schema', $data);
+        $schema = $data['schema'];
+        self::assertSame('section', $schema['name']);
+        self::assertSame('Section', $schema['label']);
+        self::assertSame('builtin', $schema['origin']);
+        self::assertTrue($schema['has_children']);
+        self::assertIsArray($schema['fields']);
+    }
 }

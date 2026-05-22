@@ -53,8 +53,20 @@ final class InspectionController extends RestController
 
     public function list_types(\WP_REST_Request $request): \WP_REST_Response
     {
+        unset($request); // unused, signature required by WP REST API.
+        // F-03: surface the full structured catalog [{name, label, origin,
+        // has_children}, ...] under `items`. Keep `element_types` as the
+        // legacy flat name-only list for back-compat with older MCP-TS
+        // builds that may still read it.
+        $catalog = $this->inspector->listCatalog();
+        $names = [];
+        foreach ($catalog as $entry) {
+            $names[] = $entry['name'];
+        }
         return new \WP_REST_Response([
-            'element_types' => $this->inspector->listTypes(),
+            'items' => $catalog,
+            'total' => count($catalog),
+            'element_types' => $names,
         ], 200);
     }
 

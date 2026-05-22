@@ -333,6 +333,200 @@ class YoothemeAdapter
     }
 
     /**
+     * Return the live YOOtheme Builder element-type registry projected to a
+     * richer per-type shape, or null when YT is not loaded / the registry
+     * is unreachable. F-03: feeds Inspector::listTypes() so MCP-clients see
+     * the full catalogue (builtin + essentials + uessentials) rather than
+     * the 10-element static fallback.
+     *
+     * Each entry surfaces:
+     *  - name:         registry key (e.g. 'section', 'grid_item').
+     *  - label:        human-readable label from type config or PascalCase
+     *                  fallback.
+     *  - origin:       'builtin' (no origin marker), 'essentials' or
+     *                  'uessentials' when the type config exposes one.
+     *  - has_children: true for container-types ('section', 'row', 'column',
+     *                  'grid', 'panel', 'switcher', 'tabs', 'modal',
+     *                  'lightbox', 'slideshow', 'slider', 'gallery') and any
+     *                  type whose config exposes `'element' => true`.
+     *
+     * @return list<array{name: string, label: string, origin: string, has_children: bool}>|null
+     */
+    public function getBuilderTypesDetailed(): ?array
+    {
+        if (!class_exists('\\YOOtheme\\Builder', false)) {
+            return null;
+        }
+        try {
+            /** @var class-string $builderClass */
+            $builderClass = 'YOOtheme\\Builder';
+            if (!method_exists($builderClass, 'getTypes')) {
+                return null;
+            }
+            /** @var mixed $types */
+            $types = $builderClass::getTypes();
+            if (!is_array($types)) {
+                return null;
+            }
+            $out = [];
+            foreach ($types as $name => $config) {
+                if (!is_string($name) && !is_int($name)) {
+                    continue;
+                }
+                $nameStr = (string) $name;
+                $out[] = [
+                    'name' => $nameStr,
+                    'label' => self::extractTypeLabel($nameStr, $config),
+                    'origin' => self::extractTypeOrigin($config),
+                    'has_children' => self::detectHasChildren($nameStr, $config),
+                ];
+            }
+            return $out;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Return the per-type config (fields, props, defaults) for `$typeName`,
+     * or null when YT is not loaded / the type is unknown / the config can
+     * not be read. F-05: feeds Inspector::schema() so MCP-clients can
+     * introspect the props each element type accepts.
+     *
+     * The shape follows YOOtheme's own element-config convention:
+     *   `{name, label, fieldset: {<group>: {label, fields: {<name>: {...}}}}}`
+     *
+     * The caller (Inspector::schema) flattens `fieldset.*.fields` into a
+     * flat field-list for the wire shape.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getBuilderTypeConfig(string $typeName): ?array
+    {
+        if (!class_exists('\\YOOtheme\\Builder', false)) {
+            return null;
+        }
+        try {
+            /** @var class-string $builderClass */
+            $builderClass = 'YOOtheme\\Builder';
+            if (!method_exists($builderClass, 'getType')) {
+                return null;
+            }
+            /** @var mixed $type */
+            $type = $builderClass::getType($typeName); // @phpstan-ignore-line
+            if ($type === null) {
+                return null;
+            }
+            // YT::Builder::getType() returns a Type config object whose
+            // public properties / array-access carry the field-set. Two
+            // shapes are observed across YT versions: (a) plain array,
+            // (b) ArrayObject-ish wrapper exposing getArrayCopy(). Coerce
+            // to array defensively.
+            if (is_array($type)) {
+                /** @var array<string, mixed> $type */
+                return $type;
+            }
+            if (is_object($type)) {
+                if (method_exists($type, 'getArrayCopy')) {
+                    /** @var mixed $copy */
+                    $copy = $type->getArrayCopy();
+                    return is_array($copy) ? $copy : null;
+                }
+                if (method_exists($type, 'toArray')) {
+                    /** @var mixed $arr */
+                    $arr = $type->toArray();
+                    return is_array($arr) ? $arr : null;
+                }
+                // Best-effort: cast public properties.
+                $cast = (array) $type;
+                return $cast === [] ? null : $cast;
+            }
+            return null;
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @param mixed $config
+     */
+    private static function extractTypeLabel(string $name, $config): string
+    {
+        if (is_array($config) && isset($config['label']) && is_string($config['label'])) {
+            return $config['label'];
+        }
+        if (is_object($config) && isset($config->label) && is_string($config->label)) { // @phpstan-ignore-line
+            return $config->label;
+        }
+        return ucwords(str_replace(['_', '-'], ' ', $name));
+    }
+
+    /**
+     * @param mixed $config
+     */
+    private static function extractTypeOrigin($config): string
+    {
+        // Origin can be hinted by:
+        //   • path:        '.../uessentials/...' or '.../essentials/...'
+        //   • templates:   path under one of those vendors
+        //   • metadata.origin: explicit marker
+        if (is_array($config)) {
+            if (isset($config['origin']) && is_string($config['origin'])) {
+                return $config['origin'];
+            }
+            foreach (['path', 'src', 'file'] as $key) {
+                if (isset($config[$key]) && is_string($config[$key])) {
+                    $hint = strtolower($config[$key]);
+                    if (str_contains($hint, 'uessentials')) {
+                        return 'uessentials';
+                    }
+                    if (str_contains($hint, 'essentials')) {
+                        return 'essentials';
+                    }
+                }
+            }
+        }
+        return 'builtin';
+    }
+
+    /**
+     * @param mixed $config
+     */
+    private static function detectHasChildren(string $name, $config): bool
+    {
+        // YT marks container types explicitly via `element: true` (the type
+        // accepts inner elements) OR via the `templates: { children: ... }`
+        // path. As a defensive default, the canonical container catalogue:
+        $knownContainers = [
+            'section', 'row', 'column', 'grid', 'grid_item',
+            'panel', 'switcher', 'switcher_item',
+            'tabs', 'tabs_item',
+            'modal', 'modal_item',
+            'lightbox', 'lightbox_item',
+            'slideshow', 'slideshow_item',
+            'slider', 'slider_item',
+            'gallery', 'gallery_item',
+            'accordion', 'accordion_item',
+            'social', 'social_item',
+            'button_group', 'button_group_item',
+            'map_marker',
+        ];
+        if (in_array($name, $knownContainers, true)) {
+            return true;
+        }
+        if (is_array($config)) {
+            if (isset($config['element']) && $config['element'] === true) {
+                return true;
+            }
+            // Some types declare children via fieldset.children.fields
+            if (isset($config['fieldset']['children'])) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Run YOOtheme's Builder::load() pipeline on $tree with the given
      * context (currently used only for the "save" context). Returns the
      * transformed array on success, or null if YT is not loaded, the
