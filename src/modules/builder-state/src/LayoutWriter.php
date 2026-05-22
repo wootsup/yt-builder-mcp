@@ -221,15 +221,25 @@ final class LayoutWriter
 
         /** @var mixed $verify */
         $verify = \get_option(LayoutReader::OPTION, null);
-        // Maria-Story E2E live-bug 2026-05-22: strict `!==` was too brittle —
-        // failed on benign PHP roundtrip differences (e.g. nested empty arrays
-        // surviving as `[]` here but coming back as `[]` from the get_option
-        // cache layer that uses a different array-vs-stdClass internal repr).
-        // Use serialise-comparison: identical bytes after maybe_serialize means
-        // the option holds an equivalent value. Real write failures still
-        // surface as different serialised forms.
+        // Maria-Story E2E root-cause 2026-05-22: dev sites can install an
+        // mu-plugin (`yootheme-option-fix.php`) that coerces the option to a
+        // JSON-string via `pre_update_option_yootheme`. Our write passes a
+        // PHP array; the mu-plugin filter replaces it with `json_encode($v)`
+        // before WP persists. The verify-read then returns a JSON-string,
+        // never an array. Strict identity AND serialize-compare both fail.
+        //
+        // Solution: decode the verify-read if it comes back as a JSON-string,
+        // then compare the decoded shape to what we passed in. Matches
+        // LayoutReader::read()'s own JSON-vs-array fallback logic.
+        $verifyState = $verify;
+        if (is_string($verify)) {
+            $decoded = \json_decode($verify, true);
+            if (is_array($decoded)) {
+                $verifyState = $decoded;
+            }
+        }
         $expected = \serialize($state);
-        $actual = \serialize($verify);
+        $actual = \serialize($verifyState);
         if ($expected !== $actual) {
             // R2.9 security-event breadcrumb so write-failures don't surface
             // only as opaque 500s without a forensics trail.
