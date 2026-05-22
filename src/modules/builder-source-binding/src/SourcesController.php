@@ -28,6 +28,7 @@ use WootsUp\BuilderMcp\Elements\ItemContainerMap;
 use WootsUp\BuilderMcp\Rest\EtagMiddleware;
 use WootsUp\BuilderMcp\Rest\PointerControllerTrait;
 use WootsUp\BuilderMcp\Rest\RestController;
+use WootsUp\BuilderMcp\SourceBinding\BindingSerializer;
 use WootsUp\BuilderMcp\State\JsonPointer;
 use WootsUp\BuilderMcp\State\LayoutReader;
 use WootsUp\BuilderMcp\State\LayoutWriter;
@@ -137,17 +138,41 @@ final class SourcesController extends RestController
         // the MCP TS `handleElementGetBinding` reader sees `source_name`
         // and `field_mappings` directly. We keep `binding` as a nested
         // back-compat alias.
+        //
+        // D1 / T1 (F-01-Rest, 2026-05-22): also surface the full structured
+        // record from BindingSerializer — `query_field`, `query_arguments`,
+        // `directives` — so MCP-clients can introspect the GraphQL field
+        // selector without re-parsing the raw source blob.
         $binding = self::extractBinding($node);
-        return new \WP_REST_Response([
+        $serialized = BindingSerializer::serialize($node);
+        $hasBinding = $serialized !== null;
+        $response = [
             'template_id' => (string) $request['template_id'],
             'path' => $pointer,
             'element_path' => $pointer,
             'source_name' => $binding['source_name'],
             'field_mappings' => $binding['field_mappings'],
-            'has_binding' => is_string($binding['source_name']) && $binding['source_name'] !== '',
+            'has_binding' => $hasBinding,
             'binding' => $binding,
             'etag' => $this->reader->etag(),
-        ], 200);
+        ];
+        if ($serialized !== null) {
+            if (isset($serialized['query_field'])) {
+                $response['query_field'] = $serialized['query_field'];
+            }
+            if (isset($serialized['query_arguments'])) {
+                $response['query_arguments'] = $serialized['query_arguments'];
+            }
+            if (isset($serialized['directives'])) {
+                $response['directives'] = $serialized['directives'];
+            }
+            // Structured field_mappings (list-of-objects) — superset of the
+            // back-compat dict shape under `field_mappings`. Field-level
+            // filters survive here even when the dict-projection drops them.
+            $response['field_mappings_structured'] = $serialized['field_mappings'];
+            $response['raw_source'] = $serialized['raw_source'];
+        }
+        return new \WP_REST_Response($response, 200);
     }
 
     /**
@@ -604,67 +629,53 @@ final class SourcesController extends RestController
      * Pull the source-binding off a node and project it back to the
      * MCP-canonical `{source_name, field_mappings}` shape.
      *
-     * YOOtheme stores bindings as a structured object under `props.source`:
-     *   `{query: {name: "posts.singlePost"}, props: {<el>: {name, filters}}}`
+     * D1 / T1 (F-01-Rest, 2026-05-22): delegates to BindingSerializer for
+     * the structured parse, then projects field_mappings (which the
+     * serializer emits as a list of {element_prop, source_field, filters?})
+     * to the dict-of-strings shape that this REST envelope has historically
+     * exposed (round-trip-safe with `PUT /binding`).
      *
-     * F-13 fix: previously emitted the raw `source` value (and a handful
-     * of historical sibling keys). The new shape is content-addressed
-     * to the same domain that `PUT /binding` accepts — round-trip safe.
-     *
-     * Legacy plain-string `source` values (written by pre-F-13 builds)
-     * are surfaced as `source_name: <string>, field_mappings: {}` so
-     * MCP-clients reading old state still see a coherent response.
+     * D5 round-trip: the `__node_item__` sentinel is re-applied here so
+     * MCP-clients see the SAME value they wrote.
      *
      * @param array<string, mixed> $node
      * @return array{source_name: string|null, field_mappings: array<string, string>}
      */
     private static function extractBinding(array $node): array
     {
-        $props = isset($node['props']) && is_array($node['props']) ? $node['props'] : [];
-        if (!array_key_exists('source', $props)) {
+        $serialized = BindingSerializer::serialize($node);
+        if ($serialized === null) {
             return ['source_name' => null, 'field_mappings' => []];
         }
-        /** @var mixed $source */
-        $source = $props['source'];
 
-        // Canonical structured shape.
-        if (is_array($source)) {
-            $sourceName = null;
-            if (isset($source['query']) && is_array($source['query']) && isset($source['query']['name']) && is_string($source['query']['name'])) {
-                $sourceName = $source['query']['name'];
-            }
-            $fieldMappings = [];
-            if (isset($source['props']) && is_array($source['props'])) {
-                foreach ($source['props'] as $propName => $propValue) {
-                    if (!is_string($propName)) {
-                        continue;
-                    }
-                    if (!is_array($propValue) || !isset($propValue['name']) || !is_string($propValue['name'])) {
-                        continue;
-                    }
-                    // D5 — surface the `__node_item__` sentinel when the
-                    // on-disk shape carries the YT INHERIT marker so
-                    // MCP-clients see the SAME value they wrote.
-                    $isInherit = isset($propValue['inherit']) && $propValue['inherit'] === true;
-                    if ($isInherit) {
-                        if (isset($propValue['field']) && is_string($propValue['field']) && $propValue['field'] !== '') {
-                            $fieldMappings[$propName] = self::NODE_ITEM_SENTINEL . ':' . $propValue['field'];
-                        } else {
-                            $fieldMappings[$propName] = self::NODE_ITEM_SENTINEL;
-                        }
+        // Dict-projection of field_mappings — preserves the historical
+        // `{prop_name => source_field_name}` envelope this endpoint exposes.
+        $rawSource = $serialized['raw_source'];
+        $fieldMappings = [];
+        if (is_array($rawSource) && isset($rawSource['props']) && is_array($rawSource['props'])) {
+            foreach ($rawSource['props'] as $propName => $propValue) {
+                if (!is_string($propName) || $propName === '') {
+                    continue;
+                }
+                if (!is_array($propValue) || !isset($propValue['name']) || !is_string($propValue['name'])) {
+                    continue;
+                }
+                $isInherit = isset($propValue['inherit']) && $propValue['inherit'] === true;
+                if ($isInherit) {
+                    if (isset($propValue['field']) && is_string($propValue['field']) && $propValue['field'] !== '') {
+                        $fieldMappings[$propName] = self::NODE_ITEM_SENTINEL . ':' . $propValue['field'];
                     } else {
-                        $fieldMappings[$propName] = $propValue['name'];
+                        $fieldMappings[$propName] = self::NODE_ITEM_SENTINEL;
                     }
+                } else {
+                    $fieldMappings[$propName] = $propValue['name'];
                 }
             }
-            return ['source_name' => $sourceName, 'field_mappings' => $fieldMappings];
         }
 
-        // Legacy plain-string fallback (pre-F-13 state).
-        if (is_string($source)) {
-            return ['source_name' => $source, 'field_mappings' => []];
-        }
-
-        return ['source_name' => null, 'field_mappings' => []];
+        return [
+            'source_name' => $serialized['source_name'],
+            'field_mappings' => $fieldMappings,
+        ];
     }
 }

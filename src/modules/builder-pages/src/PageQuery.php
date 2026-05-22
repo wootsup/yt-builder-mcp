@@ -25,6 +25,7 @@ declare(strict_types=1);
 namespace WootsUp\BuilderMcp\Pages;
 
 use WootsUp\BuilderMcp\Elements\TreeWalker;
+use WootsUp\BuilderMcp\SourceBinding\BindingSerializer;
 use WootsUp\BuilderMcp\State\JsonPointer;
 use WootsUp\BuilderMcp\State\LayoutReader;
 
@@ -243,42 +244,17 @@ final class PageQuery
     }
 
     /**
-     * Return true if the node carries a source-binding in `props.source`.
+     * Return true if the node carries a source-binding.
      *
-     * Mirrors `ElementOps::hasBinding()` and the MCP TS `hasSourceBinding`
-     * helper so `element_list`, `element_get`, and `page_get_schema` all
-     * report the same `has_binding` value for the same node.
-     *
-     * Stream C1 (F-01-Rest, 2026-05-22): the audit found that live YT4
-     * single-post templates store the binding as the F-13 structured
-     * shape `{query:{name:"posts.singlePost"}, props:{<el>:{name:…}}}`.
-     * The previous string-only heuristic returned false for every
-     * structured binding, so `element_list.BIND` column was always false.
+     * D1 / T1 (F-01-Rest, 2026-05-22): delegates to the single source-of-
+     * truth `BindingSerializer`. Recognises the F-13 structured shape
+     * `{query:{name}, props:{<el>:{name,...}}}`, top-level `node.source`,
+     * cached `node.source_extended`, and legacy plain-string sources.
      *
      * @param array<string, mixed> $node
      */
     private static function hasBinding(array $node): bool
     {
-        if (!isset($node['props']) || !is_array($node['props'])) {
-            return false;
-        }
-        /** @var array<string, mixed> $props */
-        $props = $node['props'];
-        if (!array_key_exists('source', $props)) {
-            return false;
-        }
-        $source = $props['source'];
-        if (is_string($source)) {
-            return $source !== '';
-        }
-        if (is_array($source)) {
-            // F-13 structured shape: bound when `query.name` is a non-empty
-            // string. Mirrors ElementOps::hasBinding (same module-pair).
-            return isset($source['query']) && is_array($source['query'])
-                && isset($source['query']['name'])
-                && is_string($source['query']['name'])
-                && $source['query']['name'] !== '';
-        }
-        return false;
+        return BindingSerializer::hasBinding($node);
     }
 }

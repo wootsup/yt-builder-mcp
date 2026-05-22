@@ -154,6 +154,47 @@ describe('elements-format sidecar', () => {
         ).toBe(false);
     });
 
+    // D1 / T1 (F-01-Rest, 2026-05-22): wider detector accepts the same
+    // four carrier slots BindingSerializer accepts on the PHP side.
+    it('mapElementRow recognises top-level node.source carrier', () => {
+        expect(
+            mapElementRow({
+                path: '/0',
+                element_type: 'grid',
+                source: { query: { name: 'posts.posts' } },
+            }).has_binding,
+        ).toBe(true);
+    });
+
+    it('mapElementRow recognises node.source_extended carrier', () => {
+        expect(
+            mapElementRow({
+                path: '/0',
+                element_type: 'grid',
+                source_extended: { query: { name: 'posts.posts' } },
+            }).has_binding,
+        ).toBe(true);
+    });
+
+    it('mapElementRow recognises field-mappings-only binding (inherit pattern)', () => {
+        // A node with `props.source.props.<el>.name` but no query.name is
+        // still bound — it inherits the parent iteration source via the
+        // `${builder.source}` token.
+        expect(
+            mapElementRow({
+                path: '/0',
+                element_type: 'headline',
+                props: {
+                    source: {
+                        props: {
+                            content: { name: '${builder.source}', inherit: true },
+                        },
+                    },
+                },
+            }).has_binding,
+        ).toBe(true);
+    });
+
     it('buildElementDetail produces 4 groups (Identity / Props / Children / Next steps)', () => {
         const detail = buildElementDetail({
             path: '/0',

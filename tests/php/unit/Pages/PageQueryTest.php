@@ -404,4 +404,70 @@ final class PageQueryTest extends TestCase
         self::assertNotNull($schema);
         self::assertFalse($schema[0]['has_binding']);
     }
+
+    // -------------------------------------------------------------
+    // D1 / T1 (F-01-Rest, 2026-05-22) — single source-of-truth via
+    // BindingSerializer covers four carrier slots.
+    // -------------------------------------------------------------
+
+    public function test_schema_has_binding_recognises_top_level_source_carrier(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'layout' => [
+                        'type' => 'layout',
+                        'children' => [
+                            [
+                                'type' => 'grid',
+                                'source' => ['query' => ['name' => 'posts.posts']],
+                                'children' => [],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $schema = $query->schema('tpl');
+        self::assertNotNull($schema);
+        self::assertTrue($schema[0]['has_binding']);
+    }
+
+    public function test_schema_has_binding_recognises_source_extended_carrier(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'layout' => [
+                        'type' => 'layout',
+                        'children' => [
+                            [
+                                'type' => 'grid',
+                                'source_extended' => ['query' => ['name' => 'posts.posts']],
+                                'children' => [],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $schema = $query->schema('tpl');
+        self::assertNotNull($schema);
+        self::assertTrue($schema[0]['has_binding']);
+    }
+
+    public function test_schema_has_binding_recognises_field_mappings_only_inherit_pattern(): void
+    {
+        // Node with `props.source.props.<el>.name` but no query.name is
+        // still bound — it inherits the parent iteration source via
+        // `${builder.source}`.
+        $entry = $this->schemaEntryWithSource([
+            'props' => [
+                'content' => ['name' => '${builder.source}', 'inherit' => true],
+            ],
+        ]);
+        self::assertTrue($entry['has_binding']);
+    }
 }

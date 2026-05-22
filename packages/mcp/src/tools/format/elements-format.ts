@@ -33,30 +33,74 @@ function asString(v: unknown): string {
 
 /**
  * Defensive `has_binding` derivation used when the REST plugin does not
- * surface an explicit boolean. Mirrors `PageQuery::hasBinding()` +
- * `ElementOps::hasBinding()` on the PHP side so all three readers agree
- * on the same node.
+ * surface an explicit boolean. Mirrors `BindingSerializer::hasBinding()`
+ * on the PHP side so all readers agree on the same node.
  *
- * Stream C1 (F-01-Rest, 2026-05-22): live YT4 templates store the binding
- * as the F-13 structured shape `{query:{name:"posts.singlePost"}, props:{…}}`.
- * The legacy plain-string `props.source = "name"` shape is still honoured
- * (pre-F-13 user data).
+ * D1 / T1 (F-01-Rest, 2026-05-22): the heuristic accepts the same four
+ * carrier slots BindingSerializer accepts on the PHP side:
+ *   1. props.source                — F-13 canonical
+ *   2. top-level node.source       — pre-bind cached YT4 trees
+ *   3. node.source_extended        — YT4 internal cached/expanded form
+ *   4. legacy plain-string source  — pre-F-13 user data
+ *
+ * A node is "bound" if any carrier yields either a non-empty `query.name`
+ * OR at least one `props.<el>.name` field-mapping (inherit-from-parent
+ * pattern — the field-bindings reference the parent iteration source via
+ * the `${builder.source}` token without a local query name).
  */
-function hasSourceBinding(props: unknown): boolean {
-    if (props === null || typeof props !== 'object') return false;
-    const obj = props as Record<string, unknown>;
-    if (!('source' in obj)) return false;
-    const src = obj.source;
-    // Legacy plain-string shape.
-    if (typeof src === 'string') return src.length > 0;
-    // F-13 structured shape: bound when `query.name` is a non-empty string.
-    if (src !== null && typeof src === 'object') {
-        const query = (src as Record<string, unknown>).query;
-        if (query !== null && typeof query === 'object') {
-            const name = (query as Record<string, unknown>).name;
-            return typeof name === 'string' && name.length > 0;
+function isStructuredBinding(src: unknown): boolean {
+    if (src === null || typeof src !== 'object') return false;
+    const obj = src as Record<string, unknown>;
+    const query = obj.query;
+    if (query !== null && typeof query === 'object') {
+        const name = (query as Record<string, unknown>).name;
+        if (typeof name === 'string' && name.length > 0) return true;
+    }
+    // No query name — bound only if at least one props.<el>.name field-
+    // mapping is present (inherit-from-parent pattern).
+    const props = obj.props;
+    if (props !== null && typeof props === 'object') {
+        for (const k of Object.keys(props as Record<string, unknown>)) {
+            const v = (props as Record<string, unknown>)[k];
+            if (v !== null && typeof v === 'object') {
+                const name = (v as Record<string, unknown>).name;
+                if (typeof name === 'string' && name.length > 0) return true;
+            }
         }
     }
+    return false;
+}
+
+function hasSourceBinding(node: unknown): boolean {
+    if (node === null || typeof node !== 'object') return false;
+    const obj = node as Record<string, unknown>;
+
+    // (1) props.source — F-13 canonical.
+    const props = obj.props;
+    if (props !== null && typeof props === 'object' && 'source' in (props as Record<string, unknown>)) {
+        const src = (props as Record<string, unknown>).source;
+        if (typeof src === 'string') {
+            if (src.length > 0) return true;
+        } else if (isStructuredBinding(src)) {
+            return true;
+        }
+    }
+
+    // (2) top-level node.source.
+    if ('source' in obj) {
+        const src = obj.source;
+        if (typeof src === 'string') {
+            if (src.length > 0) return true;
+        } else if (isStructuredBinding(src)) {
+            return true;
+        }
+    }
+
+    // (3) node.source_extended — YT4 cached/expanded.
+    if ('source_extended' in obj && isStructuredBinding(obj.source_extended)) {
+        return true;
+    }
+
     return false;
 }
 
@@ -87,8 +131,7 @@ export function mapElementRow(input: Record<string, unknown>): Record<string, un
         rel_path: relPath,
         element_type: asString(input.element_type),
         label,
-        has_binding:
-            explicitBinding ?? hasSourceBinding((input as Record<string, unknown>).props),
+        has_binding: explicitBinding ?? hasSourceBinding(input),
     };
 }
 
