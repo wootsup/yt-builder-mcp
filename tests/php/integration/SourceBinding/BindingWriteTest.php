@@ -1,0 +1,164 @@
+<?php
+/**
+ * SourcesController PUT/DELETE /binding — end-to-end behavioural test.
+ *
+ * Wave 3 Task 3.6. Mirrors the in-process WP-stub strategy from
+ * WriteOpsTest — no WP-Testbench needed.
+ *
+ * @package WootsUp\BuilderMcp\Tests
+ */
+
+declare(strict_types=1);
+
+namespace WootsUp\BuilderMcp\Tests\Integration\SourceBinding;
+
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\TestCase;
+use WootsUp\BuilderMcp\Cache\CacheFlusher;
+use WootsUp\BuilderMcp\Elements\ElementOps;
+use WootsUp\BuilderMcp\SourceBinding\SourceRegistry;
+use WootsUp\BuilderMcp\SourceBinding\SourcesController;
+use WootsUp\BuilderMcp\State\LayoutReader;
+use WootsUp\BuilderMcp\State\LayoutWriter;
+use WootsUp\BuilderMcp\Tests\TestVerifierFactory;
+
+#[CoversClass(SourcesController::class)]
+final class BindingWriteTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        $GLOBALS['ytb_test_options'] = [
+            'yootheme' => [
+                'templates' => [
+                    'tpl' => [
+                        'layout' => [
+                            'type' => 'layout',
+                            'children' => [
+                                ['type' => 'grid', 'props' => ['source' => 'old_source']],
+                                ['type' => 'image', 'props' => []],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    private function controller(): SourcesController
+    {
+        $reader = new LayoutReader();
+        return new SourcesController(
+            new SourceRegistry(),
+            new ElementOps($reader),
+            $reader,
+            new LayoutWriter($reader),
+            new CacheFlusher(),
+            TestVerifierFactory::verifier(),
+        );
+    }
+
+    /**
+     * Helper: build a PUT/DELETE request with a valid If-Match header
+     * (required for write-methods since Wave-6 Fix 21).
+     */
+    private function writeRequest(string $method, string $route): \WP_REST_Request
+    {
+        $req = new \WP_REST_Request($method, $route);
+        $req->set_header('If-Match', (new LayoutReader())->etag());
+        return $req;
+    }
+
+    public function test_put_binding_sets_source_prop(): void
+    {
+        $controller = $this->controller();
+        $req = $this->writeRequest('PUT', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/binding';
+        $req->set_param('source_name', 'wp_posts');
+
+        $resp = $controller->put_binding($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        $data = $resp->get_data();
+        self::assertSame('wp_posts', $data['binding']['source']);
+
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        self::assertSame('wp_posts', $stored['layout']['children'][1]['props']['source']);
+    }
+
+    public function test_put_binding_with_null_unbinds(): void
+    {
+        $controller = $this->controller();
+        $req = $this->writeRequest('PUT', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0/binding';
+        $req->set_param('source_name', null);
+
+        $resp = $controller->put_binding($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        self::assertArrayNotHasKey('source', $stored['layout']['children'][0]['props']);
+    }
+
+    public function test_put_binding_400_when_source_name_missing(): void
+    {
+        $controller = $this->controller();
+        $req = $this->writeRequest('PUT', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/binding';
+        // no source_name
+
+        $resp = $controller->put_binding($req);
+        self::assertInstanceOf(\WP_Error::class, $resp);
+        /** @var \WP_Error $resp */
+        $data = $resp->get_error_data();
+        self::assertSame(400, $data['status']);
+    }
+
+    public function test_put_binding_412_on_etag_mismatch(): void
+    {
+        $controller = $this->controller();
+        $req = $this->writeRequest('PUT', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/binding';
+        $req->set_param('source_name', 'wp_posts');
+        $req->set_header('If-Match', 'stale-value');
+
+        $resp = $controller->put_binding($req);
+        self::assertInstanceOf(\WP_Error::class, $resp);
+        /** @var \WP_Error $resp */
+        $data = $resp->get_error_data();
+        self::assertSame(412, $data['status']);
+    }
+
+    public function test_delete_binding_removes_source_prop(): void
+    {
+        $controller = $this->controller();
+        $req = $this->writeRequest('DELETE', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0/binding';
+
+        $resp = $controller->delete_binding($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        self::assertArrayNotHasKey('source', $stored['layout']['children'][0]['props']);
+    }
+
+    public function test_put_binding_404_for_unknown_element(): void
+    {
+        $controller = $this->controller();
+        $req = $this->writeRequest('PUT', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/99/binding';
+        $req->set_param('source_name', 'wp_posts');
+
+        $resp = $controller->put_binding($req);
+        self::assertInstanceOf(\WP_Error::class, $resp);
+        /** @var \WP_Error $resp */
+        $data = $resp->get_error_data();
+        self::assertSame(404, $data['status']);
+    }
+}

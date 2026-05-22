@@ -1,0 +1,79 @@
+{
+    "name": "@wootsup/yt-builder-mcp",
+    "version": "0.2.0-alpha.1",
+    "type": "module",
+    "description": "MCP Server for YOOtheme Page Builder — drive your YOOtheme site programmatically from Claude, Cursor, ChatGPT, Continue, Cline, Roo Code",
+    "license": "MIT",
+    "author": "WootsUp <hello@wootsup.com>",
+    "homepage": "https://github.com/wootsup/yt-builder-mcp",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/wootsup/yt-builder-mcp.git",
+        "directory": "packages/mcp"
+    },
+    "bugs": "https://github.com/wootsup/yt-builder-mcp/issues",
+    "keywords": [
+        "mcp",
+        "model-context-protocol",
+        "yootheme",
+        "yootheme-pro",
+        "wordpress",
+        "claude",
+        "cursor",
+        "chatgpt",
+        "page-builder",
+        "ai-assistant",
+        "wootsup"
+    ],
+    "bin": {
+        "yt-builder-mcp": "./bin/yt-builder-mcp.js"
+    },
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist",
+        "bin",
+        "skills",
+        "manifest.json",
+        "icon.png",
+        "README.md",
+        "LICENSE"
+    ],
+    "publishConfig": {
+        "access": "public"
+    },
+    "engines": {
+        "node": ">=18.17.0"
+    },
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsc --watch",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "test:grep-gate": "vitest run tests/auth/secrets-grep-gate.test.ts",
+        "typecheck": "tsc --noEmit",
+        "lint": "eslint src --max-warnings=0",
+        "setup": "node ./bin/yt-builder-mcp.js setup",
+        "install-skill": "node ./bin/yt-builder-mcp.js install-skill",
+        "build:dxt": "node ./scripts/build-dxt.js",
+        "extract-tools": "node ./scripts/extract-tools.mjs"
+    },
+    "dependencies": {
+        "@getimo/mcp-toolkit": "^1.1.1",
+        "@modelcontextprotocol/sdk": "^1.27.0",
+        "@clack/prompts": "^0.7.0",
+        "pino": "^10.3.1",
+        "zod": "^4.3.6"
+    },
+    "devDependencies": {
+        "@types/node": "^20.11.0",
+        "@typescript-eslint/eslint-plugin": "^8.0.0",
+        "@typescript-eslint/parser": "^8.0.0",
+        "@vitest/coverage-v8": "^1.4.0",
+        "eslint": "^9.0.0",
+        "typescript": "^5.4.0",
+        "typescript-eslint": "^8.0.0",
+        "vitest": "^1.4.0"
+    }
+}

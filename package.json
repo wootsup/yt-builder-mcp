@@ -1,0 +1,16 @@
+{
+    "name": "yt-builder-mcp-monorepo",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Monorepo root — PHP plugin in src/, NPM package in packages/mcp/",
+    "type": "module",
+    "license": "GPL-2.0-or-later",
+    "engines": {
+        "node": ">=18.17.0"
+    },
+    "scripts": {
+        "build": "pnpm --filter @wootsup/yt-builder-mcp run build",
+        "test:ts": "pnpm --filter @wootsup/yt-builder-mcp run test",
+        "test:php": "composer test"
+    }
+}

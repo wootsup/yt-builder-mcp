@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  php:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          tools: composer:v2
+          coverage: pcov
+
+      - name: Get composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php${{ matrix.php }}-composer-${{ hashFiles('composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-php${{ matrix.php }}-composer-
+
+      - name: Install dependencies
+        run: composer install --no-progress --prefer-dist
+
+      - name: Run PHPUnit
+        run: vendor/bin/phpunit --testdox
+
+      - name: PHPUnit coverage (text summary)
+        run: vendor/bin/phpunit --coverage-text --coverage-clover=coverage.xml
+        continue-on-error: true
+
+      - name: Upload PHP coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-coverage-${{ matrix.php }}
+          path: coverage.xml
+          if-no-files-found: ignore
+
+      - name: Run PHPStan
+        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress
+
+  npm:
+    name: Node ${{ matrix.node }} (NPM Package)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18.17', '20', '22']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm --filter @wootsup/yt-builder-mcp run typecheck
+
+      - name: Build
+        run: pnpm --filter @wootsup/yt-builder-mcp run build
+
+      - name: Test
+        run: pnpm --filter @wootsup/yt-builder-mcp run test
+
+      - name: Vitest coverage
+        run: pnpm --filter @wootsup/yt-builder-mcp run test:coverage
+        continue-on-error: true
+
+      - name: Upload vitest coverage artifact
+        if: always() && matrix.node == '20'
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage
+          path: packages/mcp/coverage/
+          if-no-files-found: ignore

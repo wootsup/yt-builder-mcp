@@ -1,0 +1,64 @@
+{
+    "name": "wootsup/yt-builder-mcp",
+    "description": "YOOtheme Builder MCP — drive YOOtheme Pro Page Builder from AI assistants via Model Context Protocol",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "keywords": ["wordpress", "yootheme", "mcp", "ai-assistant", "claude", "cursor"],
+    "homepage": "https://github.com/wootsup/yt-builder-mcp",
+    "authors": [
+        {
+            "name": "WootsUp",
+            "email": "hello@wootsup.com",
+            "homepage": "https://wootsup.com",
+            "role": "Maintainer"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/wootsup/yt-builder-mcp/issues",
+        "source": "https://github.com/wootsup/yt-builder-mcp"
+    },
+    "require": {
+        "php": ">=8.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.0",
+        "phpstan/phpstan": "^1.10",
+        "phpstan/extension-installer": "^1.3",
+        "szepeviktor/phpstan-wordpress": "^1.3",
+        "yoast/phpunit-polyfills": "^3.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "WootsUp\\BuilderMcp\\Auth\\": "src/modules/core-auth/src/",
+            "WootsUp\\BuilderMcp\\Storage\\": "src/modules/core-storage/src/",
+            "WootsUp\\BuilderMcp\\Util\\": "src/modules/core-util/src/",
+            "WootsUp\\BuilderMcp\\Rest\\": "src/modules/rest-bridge/src/",
+            "WootsUp\\BuilderMcp\\State\\": "src/modules/builder-state/src/",
+            "WootsUp\\BuilderMcp\\Pages\\": "src/modules/builder-pages/src/",
+            "WootsUp\\BuilderMcp\\Elements\\": "src/modules/builder-elements/src/",
+            "WootsUp\\BuilderMcp\\Inspection\\": "src/modules/builder-inspection/src/",
+            "WootsUp\\BuilderMcp\\SourceBinding\\": "src/modules/builder-source-binding/src/",
+            "WootsUp\\BuilderMcp\\Cache\\": "src/modules/builder-cache/src/",
+            "WootsUp\\BuilderMcp\\Yootheme\\": "src/modules/core-yootheme/src/",
+            "WootsUp\\BuilderMcp\\Platform\\WordPress\\": "src/modules/platform-wordpress/src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "WootsUp\\BuilderMcp\\Tests\\Unit\\": "tests/php/unit/",
+            "WootsUp\\BuilderMcp\\Tests\\Integration\\": "tests/php/integration/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "phpstan/extension-installer": true
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "test": "phpunit",
+        "test:unit": "phpunit --testsuite=unit",
+        "test:integration": "phpunit --testsuite=integration",
+        "phpstan": "phpstan analyse --memory-limit=512M src/"
+    }
+}

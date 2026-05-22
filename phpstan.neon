@@ -1,0 +1,56 @@
+parameters:
+    level: 8
+    paths:
+        - src
+    excludePaths:
+        - src/modules/*/vendor/*
+    treatPhpDocTypesAsCertain: false
+    reportUnmatchedIgnoredErrors: false
+    universalObjectCratesClasses:
+        # YOOtheme service-container is treated as a Pimple-style dictionary;
+        # we resolve services via $container[FQCN::class] which PHPStan can't
+        # type-check until we ship YT stubs (Wave 3 task).
+        - ArrayAccess
+    ignoreErrors:
+        # YOOtheme runtime symbols — provided by the YOOtheme Pro theme at
+        # runtime, not via composer. Stubbing them properly is a Wave 3
+        # follow-up; until then, suppress the "unknown class" complaints
+        # for the small surface we touch (Path::setAlias, app()).
+        -
+            message: '#Call to static method setAlias\(\) on an unknown class YOOtheme\\Path\.#'
+            path: src/bootstrap.php
+        # Module bootstraps register rest_api_init / admin_menu side-effects
+        # at module-load time and resolve the YOOtheme DI container lazily
+        # via \YOOtheme\app() inside their hook closures. This works around
+        # YOOtheme's ExtendLoader requiring a real service id for extend()
+        # (arbitrary string keys silently no-op). The app() function is
+        # provided by YOOtheme at runtime; stubs land in Wave 3.
+        -
+            message: '#Function YOOtheme\\app not found\.#'
+            paths:
+                - src/modules/rest-bridge/bootstrap.php
+                - src/modules/builder-pages/bootstrap.php
+                - src/modules/builder-elements/bootstrap.php
+                - src/modules/builder-inspection/bootstrap.php
+                - src/modules/builder-source-binding/bootstrap.php
+                - src/modules/platform-wordpress/bootstrap.php
+        # wpdb::prepare() requires literal-string SQL, but we interpolate
+        # {$wpdb->options} (the table name) into the SQL string. The table
+        # name is sourced from WordPress core — not user input — so the
+        # interpolation is safe; phpstan-wordpress can't track this.
+        # Documented WP-Core pattern: https://developer.wordpress.org/reference/classes/wpdb/prepare/
+        -
+            message: '#Parameter \#1 \$query of method wpdb::prepare\(\) expects literal-string#'
+            paths:
+                - src/yt-builder-mcp.php
+                - src/uninstall.php
+        # wpdb::prepare() returns string|null (null on prepare-failure).
+        # Inside deactivation/uninstall paths we accept null-passthrough —
+        # query() on a null SQL string is a no-op that wpdb silently ignores.
+        # Adding explicit null-guards here adds noise without changing
+        # observable behaviour on a fresh deactivate.
+        -
+            message: '#Parameter \#1 \$query of method wpdb::query\(\) expects string, string\|null given\.#'
+            paths:
+                - src/yt-builder-mcp.php
+                - src/uninstall.php
