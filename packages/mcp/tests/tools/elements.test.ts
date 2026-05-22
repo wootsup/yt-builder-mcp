@@ -117,6 +117,51 @@ describe('buildElementsTools — write endpoints', () => {
         expect(seenUrl).toContain('/elements/0/children/2/settings');
     });
 
+    // T5 / F-12 — merge:true forwards an explicit body flag.
+    it('element_update_settings forwards merge:true into the PUT body', async () => {
+        let seenBody: string | undefined;
+        const tools = buildElementsTools(
+            fakeClient((_url, init) => {
+                seenBody = init.body as string | undefined;
+                return jsonResponse({ etag: 'e1' });
+            }),
+        );
+        await findTool(tools, 'yootheme_builder_element_update_settings').handler({
+            template_id: 'default',
+            element_path: '/0/children/2',
+            props: { source: { props: { title: 'new' } } },
+            merge: true,
+            etag: '"e0"',
+        });
+        const body = JSON.parse(seenBody ?? '{}') as Record<string, unknown>;
+        expect(body.merge).toBe(true);
+        expect(body.props).toEqual({ source: { props: { title: 'new' } } });
+    });
+
+    it('element_update_settings omits merge when not specified (back-compat)', async () => {
+        let seenBody: string | undefined;
+        const tools = buildElementsTools(
+            fakeClient((_url, init) => {
+                seenBody = init.body as string | undefined;
+                return jsonResponse({ etag: 'e1' });
+            }),
+        );
+        await findTool(tools, 'yootheme_builder_element_update_settings').handler({
+            template_id: 'default',
+            element_path: '/0/children/2',
+            props: { foo: 'bar' },
+            etag: '"e0"',
+        });
+        const body = JSON.parse(seenBody ?? '{}') as Record<string, unknown>;
+        expect(body).not.toHaveProperty('merge');
+    });
+
+    it('element_update_settings input-schema exposes a merge field', () => {
+        const tools = buildElementsTools(fakeClient(() => jsonResponse({})));
+        const tool = findTool(tools, 'yootheme_builder_element_update_settings');
+        expect(tool.inputSchema).toHaveProperty('merge');
+    });
+
     it('element_move POSTs to /move with to_parent_path + to_index', async () => {
         let seenBody: string | undefined;
         const tools = buildElementsTools(

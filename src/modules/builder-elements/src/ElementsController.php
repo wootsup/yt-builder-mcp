@@ -323,8 +323,25 @@ final class ElementsController extends RestController
             return $err;
         }
 
-        return $this->mutate($templateId, $request, function (array &$state) use ($templateId, $pointer, $props): array {
-            $this->ops->updateSettings($state, $templateId, $pointer, $props);
+        // T5 / F-12 (Maria-Audit 2026-05-22): when `merge:true`, fetch the
+        // current props and deep-merge the request body in-place. This
+        // closes the read-modify-write race that clients otherwise face
+        // when extending a sub-key without clobbering siblings. Default
+        // remains "full replace" — back-compat with every existing caller.
+        $merge = !empty($params['merge']);
+
+        return $this->mutate($templateId, $request, function (array &$state) use ($templateId, $pointer, $props, $merge): array {
+            if ($merge) {
+                $currentNode = JsonPointer::get($state, $pointer);
+                $currentProps = (is_array($currentNode) && isset($currentNode['props']) && is_array($currentNode['props']))
+                    ? $currentNode['props']
+                    : [];
+                /** @var array<string, mixed> $currentProps */
+                $merged = ElementOps::mergeProps($currentProps, $props);
+                $this->ops->updateSettings($state, $templateId, $pointer, $merged);
+            } else {
+                $this->ops->updateSettings($state, $templateId, $pointer, $props);
+            }
             return ['element_path' => $pointer];
         });
     }

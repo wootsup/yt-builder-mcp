@@ -119,13 +119,22 @@ export function buildElementsTools(
         defineTool({
             name: 'yootheme_builder_element_update_settings',
             description:
-                'Replace the `props` on an element. Use this for any setting change — title, ' +
-                'margins, classes, sources, etc. Requires ETag. Existing props NOT in the ' +
-                'request are removed.',
+                'Update `props` on an element. Default: full replace (existing props NOT in ' +
+                'the request are removed). Pass `merge:true` for server-side deep-merge — only ' +
+                'keys present in the request body are overwritten, all other keys survive ' +
+                'unchanged. Use merge mode to extend a sub-key (e.g. `source.props.title`) ' +
+                'without a client-side read-modify-write race. Requires ETag.',
             inputSchema: {
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
                 props: PROPS,
+                merge: z
+                    .boolean()
+                    .optional()
+                    .describe(
+                        'When true, server reads current props and deep-merges the request body ' +
+                            '(request wins, untouched keys preserved). Default false (full replace).',
+                    ),
                 etag: ETAG,
             },
             annotations: mutating('Update Element Settings'),

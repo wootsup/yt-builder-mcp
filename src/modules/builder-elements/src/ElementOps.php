@@ -22,6 +22,7 @@ declare(strict_types=1);
 
 namespace WootsUp\BuilderMcp\Elements;
 
+use WootsUp\BuilderMcp\SourceBinding\BindingSerializer;
 use WootsUp\BuilderMcp\State\JsonPointer;
 use WootsUp\BuilderMcp\State\LayoutReader;
 
@@ -205,34 +206,17 @@ final class ElementOps
     }
 
     /**
-     * F-01: same binding-presence heuristic used by PageQuery::schema() and
-     * the MCP TS `mapElementRow` mapper. Both the legacy plain-string and
-     * the F-13 structured shape count as a binding.
+     * D1 / T1 (F-01-Rest, 2026-05-22): single source-of-truth via
+     * BindingSerializer. Recognises legacy bare-string, F-13 canonical
+     * `props.source.query.name`, top-level `node.source`, cached
+     * `node.source_extended`, AND nodes whose only binding indicator is
+     * a `props.<el>.name` field-mapping (inherit-from-parent pattern).
      *
      * @param array<string, mixed> $node
      */
     private static function hasBinding(array $node): bool
     {
-        if (!isset($node['props']) || !is_array($node['props'])) {
-            return false;
-        }
-        /** @var array<string, mixed> $props */
-        $props = $node['props'];
-        if (!array_key_exists('source', $props)) {
-            return false;
-        }
-        $source = $props['source'];
-        if (is_string($source)) {
-            return $source !== '';
-        }
-        if (is_array($source)) {
-            // F-13 structured shape: {query: {name: ...}, ...} is "bound"
-            // when query.name is a non-empty string.
-            return isset($source['query']['name'])
-                && is_string($source['query']['name'])
-                && $source['query']['name'] !== '';
-        }
-        return false;
+        return BindingSerializer::hasBinding($node);
     }
 
     // ---------------------------------------------------------------------
@@ -451,6 +435,74 @@ final class ElementOps
             );
         }
         JsonPointer::set($state, $elementPath . '/props', $newProps);
+    }
+
+    /**
+     * Deep-merge $patch into $current — keys present in $patch overwrite
+     * keys in $current; keys NOT in $patch survive unchanged. The recursive
+     * descent kicks in for associative arrays only — list arrays (numerically
+     * indexed) are replaced atomically by the patch value because index-
+     * level merging produces unreadable garbage (see canonical pin in
+     * tests/php/unit/Elements/ElementOpsTest.php).
+     *
+     * T5 / F-12 (Maria-Audit 2026-05-22): the controller `update_settings`
+     * endpoint accepts an optional `merge` boolean. When true it fetches the
+     * current props, calls this helper, and writes the merged result —
+     * avoiding the read-modify-write race that the client would otherwise
+     * face when extending a sub-key without clobbering siblings.
+     *
+     * Type-mismatch policy: when $current[$k] and $patch[$k] hold different
+     * shapes (e.g. string vs array), the patch value wins. This keeps the
+     * merge predictable: callers know "request always wins" for any key
+     * they specified.
+     *
+     * @param array<string, mixed> $current
+     * @param array<string, mixed> $patch
+     * @return array<string, mixed>
+     */
+    public static function mergeProps(array $current, array $patch): array
+    {
+        if ($patch === []) {
+            return $current;
+        }
+        if ($current === []) {
+            return $patch;
+        }
+        $out = $current;
+        foreach ($patch as $key => $value) {
+            $haveCurrent = array_key_exists($key, $out);
+            if ($haveCurrent && is_array($out[$key]) && is_array($value)
+                && self::isAssoc($out[$key]) && self::isAssoc($value)
+            ) {
+                /** @var array<string, mixed> $currentChild */
+                $currentChild = $out[$key];
+                /** @var array<string, mixed> $patchChild */
+                $patchChild = $value;
+                $out[$key] = self::mergeProps($currentChild, $patchChild);
+                continue;
+            }
+            $out[$key] = $value;
+        }
+        return $out;
+    }
+
+    /**
+     * Treat any array as associative unless it is an empty array (which is
+     * ambiguous — opt-in to "associative" so the empty patch behaves as a
+     * no-op merge target instead of clobbering the current value with []).
+     *
+     * Numerically-indexed lists are detected via array_is_list() so
+     * (`['a','b','c']`) returns false and is treated as atomic for the
+     * purposes of mergeProps.
+     *
+     * @param array<int|string, mixed> $array
+     */
+    private static function isAssoc(array $array): bool
+    {
+        if ($array === []) {
+            return true;
+        }
+        return !array_is_list($array);
     }
 
     private static function templateLayoutPath(string $templateId): string

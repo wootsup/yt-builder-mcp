@@ -69,18 +69,26 @@ export async function handleElementUpdateSettings(
         template_id: string;
         element_path: string;
         props: Record<string, unknown>;
+        merge?: boolean;
         etag: string;
     },
     extra?: HandlerExtra,
 ): Promise<ToolResult> {
-    const { template_id, element_path, props, etag } = input;
+    const { template_id, element_path, props, merge, etag } = input;
     const encoded = encodeElementPath(element_path);
     const progress = extra ? createProgressReporter(extra) : null;
     await progress?.report(0, 2, PHASE_SEND);
     try {
+        // T5 / F-12: forward `merge` only when explicitly true so older PHP
+        // builds (which ignore unknown keys anyway) get the same byte-for-
+        // byte body they did before.
+        const body: { props: Record<string, unknown>; merge?: boolean } = { props };
+        if (merge === true) {
+            body.merge = true;
+        }
         const data = await client.put(
             `/pages/${encodeURIComponent(template_id)}/elements/${encoded}/settings`,
-            { body: { props }, etag },
+            { body, etag },
         );
         await progress?.report(2, 2, PHASE_CONFIRM);
         return jsonResult(data);
@@ -90,8 +98,8 @@ export async function handleElementUpdateSettings(
             context: { template_id, element_path },
             hint:
                 'On 412 refresh via yootheme_builder_get_etag and retry. To merge ' +
-                'props instead of replacing, fetch via yootheme_builder_element_get ' +
-                'first and pass the merged result.',
+                'props instead of replacing, pass `merge:true` (server deep-merges ' +
+                'the request into current props).',
         });
     }
 }

@@ -413,4 +413,84 @@ final class ElementOpsTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         $ops->updateSettings($state, 'tpl', '/templates/tpl/layout/children/99', ['x' => 1]);
     }
+
+    // ------------------------------------------------------------------
+    // T5 / F-12 — mergeProps() helper for server-side deep-merge writes.
+    //
+    // The MCP update_settings endpoint replaces props by default; passing
+    // merge=true causes the controller to fetch the current props, deep-
+    // merge the request body, and write the merged result back. The
+    // canonical merge semantics live in ElementOps::mergeProps() so they
+    // can be tested in isolation.
+    // ------------------------------------------------------------------
+
+    public function test_merge_props_overwrites_top_level_scalars(): void
+    {
+        $merged = ElementOps::mergeProps(
+            ['title' => 'old', 'class' => 'a'],
+            ['title' => 'new'],
+        );
+        self::assertSame(['title' => 'new', 'class' => 'a'], $merged);
+    }
+
+    public function test_merge_props_preserves_untouched_keys(): void
+    {
+        // F-12 invariant: merge must keep keys NOT in the patch — read-
+        // modify-write race avoidance only works when the server keeps
+        // unspecified keys.
+        $merged = ElementOps::mergeProps(
+            ['title' => 'old', 'margin' => 'small', 'class' => 'a'],
+            ['title' => 'new'],
+        );
+        self::assertSame('small', $merged['margin']);
+        self::assertSame('a', $merged['class']);
+    }
+
+    public function test_merge_props_recurses_into_nested_associative_arrays(): void
+    {
+        $merged = ElementOps::mergeProps(
+            ['source' => ['query' => ['name' => 'old'], 'props' => ['a' => 1]]],
+            ['source' => ['query' => ['name' => 'new']]],
+        );
+        self::assertSame(
+            ['source' => ['query' => ['name' => 'new'], 'props' => ['a' => 1]]],
+            $merged,
+        );
+    }
+
+    public function test_merge_props_replaces_list_arrays_atomically(): void
+    {
+        // Lists are treated as scalar values — replacing them is the only
+        // sane semantics (otherwise array-index merging produces garbage).
+        $merged = ElementOps::mergeProps(
+            ['items' => ['a', 'b', 'c']],
+            ['items' => ['x']],
+        );
+        self::assertSame(['items' => ['x']], $merged);
+    }
+
+    public function test_merge_props_request_overrides_current_when_types_differ(): void
+    {
+        // Type-mismatch: current = string, patch = array → patch wins.
+        $merged = ElementOps::mergeProps(
+            ['source' => 'plain-string'],
+            ['source' => ['query' => ['name' => 'fancy']]],
+        );
+        self::assertSame(
+            ['source' => ['query' => ['name' => 'fancy']]],
+            $merged,
+        );
+    }
+
+    public function test_merge_props_empty_patch_returns_current_unchanged(): void
+    {
+        $current = ['title' => 'x', 'margin' => 'y'];
+        self::assertSame($current, ElementOps::mergeProps($current, []));
+    }
+
+    public function test_merge_props_empty_current_returns_patch_unchanged(): void
+    {
+        $patch = ['title' => 'x'];
+        self::assertSame($patch, ElementOps::mergeProps([], $patch));
+    }
 }

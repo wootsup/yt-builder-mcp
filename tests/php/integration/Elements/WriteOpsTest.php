@@ -170,6 +170,90 @@ final class WriteOpsTest extends TestCase
         self::assertInstanceOf(\WP_Error::class, $resp);
     }
 
+    public function test_update_settings_merge_preserves_untouched_keys(): void
+    {
+        // T5 / F-12: merge=true reads current props, deep-merges request, writes back.
+        // Untouched keys must survive (this is the whole point — it avoids
+        // client-side read-modify-write races).
+        $controller = $this->controller();
+        // Seed an extra key in current props so we can prove merge keeps it.
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][1]['props']
+            = ['source' => 'cat.jpg', 'alt' => 'Cat', 'class' => 'uk-border-rounded'];
+
+        $req = $this->writeRequest('PUT');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/settings';
+        $req->set_param('props', ['source' => 'dog.jpg']);
+        $req->set_param('merge', true);
+
+        $resp = $controller->update_settings($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        // source overwritten, alt + class preserved.
+        self::assertSame('dog.jpg', $stored['layout']['children'][1]['props']['source']);
+        self::assertSame('Cat', $stored['layout']['children'][1]['props']['alt']);
+        self::assertSame(
+            'uk-border-rounded',
+            $stored['layout']['children'][1]['props']['class'],
+        );
+    }
+
+    public function test_update_settings_replace_mode_unchanged_when_merge_omitted(): void
+    {
+        // Default merge=false (omitted) behaviour must remain "full replace".
+        $controller = $this->controller();
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][1]['props']
+            = ['source' => 'cat.jpg', 'alt' => 'Cat', 'class' => 'uk-border-rounded'];
+
+        $req = $this->writeRequest('PUT');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/settings';
+        $req->set_param('props', ['source' => 'dog.jpg']);
+        // No `merge` param — default replace semantics.
+
+        $resp = $controller->update_settings($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        self::assertSame(['source' => 'dog.jpg'], $stored['layout']['children'][1]['props']);
+    }
+
+    public function test_update_settings_merge_deep_merges_nested_objects(): void
+    {
+        // F-12: structured F-13-shape sources must be merge-able by sub-key.
+        $controller = $this->controller();
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][1]['props']
+            = [
+                'source' => [
+                    'query' => ['name' => 'posts.singlePost'],
+                    'props' => ['title' => 'old', 'image' => 'a.jpg'],
+                ],
+            ];
+
+        $req = $this->writeRequest('PUT');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/settings';
+        $req->set_param('props', [
+            'source' => ['props' => ['title' => 'new']],
+        ]);
+        $req->set_param('merge', true);
+
+        $resp = $controller->update_settings($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        $props = $stored['layout']['children'][1]['props'];
+        // query.name preserved.
+        self::assertSame('posts.singlePost', $props['source']['query']['name']);
+        // props.title overwritten, props.image preserved.
+        self::assertSame('new', $props['source']['props']['title']);
+        self::assertSame('a.jpg', $props['source']['props']['image']);
+    }
+
     public function test_update_settings_returns_412_on_etag_mismatch(): void
     {
         $controller = $this->controller();
