@@ -22,6 +22,7 @@ use WootsUp\BuilderMcp\Auth\SigningSecret;
 use WootsUp\BuilderMcp\Cache\CacheFlusher;
 use WootsUp\BuilderMcp\Elements\ElementOps;
 use WootsUp\BuilderMcp\Elements\ElementsController;
+use WootsUp\BuilderMcp\Inspection\Inspector;
 use WootsUp\BuilderMcp\State\LayoutReader;
 use WootsUp\BuilderMcp\State\LayoutWriter;
 use WootsUp\BuilderMcp\State\StateLock;
@@ -78,6 +79,16 @@ use WootsUp\BuilderMcp\Yootheme\YoothemeAdapter;
         static fn (): ElementOps => new ElementOps($reader),
     );
 
+    $inspector = Container::get(
+        Inspector::class,
+        static fn (): Inspector => new Inspector(
+            Container::get(
+                YoothemeAdapter::class,
+                static fn (): YoothemeAdapter => new YoothemeAdapter(),
+            ),
+        ),
+    );
+
     $controller = Container::get(
         ElementsController::class,
         static fn (): ElementsController => new ElementsController(
@@ -86,6 +97,7 @@ use WootsUp\BuilderMcp\Yootheme\YoothemeAdapter;
             $writer,
             $cacheFlusher,
             $verifier,
+            $inspector,
         ),
     );
 

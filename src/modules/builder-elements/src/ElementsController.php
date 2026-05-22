@@ -39,6 +39,7 @@ declare(strict_types=1);
 namespace WootsUp\BuilderMcp\Elements;
 
 use WootsUp\BuilderMcp\Cache\CacheFlusher;
+use WootsUp\BuilderMcp\Inspection\Inspector;
 use WootsUp\BuilderMcp\Rest\EtagMiddleware;
 use WootsUp\BuilderMcp\Rest\PointerControllerTrait;
 use WootsUp\BuilderMcp\Rest\RestController;
@@ -50,14 +51,18 @@ final class ElementsController extends RestController
 {
     use PointerControllerTrait;
 
+    private ?Inspector $inspector;
+
     public function __construct(
         private readonly ElementOps $ops,
         private readonly LayoutReader $reader,
         private readonly LayoutWriter $writer,
         private readonly CacheFlusher $cacheFlusher,
         \WootsUp\BuilderMcp\Auth\BearerVerifier $verifier,
+        ?Inspector $inspector = null,
     ) {
         parent::__construct($verifier);
+        $this->inspector = $inspector;
     }
 
     public function register_routes(): void
@@ -238,6 +243,26 @@ final class ElementsController extends RestController
                 'yootheme_builder_mcp.elements.invalid_body',
                 '`element_type` is required.',
                 ['status' => 400],
+            );
+        }
+        // F-11 (Maria-Audit 2026-05-22): validate `element_type` against the
+        // live YT element-registry (or the static fallback catalogue when YT
+        // is not loaded). Without this check, the controller happily wrote
+        // unknown element-types into the layout tree — YT then refused to
+        // render them and the customer saw silent failure.
+        $inspector = $this->inspector();
+        if (!$inspector->isKnownType($elementType)) {
+            return new \WP_Error(
+                'yootheme_builder_mcp.elements.invalid_type',
+                sprintf(
+                    'Unknown element-type "%s". Use yootheme_builder_element_types_list to discover valid values.',
+                    $elementType,
+                ),
+                [
+                    'status' => 400,
+                    'element_type' => $elementType,
+                    'hint' => 'Use yootheme_builder_element_types_list to discover valid values.',
+                ],
             );
         }
         $props = isset($params['props']) && is_array($params['props']) ? $params['props'] : [];
@@ -460,4 +485,15 @@ final class ElementsController extends RestController
     // pointerFromRequest() and assertPointerWithinTemplate() now live in
     // PointerControllerTrait (Wave-6 R2.8 — single source of truth shared
     // with SourcesController).
+
+    /**
+     * Lazy Inspector accessor — keeps the constructor signature back-compat
+     * (Inspector is injected by the module bootstrap when wired; tests that
+     * build the controller directly without an Inspector get a default
+     * static-catalogue Inspector here).
+     */
+    private function inspector(): Inspector
+    {
+        return $this->inspector ??= new Inspector();
+    }
 }

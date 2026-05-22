@@ -342,6 +342,44 @@ final class WriteOpsTest extends TestCase
         self::assertSame(3, $data['total']);
     }
 
+    // ------------------------------------------------------------------
+    // F-11 — element_add validates element_type against Inspector registry.
+    // ------------------------------------------------------------------
+
+    public function test_add_element_returns_400_for_unknown_element_type(): void
+    {
+        $controller = $this->controller();
+        $req = $this->writeRequest('POST');
+        $req['template_id'] = 'tpl';
+        $req->set_param('parent_path', '');
+        $req->set_param('element_type', 'definitely-not-a-real-type');
+
+        $resp = $controller->add_element($req);
+        self::assertInstanceOf(\WP_Error::class, $resp);
+        /** @var \WP_Error $resp */
+        self::assertSame('yootheme_builder_mcp.elements.invalid_type', $resp->get_error_code());
+        $data = $resp->get_error_data();
+        self::assertSame(400, $data['status']);
+        // Hint must reference element_types_list (the discovery tool).
+        self::assertStringContainsString('element_types_list', $data['hint']);
+        self::assertSame('definitely-not-a-real-type', $data['element_type']);
+    }
+
+    public function test_add_element_accepts_canonical_builtin_type(): void
+    {
+        // F-11 must NOT reject canonical built-in types.
+        $controller = $this->controller();
+        $req = $this->writeRequest('POST');
+        $req['template_id'] = 'tpl';
+        $req->set_param('parent_path', '');
+        $req->set_param('element_type', 'headline');
+        $req->set_param('props', ['content' => 'Hello']);
+
+        $resp = $controller->add_element($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        self::assertSame(200, $resp->get_status());
+    }
+
     /**
      * F-07 fix (Maria-Audit 2026-05-22): a mutation cycle A→B→A must
      * surface three distinct ETags even when the final state byte-equals
