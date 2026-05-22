@@ -1,6 +1,6 @@
 {
     "name": "@wootsup/yt-builder-mcp",
-    "version": "0.2.0-alpha.3",
+    "version": "0.2.0-alpha.4",
     "type": "module",
     "description": "YT Builder MCP — drive your page builder from Claude, Cursor, Codex, Gemini and 5 other MCP-capable AI assistants. Built for YOOtheme Pro 4.0+. Independent third-party project, not affiliated with YOOtheme GmbH.",
     "license": "MIT",
