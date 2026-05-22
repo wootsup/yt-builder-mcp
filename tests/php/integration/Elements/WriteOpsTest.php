@@ -380,6 +380,30 @@ final class WriteOpsTest extends TestCase
         self::assertSame(200, $resp->get_status());
     }
 
+    // ------------------------------------------------------------------
+    // F-12 — 412 precondition_failed carries a hint pointing at element_get.
+    // ------------------------------------------------------------------
+
+    public function test_update_settings_412_response_includes_element_get_hint(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('PUT', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/settings';
+        $req->set_param('props', ['source' => 'dog.jpg']);
+        $req->set_header('If-Match', 'stale-etag-value');
+
+        $resp = $controller->update_settings($req);
+        self::assertInstanceOf(\WP_Error::class, $resp);
+        /** @var \WP_Error $resp */
+        $data = $resp->get_error_data();
+        self::assertSame(412, $data['status']);
+        // Hint must reference yootheme_builder_element_get so the LLM
+        // re-reads the (now-canonical, F-01) element shape before retrying.
+        self::assertArrayHasKey('hint', $data);
+        self::assertStringContainsString('element_get', $data['hint']);
+    }
+
     /**
      * F-07 fix (Maria-Audit 2026-05-22): a mutation cycle A→B→A must
      * surface three distinct ETags even when the final state byte-equals

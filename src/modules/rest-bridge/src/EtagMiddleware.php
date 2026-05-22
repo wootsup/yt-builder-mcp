@@ -80,6 +80,11 @@ final class EtagMiddleware
             [
                 'status' => 412,
                 'expected_etag' => $currentEtag,
+                // F-12 (Maria-Audit 2026-05-22): the read-modify-write
+                // cycle is functional now that F-01 makes element_get
+                // surface the canonical shape — direct callers to
+                // re-read the element they want to mutate before retrying.
+                'hint' => 'Re-read via yootheme_builder_element_get and retry with the fresh ETag in If-Match.',
             ],
         );
     }

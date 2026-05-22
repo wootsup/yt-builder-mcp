@@ -456,7 +456,15 @@ final class ElementsController extends RestController
             return new \WP_Error(
                 'yootheme_builder_mcp.precondition_failed',
                 'State changed during write (TOCTOU). Re-read and retry.',
-                ['status' => 412, 'expected_etag' => $etagAtStart, 'current_etag' => $etagNow],
+                [
+                    'status' => 412,
+                    'expected_etag' => $etagAtStart,
+                    'current_etag' => $etagNow,
+                    // F-12 (Maria-Audit 2026-05-22): hint MCP-clients to
+                    // re-read via element_get (now that F-01 makes its
+                    // response shape canonical) before retrying the write.
+                    'hint' => 'Re-read the element via yootheme_builder_element_get and retry with the fresh ETag in If-Match.',
+                ],
             );
         }
 
