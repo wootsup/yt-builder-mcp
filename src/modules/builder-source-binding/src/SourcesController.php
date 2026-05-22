@@ -168,7 +168,39 @@ final class SourcesController extends RestController
             );
         }
 
-        return $this->mutateBinding($templateId, $pointer, $sourceName);
+        /** @var mixed $fieldMappingsRaw */
+        $fieldMappingsRaw = $params['field_mappings'] ?? null;
+        $fieldMappings = null;
+        if ($fieldMappingsRaw !== null) {
+            if (!is_array($fieldMappingsRaw)) {
+                return new \WP_Error(
+                    'yootheme_builder_mcp.source_binding.invalid_body',
+                    '`field_mappings` must be an object of {prop_name: source_field_name} strings.',
+                    ['status' => 400],
+                );
+            }
+            $normalized = [];
+            foreach ($fieldMappingsRaw as $propName => $sourceField) {
+                if (!is_string($propName) || $propName === '') {
+                    return new \WP_Error(
+                        'yootheme_builder_mcp.source_binding.invalid_body',
+                        '`field_mappings` keys must be non-empty strings.',
+                        ['status' => 400],
+                    );
+                }
+                if (!is_string($sourceField)) {
+                    return new \WP_Error(
+                        'yootheme_builder_mcp.source_binding.invalid_body',
+                        sprintf('`field_mappings["%s"]` must be a string source-field name.', $propName),
+                        ['status' => 400],
+                    );
+                }
+                $normalized[$propName] = $sourceField;
+            }
+            $fieldMappings = $normalized;
+        }
+
+        return $this->mutateBinding($templateId, $pointer, $sourceName, $fieldMappings);
     }
 
     /**
@@ -191,10 +223,27 @@ final class SourcesController extends RestController
     /**
      * Common bind/unbind flow.
      *
+     * Writes a YOOtheme-canonical structured `source` object:
+     * ```
+     * source: {
+     *   query: { name: "<source_name>" },
+     *   props: { <prop_name>: { name: "<source_field>", filters: {} }, ... }
+     * }
+     * ```
+     *
+     * F-13 fix: previously stored `props.source` as a plain string which
+     * YT's frontend rejected. Structured shape mirrors the canonical
+     * layout (see YOOtheme native bindings + spike-source-bridge).
+     *
+     * @param array<string, string>|null $fieldMappings prop_name → source_field_name
      * @return \WP_REST_Response|\WP_Error
      */
-    private function mutateBinding(string $templateId, string $pointer, ?string $sourceName)
-    {
+    private function mutateBinding(
+        string $templateId,
+        string $pointer,
+        ?string $sourceName,
+        ?array $fieldMappings = null,
+    ) {
         // Wave-6 Fix 6: assert the pointer lives within the addressed template.
         $allowedPrefix = JsonPointer::compile(['templates', $templateId]);
         if (!JsonPointer::isWithinPrefix($pointer, $allowedPrefix)) {
@@ -236,7 +285,8 @@ final class SourcesController extends RestController
             // Unbind: remove the prop if present (no-op if missing).
             JsonPointer::remove($state, $sourcePtr);
         } else {
-            JsonPointer::set($state, $sourcePtr, $sourceName);
+            $sourceValue = self::buildSourceValue($sourceName, $fieldMappings);
+            JsonPointer::set($state, $sourcePtr, $sourceValue);
         }
 
         // Re-verify ETag immediately before persisting.
@@ -262,14 +312,70 @@ final class SourcesController extends RestController
         }
         $this->cacheFlusher->flush();
 
+        // Re-read the node to surface the canonical de-structured shape
+        // back to the caller (so MCP-clients can pin a single response
+        // contract for both PUT and GET).
+        $updatedNode = $this->elements->get($pointer);
+        $binding = $updatedNode !== null
+            ? self::extractBinding($updatedNode)
+            : ($sourceName === null
+                ? ['source_name' => null, 'field_mappings' => []]
+                : self::buildBindingResponse($sourceName, $fieldMappings));
+
         return new \WP_REST_Response([
             'template_id' => $templateId,
             'element_path' => $pointer,
-            'binding' => [
-                'source' => $sourceName,
-            ],
+            'binding' => $binding,
             'etag' => $this->reader->etag(),
         ], 200);
+    }
+
+    /**
+     * Build the YT-canonical `source` value written to `props.source`.
+     *
+     * Shape:
+     *   `{query: {name: <source_name>}, props?: {<prop>: {name: <field>, filters: {}}}}`
+     *
+     * The optional `props` is only included when `$fieldMappings` is a
+     * non-empty array — YT's renderer treats absence-of-`props` as
+     * "let the element render with no field-bound props" (still iterates
+     * the source).
+     *
+     * @param array<string, string>|null $fieldMappings
+     * @return array<string, mixed>
+     */
+    private static function buildSourceValue(string $sourceName, ?array $fieldMappings): array
+    {
+        $value = [
+            'query' => ['name' => $sourceName],
+        ];
+        if ($fieldMappings !== null && $fieldMappings !== []) {
+            $propsOut = [];
+            foreach ($fieldMappings as $propName => $sourceField) {
+                $propsOut[$propName] = [
+                    'name' => $sourceField,
+                    'filters' => new \stdClass(),
+                ];
+            }
+            $value['props'] = $propsOut;
+        }
+        return $value;
+    }
+
+    /**
+     * Build the binding-response shape from an in-memory mutation when
+     * the node-read after write fails (defense — the writer ran, so the
+     * canonical shape is known).
+     *
+     * @param array<string, string>|null $fieldMappings
+     * @return array{source_name: string, field_mappings: array<string, string>}
+     */
+    private static function buildBindingResponse(string $sourceName, ?array $fieldMappings): array
+    {
+        return [
+            'source_name' => $sourceName,
+            'field_mappings' => $fieldMappings ?? [],
+        ];
     }
 
     // pointerFromRequest() now lives in PointerControllerTrait. The
@@ -277,22 +383,57 @@ final class SourcesController extends RestController
     // action-suffix.
 
     /**
-     * Pull the source-binding off a node. YOOtheme stores the binding
-     * under `props.source` plus `source_config`/`source_args`. Wave-2
-     * surfaces them as-is; Wave-3 will canonicalise into a richer shape.
+     * Pull the source-binding off a node and project it back to the
+     * MCP-canonical `{source_name, field_mappings}` shape.
+     *
+     * YOOtheme stores bindings as a structured object under `props.source`:
+     *   `{query: {name: "posts.singlePost"}, props: {<el>: {name, filters}}}`
+     *
+     * F-13 fix: previously emitted the raw `source` value (and a handful
+     * of historical sibling keys). The new shape is content-addressed
+     * to the same domain that `PUT /binding` accepts — round-trip safe.
+     *
+     * Legacy plain-string `source` values (written by pre-F-13 builds)
+     * are surfaced as `source_name: <string>, field_mappings: {}` so
+     * MCP-clients reading old state still see a coherent response.
      *
      * @param array<string, mixed> $node
-     * @return array<string, mixed>
+     * @return array{source_name: string|null, field_mappings: array<string, string>}
      */
     private static function extractBinding(array $node): array
     {
         $props = isset($node['props']) && is_array($node['props']) ? $node['props'] : [];
-        $binding = [];
-        foreach (['source', 'source_config', 'source_args', 'source_filter', 'source_orderby', 'source_limit'] as $key) {
-            if (array_key_exists($key, $props)) {
-                $binding[$key] = $props[$key];
-            }
+        if (!array_key_exists('source', $props)) {
+            return ['source_name' => null, 'field_mappings' => []];
         }
-        return $binding;
+        /** @var mixed $source */
+        $source = $props['source'];
+
+        // Canonical structured shape.
+        if (is_array($source)) {
+            $sourceName = null;
+            if (isset($source['query']) && is_array($source['query']) && isset($source['query']['name']) && is_string($source['query']['name'])) {
+                $sourceName = $source['query']['name'];
+            }
+            $fieldMappings = [];
+            if (isset($source['props']) && is_array($source['props'])) {
+                foreach ($source['props'] as $propName => $propValue) {
+                    if (!is_string($propName)) {
+                        continue;
+                    }
+                    if (is_array($propValue) && isset($propValue['name']) && is_string($propValue['name'])) {
+                        $fieldMappings[$propName] = $propValue['name'];
+                    }
+                }
+            }
+            return ['source_name' => $sourceName, 'field_mappings' => $fieldMappings];
+        }
+
+        // Legacy plain-string fallback (pre-F-13 state).
+        if (is_string($source)) {
+            return ['source_name' => $source, 'field_mappings' => []];
+        }
+
+        return ['source_name' => null, 'field_mappings' => []];
     }
 }
