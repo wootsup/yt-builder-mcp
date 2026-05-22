@@ -21,7 +21,7 @@ declare(strict_types=1);
 
 namespace WootsUp\BuilderMcp\Yootheme;
 
-final class YoothemeAdapter
+class YoothemeAdapter
 {
     /**
      * Return true if the YOOtheme Pro application has booted in the
@@ -34,16 +34,106 @@ final class YoothemeAdapter
     }
 
     /**
-     * Return YOOtheme's reported version string (from the YOOTHEME_VERSION
-     * constant) or null if YT is not loaded / version cannot be detected.
+     * Return YOOtheme's reported version string, or null when YT is not
+     * loaded / no detection path succeeds.
+     *
+     * F-09 fix (Maria-Audit 2026-05-22): the live audit saw `yootheme_version: null`
+     * on dev — turns out YT Pro exposes its version via several different
+     * symbols across versions, and the old code only probed one
+     * (`YOOTHEME_VERSION`). Walk every known surface in order of trust
+     * before giving up:
+     *
+     *   1. `YOOTHEME_VERSION` constant — defined by yootheme-pro plugin
+     *      bootstrap on most modern (>=4.x) installs.
+     *   2. `\YOOtheme\Theme::VERSION` class constant — older theme-bundled
+     *      builds; surfaced via reflection so we don't hard-fail when the
+     *      class is absent.
+     *   3. `\YOOtheme\app('version')` — DI-registered scalar, available on
+     *      the headless YT 5 stack.
+     *
+     * Returns the first non-empty string; null when every probe misses.
      */
     public function getVersion(): ?string
     {
         if (!$this->isLoaded()) {
             return null;
         }
+
+        // 1. Plugin-bootstrap constant.
         if (defined('YOOTHEME_VERSION')) {
-            return (string) \YOOTHEME_VERSION;
+            $v = (string) \YOOTHEME_VERSION;
+            if ($v !== '') {
+                return $v;
+            }
+        }
+
+        // 2. Class-constant reflection. `\YOOtheme\Theme::VERSION` is the
+        // canonical surface on theme-bundled YT 4 builds. Reflection
+        // avoids a hard class-load when the class isn't autoloadable.
+        if (class_exists('\\YOOtheme\\Theme', false)) {
+            try {
+                $reflection = new \ReflectionClass('\\YOOtheme\\Theme');
+                if ($reflection->hasConstant('VERSION')) {
+                    $v = $reflection->getConstant('VERSION');
+                    if (is_string($v) && $v !== '') {
+                        return $v;
+                    }
+                }
+            } catch (\Throwable) {
+                // fall through to next probe
+            }
+        }
+
+        // 3. DI-registered scalar.
+        $appFn = '\\YOOtheme\\app';
+        if (function_exists($appFn)) {
+            try {
+                /** @var mixed $v */
+                $v = $appFn('version'); // @phpstan-ignore-line
+                if (is_string($v) && $v !== '') {
+                    return $v;
+                }
+            } catch (\Throwable) {
+                // ignore
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Return the YOOessentials companion-plugin version, or null when
+     * YOOessentials is not installed / not loaded.
+     *
+     * F-09 fix (Maria-Audit 2026-05-22): pages_list element-counts and
+     * the element_type_get_schema surface depend on which essentials
+     * elements are registered — exposing the version makes "why is
+     * `card-grid` missing on this server?" debuggable for support.
+     */
+    public function getEssentialsVersion(): ?string
+    {
+        // YOOessentials uses a plugin-bootstrap constant on modern builds.
+        if (defined('YOOESSENTIALS_VERSION')) {
+            $v = (string) \constant('YOOESSENTIALS_VERSION');
+            if ($v !== '') {
+                return $v;
+            }
+        }
+        // Class-constant reflection fallback.
+        foreach (['\\Yooessentials\\Plugin', '\\YOOessentials\\Plugin'] as $candidate) {
+            if (class_exists($candidate, false)) {
+                try {
+                    $reflection = new \ReflectionClass($candidate);
+                    if ($reflection->hasConstant('VERSION')) {
+                        $v = $reflection->getConstant('VERSION');
+                        if (is_string($v) && $v !== '') {
+                            return $v;
+                        }
+                    }
+                } catch (\Throwable) {
+                    // try next candidate
+                }
+            }
         }
         return null;
     }
@@ -114,6 +204,96 @@ final class YoothemeAdapter
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Return enriched source-field entries pulled from the YOOtheme
+     * Builder source-schema. Each entry exposes:
+     *
+     *  - name:  canonical field-name (e.g. `posts.singlePost`)
+     *  - label: human-facing label (from `config['metadata']['label']`,
+     *           falls back to the name)
+     *  - group: group key as YT itself classifies it
+     *           (`config['metadata']['group']`, falls back to '')
+     *  - type:  GraphQL-Type display-string (`(string) $field->getType()`)
+     *           — empty string when type-introspection unavailable.
+     *
+     * Returns `null` when YT is not loaded so callers can fall through
+     * to safe defaults. Reads the FieldDefinition objects returned by
+     * `Query->getFields()` — `->config['metadata']` is the canonical
+     * source-of-truth for label / group (api-mapper's DynamicQueryType
+     * registers the same shape; see spike-source-bridge).
+     *
+     * @return list<array{name: string, label: string, group: string, type: string}>|null
+     */
+    public function getSourceFieldEntries(): ?array
+    {
+        $fields = $this->getSourceFields();
+        if ($fields === null) {
+            return null;
+        }
+        $out = [];
+        foreach ($fields as $name => $field) {
+            $entry = [
+                'name' => (string) $name,
+                'label' => (string) $name,
+                'group' => '',
+                'type' => '',
+            ];
+            // FieldDefinition objects (webonyx/graphql-php) expose ->config
+            // as a public array; api-mapper writes 'metadata' there.
+            if (is_object($field)) {
+                /** @var mixed $config */
+                $config = property_exists($field, 'config')
+                    ? $field->config // @phpstan-ignore-line
+                    : null;
+                if (is_array($config) && isset($config['metadata']) && is_array($config['metadata'])) {
+                    /** @var array<string, mixed> $metadata */
+                    $metadata = $config['metadata'];
+                    if (isset($metadata['label']) && is_string($metadata['label'])) {
+                        $entry['label'] = $metadata['label'];
+                    }
+                    if (isset($metadata['group']) && is_string($metadata['group'])) {
+                        $entry['group'] = $metadata['group'];
+                    }
+                }
+                if (method_exists($field, 'getType')) {
+                    try {
+                        /** @var mixed $type */
+                        $type = $field->getType();
+                        if (is_object($type) && method_exists($type, '__toString')) {
+                            $entry['type'] = (string) $type; // @phpstan-ignore-line
+                        }
+                    } catch (\Throwable) {
+                        // best-effort — leave type empty
+                    }
+                }
+            } elseif (is_array($field)) {
+                /** @var array<string, mixed> $arr */
+                $arr = $field;
+                if (isset($arr['metadata']) && is_array($arr['metadata'])) {
+                    /** @var array<string, mixed> $metadata */
+                    $metadata = $arr['metadata'];
+                    if (isset($metadata['label']) && is_string($metadata['label'])) {
+                        $entry['label'] = $metadata['label'];
+                    }
+                    if (isset($metadata['group']) && is_string($metadata['group'])) {
+                        $entry['group'] = $metadata['group'];
+                    }
+                }
+                if (isset($arr['type'])) {
+                    /** @var mixed $rawType */
+                    $rawType = $arr['type'];
+                    if (is_string($rawType)) {
+                        $entry['type'] = $rawType;
+                    } elseif (is_object($rawType) && method_exists($rawType, '__toString')) {
+                        $entry['type'] = (string) $rawType; // @phpstan-ignore-line
+                    }
+                }
+            }
+            $out[] = $entry;
+        }
+        return $out;
     }
 
     /**

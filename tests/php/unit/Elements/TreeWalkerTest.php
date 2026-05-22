@@ -86,4 +86,101 @@ final class TreeWalkerTest extends TestCase
         $entries = iterator_to_array(TreeWalker::walk($tree, ''), false);
         self::assertSame([], $entries);
     }
+
+    // ------------------------------------------------------------------
+    // F-02 — countDescendants() recursive count (single source of truth
+    // for pages_list.elements_count / element_list.total / page_get_schema.total).
+    // ------------------------------------------------------------------
+
+    public function test_count_descendants_returns_zero_for_leaf(): void
+    {
+        self::assertSame(0, TreeWalker::countDescendants(['type' => 'headline']));
+    }
+
+    public function test_count_descendants_returns_zero_when_children_missing(): void
+    {
+        self::assertSame(0, TreeWalker::countDescendants(['type' => 'layout']));
+    }
+
+    public function test_count_descendants_returns_zero_when_children_empty(): void
+    {
+        self::assertSame(0, TreeWalker::countDescendants(['type' => 'layout', 'children' => []]));
+    }
+
+    public function test_count_descendants_counts_top_level_children(): void
+    {
+        $tree = [
+            'type' => 'layout',
+            'children' => [
+                ['type' => 'section'],
+                ['type' => 'section'],
+                ['type' => 'section'],
+            ],
+        ];
+        self::assertSame(3, TreeWalker::countDescendants($tree));
+    }
+
+    public function test_count_descendants_recurses_into_nested_children(): void
+    {
+        // section→row→column→headline + section = 5 descendants of the layout
+        $tree = [
+            'type' => 'layout',
+            'children' => [
+                [
+                    'type' => 'section',
+                    'children' => [
+                        ['type' => 'row', 'children' => [
+                            ['type' => 'column', 'children' => [
+                                ['type' => 'headline'],
+                            ]],
+                        ]],
+                    ],
+                ],
+                ['type' => 'section'],
+            ],
+        ];
+        self::assertSame(5, TreeWalker::countDescendants($tree));
+    }
+
+    public function test_count_descendants_skips_non_array_children(): void
+    {
+        $tree = [
+            'type' => 'layout',
+            'children' => [
+                'broken-scalar',
+                ['type' => 'section'],
+                42,
+                ['type' => 'image'],
+            ],
+        ];
+        self::assertSame(2, TreeWalker::countDescendants($tree));
+    }
+
+    public function test_count_descendants_matches_walk_count(): void
+    {
+        // Pin: countDescendants() and walk() must agree on every tree —
+        // they are the structural guarantee that F-02 holds (one source of
+        // truth for "how many elements" across pages_list / element_list /
+        // page_get_schema).
+        $tree = [
+            'type' => 'layout',
+            'children' => [
+                [
+                    'type' => 'section',
+                    'children' => [
+                        ['type' => 'row', 'children' => [
+                            ['type' => 'column'],
+                            ['type' => 'column', 'children' => [
+                                ['type' => 'headline'],
+                                ['type' => 'image'],
+                            ]],
+                        ]],
+                    ],
+                ],
+                ['type' => 'image'],
+            ],
+        ];
+        $walked = iterator_to_array(TreeWalker::walk($tree, ''), false);
+        self::assertSame(count($walked), TreeWalker::countDescendants($tree));
+    }
 }

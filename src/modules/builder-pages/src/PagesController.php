@@ -136,17 +136,32 @@ final class PagesController extends RestController
                 ['status' => 404],
             );
         }
+        // F-01/F-02: emit `nodes` (canonical wire name read by the MCP TS
+        // mapper) AND `schema` (legacy alias for backwards-compat with
+        // older builds). `total` is the recursive count from the same
+        // walker used by pages_list.elements_count and element_list.total
+        // so the three totals are guaranteed to agree.
         return new \WP_REST_Response([
             'template_id' => $id,
+            'nodes' => $schema,
             'schema' => $schema,
+            'total' => count($schema),
             'etag' => $this->query->etag(),
         ], 200);
     }
 
     public function get_etag(\WP_REST_Request $request): \WP_REST_Response
     {
+        unset($request); // unused, signature required by WP REST API.
+        // F-10 (Maria-Audit 2026-05-22): callers (clients, MCP tools, CI
+        // gates) want to know WHEN the ETag was computed — so they can
+        // tell a stale-cached document from a fresh server probe. ISO-8601
+        // (RFC-3339) with the `c` format preserves the timezone-offset
+        // explicitly — UTC ends in `+00:00`, locale-defaults retain their
+        // offset rather than collapsing to the server's local TZ.
         return new \WP_REST_Response([
             'etag' => $this->query->etag(),
+            'generated_at' => \gmdate('c'),
         ], 200);
     }
 
@@ -196,8 +211,29 @@ final class PagesController extends RestController
     }
 
     /**
-     * Publish a template. Wave-3 stub: alias to save_page. Later waves may
-     * bump `post_status` on the underlying WP post or trigger cache-warmers.
+     * Publish a template.
+     *
+     * F-15 fix (Maria-Audit 2026-05-22): Wave-3 shipped a thin alias to
+     * save_page() with a `published: true` marker. The audit observed
+     * that this didn't reflect the real semantics — YOOtheme Pro
+     * templates do not have a draft/publish lifecycle in the WordPress
+     * post-status sense; they are "live" the instant they are saved.
+     *
+     * The structural fix has three parts:
+     *
+     *  1. Run save_page() to commit the state (this also bumps the
+     *     monotonic revision — F-07 — so the post-publish ETag is
+     *     guaranteed to differ from any prior state).
+     *  2. Flush every cache layer that might still hold a pre-publish
+     *     render (CacheFlusher already covers YT cache + scoped WP
+     *     object-cache eviction).
+     *  3. Persist the post-publish ETag in `wp_option('ytb_mcp_published_state_etag')`
+     *     so subsequent callers can diff the published snapshot against
+     *     the current draft. This is the closest analogue to a
+     *     "published version" YT's data model supports.
+     *
+     * The response carries a `note` documenting (3) so MCP clients and
+     * the future Joomla port have a stable explanation surface.
      *
      * @return \WP_REST_Response|\WP_Error
      */
@@ -209,10 +245,34 @@ final class PagesController extends RestController
         }
         /** @var \WP_REST_Response $resp */
         $data = $resp->get_data();
-        if (is_array($data)) {
-            $data['published'] = true;
-            $resp->data = $data;
+        if (!is_array($data)) {
+            return $resp;
         }
+
+        // (2) Belt-and-braces cache flush. save_page() already calls
+        // $this->cacheFlusher->flush() inside its successful path; we
+        // re-invoke explicitly here so the publish-action is documented
+        // as an idempotent cache-eviction trigger (the second flush is
+        // cheap — wp_cache_delete on missing keys is a no-op).
+        $this->cacheFlusher->flush();
+
+        // (3) Snapshot the current ETag as the "published" state. We
+        // pull a fresh ETag from the reader (which reflects the
+        // just-bumped revision from save_page() → LayoutWriter::persist).
+        $publishedEtag = $this->reader->etag();
+        \update_option(self::PUBLISHED_STATE_ETAG_OPTION, $publishedEtag, false);
+
+        $data['published'] = true;
+        $data['published_state_etag'] = $publishedEtag;
+        $data['note'] = 'YOOtheme templates publish on save; this is a cache-flush + state-snapshot operation.';
+        $resp->data = $data;
         return $resp;
     }
+
+    /**
+     * wp_option key for the F-15 "last-published" ETag snapshot. Stored
+     * with autoload=false — every publish_page() call writes it, but
+     * only callers explicitly probing draft-vs-published need to read it.
+     */
+    public const PUBLISHED_STATE_ETAG_OPTION = 'ytb_mcp_published_state_etag';
 }

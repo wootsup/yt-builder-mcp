@@ -2,17 +2,21 @@
 /**
  * SourceRegistry — group-aware view of registered YOOtheme Builder sources.
  *
- * Wave 2 Task 2.5 (read-only). Returns a structure with three top-level
- * groups — `apimapper` (sources contributed by the WootsUp API Mapper
- * companion plugin), `wordpress` (built-in WP post-types, terms, options),
- * and `essentials` (third-party uEssentials types) — so MCP-clients can
- * present them with stable grouping no matter which subset is installed.
+ * Reads the canonical YOOtheme source schema (`\YOOtheme\Builder\Source`'s
+ * GraphQL `Query` type) via {@see YoothemeAdapter::getSourceFieldEntries()}
+ * and groups every registered query field into one of:
  *
- * When YOOtheme Pro is not loaded (e.g. unit-test bootstrap), all groups
- * are empty arrays. When YT is present, we ask its source-schema for the
- * Query type's fields and bucket them by name-prefix heuristic. The full
- * field-introspection (return-type, args, current-binding) is a Wave 3
- * task and lives in `SourceBinding`'s write path.
+ *  - `apimapper`  — Sources contributed by the WootsUp API Mapper plugin.
+ *  - `wordpress`  — WP core sources (posts.*, terms.*, users.*, …) and
+ *                   classic third-party sources (ACF, WooCommerce, …).
+ *  - `essentials` — uEssentials / YOOessentials sources.
+ *
+ * The classifier prefers YT's own `metadata.group` value (canonical) and
+ * only falls back to a name-prefix heuristic when YT did not annotate the
+ * field (very old plugins). When YT is not loaded the registry yields
+ * three empty arrays so MCP-clients always see the expected scaffold.
+ *
+ * Each entry exposes `{name, label, group, type}` — Wave-6 F-04 fix.
  *
  * @license GPL-2.0-or-later
  * @package WootsUp\BuilderMcp\SourceBinding
@@ -28,38 +32,61 @@ final class SourceRegistry
 {
     private readonly YoothemeAdapter $yootheme;
 
-    public function __construct(?YoothemeAdapter $yootheme = null)
+    /**
+     * Optional entry-source override (test seam). When set, listAll()
+     * skips the YT adapter entirely and uses this closure's return as
+     * the raw `getSourceFieldEntries()` result. Production code does NOT
+     * pass this — `bootstrap.php` injects only the adapter.
+     *
+     * @var (\Closure(): (list<array{name: string, label: string, group: string, type: string}>|null))|null
+     */
+    private $entriesProvider;
+
+    /**
+     * @param (\Closure(): (list<array{name: string, label: string, group: string, type: string}>|null))|null $entriesProvider
+     */
+    public function __construct(?YoothemeAdapter $yootheme = null, ?\Closure $entriesProvider = null)
     {
         $this->yootheme = $yootheme ?? new YoothemeAdapter();
+        $this->entriesProvider = $entriesProvider;
     }
 
     /**
      * Return the registered sources grouped by origin.
      *
-     * The shape is intentionally stable across installs:
+     * The shape is stable across installs:
      * ```
      * [
-     *   'apimapper'  => [...],
+     *   'apimapper'  => [{name, label, group, type}, ...],
      *   'wordpress'  => [...],
      *   'essentials' => [...],
      * ]
      * ```
      *
-     * Each group value is `list<array{name: string, ...}>`. Wave-2 emits
-     * names only; Wave-3 will enrich with return-type and args.
-     *
-     * @return array{apimapper: list<array<string, mixed>>, wordpress: list<array<string, mixed>>, essentials: list<array<string, mixed>>}
+     * @return array{apimapper: list<array{name: string, label: string, group: string, type: string}>, wordpress: list<array{name: string, label: string, group: string, type: string}>, essentials: list<array{name: string, label: string, group: string, type: string}>}
      */
     public function listAll(): array
     {
-        /** @var list<array<string, mixed>> $apimapper */
+        /** @var list<array{name: string, label: string, group: string, type: string}> $apimapper */
         $apimapper = [];
-        /** @var list<array<string, mixed>> $wordpress */
+        /** @var list<array{name: string, label: string, group: string, type: string}> $wordpress */
         $wordpress = [];
-        /** @var list<array<string, mixed>> $essentials */
+        /** @var list<array{name: string, label: string, group: string, type: string}> $essentials */
         $essentials = [];
 
-        if (!$this->yootheme->isLoaded()) {
+        if ($this->entriesProvider !== null) {
+            $entries = ($this->entriesProvider)();
+        } else {
+            if (!$this->yootheme->isLoaded()) {
+                return [
+                    'apimapper' => $apimapper,
+                    'wordpress' => $wordpress,
+                    'essentials' => $essentials,
+                ];
+            }
+            $entries = $this->yootheme->getSourceFieldEntries();
+        }
+        if ($entries === null) {
             return [
                 'apimapper' => $apimapper,
                 'wordpress' => $wordpress,
@@ -67,18 +94,8 @@ final class SourceRegistry
             ];
         }
 
-        $fields = $this->ytFields();
-        if ($fields === null) {
-            return [
-                'apimapper' => $apimapper,
-                'wordpress' => $wordpress,
-                'essentials' => $essentials,
-            ];
-        }
-
-        foreach ($fields as $name => $_meta) {
-            $entry = ['name' => (string) $name];
-            switch (self::classify((string) $name)) {
+        foreach ($entries as $entry) {
+            switch (self::classify($entry)) {
                 case 'apimapper':
                     $apimapper[] = $entry;
                     break;
@@ -99,32 +116,37 @@ final class SourceRegistry
     }
 
     /**
-     * Best-effort: pull the GraphQL `Query` type's fields out of the YOOtheme
-     * Builder source-schema. Returns null on any failure — we never throw.
+     * Classify a source field into one of the three top-level groups.
      *
-     * @return array<string, mixed>|null
+     * Precedence:
+     *  1. `metadata.group` value matched case-insensitively against
+     *     well-known group-strings (canonical — every well-behaved YT
+     *     source-provider sets this).
+     *  2. Name-prefix fallback for fields without group-metadata.
+     *
+     * @param array{name: string, label: string, group: string, type: string} $entry
      */
-    private function ytFields(): ?array
+    private static function classify(array $entry): string
     {
-        // Wave-6 R2.7: every YOOtheme symbol access funnels through the
-        // adapter (single coupling point — see core-yootheme module).
-        return $this->yootheme->getSourceFields();
-    }
+        $group = strtolower($entry['group']);
+        if ($group !== '') {
+            // API Mapper publishes flows under the explicit
+            // "WootsUp - API Mapper" group string.
+            if (str_contains($group, 'api mapper') || str_contains($group, 'apimapper')) {
+                return 'apimapper';
+            }
+            if (str_contains($group, 'essentials') || str_contains($group, 'uikit')) {
+                return 'essentials';
+            }
+            // Everything else metadata-tagged (WordPress, WooCommerce,
+            // ACF, Toolset, custom plugin sources) groups under
+            // 'wordpress' for now — that's the platform bucket.
+            return 'wordpress';
+        }
 
-    /**
-     * Bucket a Query-field name into one of the three group keys.
-     *
-     * Heuristic (Wave-2):
-     *  - `apimapper_*`   → apimapper
-     *  - `essentials_*`  → essentials
-     *  - everything else → wordpress
-     *
-     * Wave-3 will refine this once we mine the group-metadata YOOtheme
-     * itself attaches via `metadata.group`.
-     */
-    private static function classify(string $name): string
-    {
-        if (str_starts_with($name, 'apimapper_')) {
+        // No metadata.group — fall back to name-prefix heuristic.
+        $name = $entry['name'];
+        if (str_starts_with($name, 'apimapper_') || str_starts_with($name, 'apimapperFlow')) {
             return 'apimapper';
         }
         if (str_starts_with($name, 'essentials_') || str_starts_with($name, 'uikit_')) {

@@ -39,4 +39,37 @@ final class TreeWalker
             yield from self::walk($child, $childPointer);
         }
     }
+
+    /**
+     * Count every descendant of the given layout node (recursive, depth-first,
+     * same enumeration rules as walk()).
+     *
+     * F-02: this is the single source of truth for "how many elements live in
+     * this template". Callers (PageQuery::list, ElementOps::listOnTemplate,
+     * PageQuery::schema) all funnel through this counter so the totals in
+     * `pages_list.elements_count`, `element_list.total`, and
+     * `page_get_schema.total` are guaranteed to agree for any given state.
+     *
+     * The root node itself is NOT counted — consistent with walk() which only
+     * yields descendants. A leaf returns 0. A node with no `children` key
+     * also returns 0.
+     *
+     * @param array<string, mixed> $node
+     */
+    public static function countDescendants(array $node): int
+    {
+        if (!isset($node['children']) || !is_array($node['children'])) {
+            return 0;
+        }
+        $total = 0;
+        foreach ($node['children'] as $child) {
+            if (!is_array($child)) {
+                continue;
+            }
+            /** @var array<string, mixed> $child */
+            $total++;
+            $total += self::countDescendants($child);
+        }
+        return $total;
+    }
 }
