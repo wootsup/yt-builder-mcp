@@ -25,6 +25,7 @@ import {
     handlePageGetLayout,
     handlePageGetSchema,
     handlePagesList,
+    handleTemplateSummary,
 } from './handlers-read.js';
 import { handlePagePublish, handlePageSave } from './handlers-write.js';
 import {
@@ -100,6 +101,18 @@ export function buildPagesTools(client: RestClient): readonly AnyToolDefinition[
             outputSchema: ETAG_OUTPUT_SCHEMA,
             annotations: readOnly('Get ETag'),
             handler: () => handleGetEtag(client),
+        }),
+
+        defineTool({
+            name: 'yootheme_builder_template_summary',
+            description:
+                'Token-efficient template overview: element counts by type, binding ' +
+                'count, max nesting depth, and named landmark sections — computed ' +
+                'server-side in one call. Use this to grasp a large template before ' +
+                'pulling element_list or page_get_layout.',
+            inputSchema: { template_id: TEMPLATE_ID },
+            annotations: readOnly('Template Summary'),
+            handler: (input) => handleTemplateSummary(client, input),
         }),
 
         defineTool({

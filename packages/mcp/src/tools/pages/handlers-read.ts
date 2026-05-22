@@ -192,3 +192,35 @@ export async function handleGetEtag(client: RestClient): Promise<ToolResult> {
         });
     }
 }
+
+// ─── template_summary (T9 — Audit-v3 B.5 token-efficient overview) ────
+
+/**
+ * T9: a one-call structured overview of a template — element counts by
+ * type, binding count, max nesting depth, and named landmarks. Lets the
+ * agent grasp a 96-node template for ~1 kB instead of pulling the full
+ * element_list dump (20 kB+).
+ */
+export async function handleTemplateSummary(
+    client: RestClient,
+    { template_id }: { template_id: string },
+): Promise<ToolResult> {
+    try {
+        const data = await client.get<{
+            template_id: string;
+            counts_by_type: Record<string, number>;
+            bound_count: number;
+            max_depth: number;
+            total: number;
+            named_sections: { path: string; name: string }[];
+            etag: string;
+        }>(`/pages/${encodeURIComponent(template_id)}/summary`);
+        return jsonResult(data);
+    } catch (e) {
+        return errorResult({
+            error: e,
+            context: { template_id },
+            hint: 'Verify the template_id exists via yootheme_builder_pages_list.',
+        });
+    }
+}

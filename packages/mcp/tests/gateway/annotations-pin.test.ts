@@ -157,6 +157,7 @@ describe('annotation pin tests (all lanes)', () => {
         yootheme_builder_sources_list: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         yootheme_builder_element_get_binding: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         yootheme_builder_inspect_multi_items_binding: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_template_summary: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 
         // additive (creating) writes — not idempotent
         yootheme_builder_element_add: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },

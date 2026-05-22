@@ -49,6 +49,6 @@ describe('Tool description-length pin', () => {
 
     test('tool count matches expected registered surface', () => {
         // 2 health + 6 pages + 7 elements + 4 sources + 2 multi-items + 2 inspection = 23
-        expect(tools.length).toBe(23);
+        expect(tools.length).toBe(24);
     });
 });

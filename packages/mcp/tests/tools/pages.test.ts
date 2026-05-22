@@ -99,4 +99,46 @@ describe('buildPagesTools', () => {
         expect(parsed.context).toMatchObject({ template_id: 'missing' });
         expect(parsed.hint).toBeTypeOf('string');
     });
+
+    // ─── T9 (Audit-v3 B.5) — template_summary ─────────────────────────
+
+    it('template_summary GETs /pages/{id}/summary and passes through the body', async () => {
+        const seen: string[] = [];
+        const tools = buildPagesTools(
+            fakeClient((url) => {
+                seen.push(url);
+                return jsonResponse({
+                    template_id: 'home',
+                    counts_by_type: { section: 2, headline: 1 },
+                    bound_count: 1,
+                    max_depth: 3,
+                    total: 4,
+                    named_sections: [{ path: '/templates/home/layout/children/0', name: 'Hero' }],
+                    etag: 'e9',
+                });
+            }),
+        );
+        const result = await findTool(tools, 'yootheme_builder_template_summary').handler({
+            template_id: 'home',
+        });
+        expect(seen[0]).toContain('/pages/home/summary');
+        const body = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+        expect(body.counts_by_type).toMatchObject({ section: 2, headline: 1 });
+        expect(body.bound_count).toBe(1);
+        expect(body.max_depth).toBe(3);
+        expect(body.named_sections).toHaveLength(1);
+    });
+
+    it('template_summary returns a structured error when the template is missing', async () => {
+        const tools = buildPagesTools(
+            fakeClient(() => jsonResponse({ code: 'x', message: 'not found' }, 404)),
+        );
+        const result = await findTool(tools, 'yootheme_builder_template_summary').handler({
+            template_id: 'ghost',
+        });
+        expect(result.isError).toBe(true);
+        const parsed = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+        expect(parsed.status).toBe(404);
+        expect(parsed.context).toMatchObject({ template_id: 'ghost' });
+    });
 });

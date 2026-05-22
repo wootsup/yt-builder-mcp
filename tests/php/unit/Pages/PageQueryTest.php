@@ -470,4 +470,84 @@ final class PageQueryTest extends TestCase
         ]);
         self::assertTrue($entry['has_binding']);
     }
+
+    // ─── T9 (Audit-v3 B.5) — template_summary ─────────────────────────
+
+    public function test_summary_returns_null_for_unknown_template(): void
+    {
+        $query = new PageQuery(new LayoutReader());
+        self::assertNull($query->summary('does-not-exist'));
+    }
+
+    public function test_summary_counts_by_type_depth_and_named_sections(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'name' => 'Sample',
+                    'layout' => [
+                        'type' => 'layout',
+                        'children' => [
+                            [
+                                'type' => 'section',
+                                'name' => 'Hero',
+                                'children' => [
+                                    ['type' => 'row', 'children' => [
+                                        ['type' => 'column', 'children' => [
+                                            ['type' => 'headline'],
+                                            ['type' => 'text'],
+                                        ]],
+                                    ]],
+                                ],
+                            ],
+                            ['type' => 'section', 'name' => 'Footer'],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $summary = $query->summary('tpl');
+
+        self::assertNotNull($summary);
+        self::assertSame('tpl', $summary['template_id']);
+        // 2 section + 1 row + 1 column + 1 headline + 1 text = 6 descendants.
+        self::assertSame(6, $summary['total']);
+        self::assertSame(2, $summary['counts_by_type']['section']);
+        self::assertSame(1, $summary['counts_by_type']['headline']);
+        // Deepest node (headline/text) sits 4 /children/ segments below root.
+        self::assertSame(4, $summary['max_depth']);
+        self::assertSame(0, $summary['bound_count']);
+        // Two named landmarks: Hero + Footer.
+        $names = array_column($summary['named_sections'], 'name');
+        self::assertSame(['Hero', 'Footer'], $names);
+        self::assertNotEmpty($summary['etag']);
+    }
+
+    public function test_summary_counts_bound_elements(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'layout' => [
+                        'type' => 'layout',
+                        'children' => [
+                            [
+                                'type' => 'headline',
+                                'props' => [
+                                    'source' => ['query' => ['name' => 'posts.singlePost']],
+                                ],
+                            ],
+                            ['type' => 'text'],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $summary = $query->summary('tpl');
+        self::assertNotNull($summary);
+        self::assertSame(1, $summary['bound_count']);
+        self::assertSame(2, $summary['total']);
+    }
 }

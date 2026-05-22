@@ -2,9 +2,9 @@
  * Pin-tests for the Cursor-cap-safe `tools/list` surface.
  *
  * After Wave G.1, an LLM-host enumerating `tools/list` MUST see exactly
- * 16 entries (13 L1 essentials + 2 L3 direct + 1 gateway). Every other
+ * 17 entries (14 L1 essentials + 2 L3 direct + 1 gateway). Every other
  * tool reachable through `yootheme_builder_advanced`. The total tool
- * count across BOTH surfaces is exactly 24.
+ * count across BOTH surfaces is exactly 25.
  *
  * These counts are PINNED. A failing pin = a wave-spec drift; either
  * (a) the spec genuinely needs to change and the pin updates, or
@@ -36,13 +36,13 @@ function realToolNames(server: ReturnType<typeof createServer>['mcp']): string[]
 }
 
 describe('tools/list surface (Cursor-cap-safe)', () => {
-    it('the real server exposes exactly 16 tools: 13 L1 + 2 L3 + 1 gateway', () => {
+    it('the real server exposes exactly 17 tools: 14 L1 + 2 L3 + 1 gateway', () => {
         const { mcp } = createServer({ client: makeClient() });
         const names = realToolNames(mcp).sort();
-        expect(names.length).toBe(16);
+        expect(names.length).toBe(17);
     });
 
-    it('the 13 L1 essentials are all on the real server', () => {
+    it('the 14 L1 essentials are all on the real server', () => {
         const { mcp } = createServer({ client: makeClient() });
         const names = realToolNames(mcp);
         for (const name of ESSENTIAL_TOOLS) {
@@ -63,10 +63,10 @@ describe('tools/list surface (Cursor-cap-safe)', () => {
         expect(realToolNames(mcp)).toContain('yootheme_builder_advanced');
     });
 
-    it('collectAllRegisteredTools returns exactly 24 tools (full surface)', () => {
+    it('collectAllRegisteredTools returns exactly 25 tools (full surface)', () => {
         const { mcp, capturing } = createServer({ client: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
-        expect(Object.keys(all).length).toBe(24);
+        expect(Object.keys(all).length).toBe(25);
     });
 
     it('the L2 advanced surface holds exactly 8 captured tools', () => {

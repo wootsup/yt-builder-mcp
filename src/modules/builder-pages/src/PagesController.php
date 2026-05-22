@@ -67,6 +67,15 @@ final class PagesController extends RestController
             ],
         ]);
 
+        \register_rest_route(self::NAMESPACE, '/pages/(?P<template_id>[A-Za-z0-9_-]+)/summary', [
+            'methods' => 'GET',
+            'callback' => [$this, 'get_summary'],
+            'permission_callback' => $read,
+            'args' => [
+                'template_id' => ['type' => 'string', 'required' => true],
+            ],
+        ]);
+
         \register_rest_route(self::NAMESPACE, '/etag', [
             'methods' => 'GET',
             'callback' => [$this, 'get_etag'],
@@ -148,6 +157,28 @@ final class PagesController extends RestController
             'total' => count($schema),
             'etag' => $this->query->etag(),
         ], 200);
+    }
+
+    /**
+     * T9 (Audit-v3 B.5): GET /pages/{id}/summary — token-efficient
+     * template overview (counts, depth, named landmarks) computed
+     * server-side. Lets an agent grasp a 96-node template in one cheap
+     * call instead of pulling the full element_list dump.
+     *
+     * @return \WP_REST_Response|\WP_Error
+     */
+    public function get_summary(\WP_REST_Request $request)
+    {
+        $id = (string) $request['template_id'];
+        $summary = $this->query->summary($id);
+        if ($summary === null) {
+            return new \WP_Error(
+                'yootheme_builder_mcp.pages.not_found',
+                sprintf('Template "%s" not found.', $id),
+                ['status' => 404],
+            );
+        }
+        return new \WP_REST_Response($summary, 200);
     }
 
     public function get_etag(\WP_REST_Request $request): \WP_REST_Response

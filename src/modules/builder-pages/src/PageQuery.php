@@ -203,6 +203,70 @@ final class PageQuery
     }
 
     /**
+     * T9 (Audit-v3 B.5): a token-efficient template overview computed
+     * server-side in a single recursive walk. Replaces a 20 kB+ raw
+     * element_list dump with a ~1 kB structured summary — the agent gets
+     * counts + depth + named landmarks for ~0 tokens of its own context.
+     *
+     * @return array{template_id: string, counts_by_type: array<string, int>, bound_count: int, max_depth: int, total: int, named_sections: list<array{path: string, name: string}>, etag: string}|null
+     */
+    public function summary(string $templateId): ?array
+    {
+        $tpl = $this->reader->readTemplate($templateId);
+        if ($tpl === null) {
+            return null;
+        }
+
+        /** @var array<string, int> $countsByType */
+        $countsByType = [];
+        $boundCount = 0;
+        $maxDepth = 0;
+        $total = 0;
+        /** @var list<array{path: string, name: string}> $namedSections */
+        $namedSections = [];
+
+        if (isset($tpl['layout']) && is_array($tpl['layout'])) {
+            $basePointer = JsonPointer::compile(['templates', $templateId, 'layout']);
+            /** @var array<string, mixed> $layout */
+            $layout = $tpl['layout'];
+            foreach (TreeWalker::walk($layout, $basePointer) as [$pointer, $node]) {
+                $total++;
+                $type = isset($node['type']) && is_string($node['type'])
+                    ? $node['type']
+                    : 'unknown';
+                $countsByType[$type] = ($countsByType[$type] ?? 0) + 1;
+
+                if (BindingSerializer::serialize($node) !== null) {
+                    $boundCount++;
+                }
+
+                // Depth = number of `/children/` segments past the layout root.
+                $depth = substr_count($pointer, '/children/');
+                if ($depth > $maxDepth) {
+                    $maxDepth = $depth;
+                }
+
+                // Named landmarks — any node carrying a human `name`.
+                if (isset($node['name']) && is_string($node['name']) && $node['name'] !== '') {
+                    $namedSections[] = ['path' => $pointer, 'name' => $node['name']];
+                }
+            }
+        }
+
+        ksort($countsByType);
+
+        return [
+            'template_id' => $templateId,
+            'counts_by_type' => $countsByType,
+            'bound_count' => $boundCount,
+            'max_depth' => $maxDepth,
+            'total' => $total,
+            'named_sections' => $namedSections,
+            'etag' => $this->reader->etag(),
+        ];
+    }
+
+    /**
      * Depth-first walk over a node + its children, appending one entry per
      * descended-into node to $out.
      *

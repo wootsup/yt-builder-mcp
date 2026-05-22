@@ -54,6 +54,9 @@ export const ESSENTIAL_TOOLS = [
     'yootheme_builder_element_clone',
     'yootheme_builder_element_move',
     'yootheme_builder_page_get_layout',
+    // T9 (Audit-v3 B.5) — token-efficient template overview. L1 because
+    // it's the recommended first call when orienting in a large template.
+    'yootheme_builder_template_summary',
 ] as const;
 
 /**
