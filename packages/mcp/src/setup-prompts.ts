@@ -54,7 +54,7 @@ export async function defaultPrompt(input: {
 
     // 1. Bearer key first. Decoded `iss` will pre-fill the URL prompt.
     const bearerRaw = await password({
-        message: 'Bearer key (from wp-admin → "YOOtheme Builder MCP" → Settings):',
+        message: 'Bearer key (from wp-admin → Tools → "YT Builder MCP" → Bearer Keys):',
         validate: (v) => {
             const trimmed = v.trim();
             if (trimmed === '') return 'Bearer key is required.';

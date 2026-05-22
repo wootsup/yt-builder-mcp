@@ -1,4 +1,9 @@
-# Getting Started — YOOtheme Builder MCP
+# Getting Started — YT Builder MCP for YOOtheme Pro (unofficial)
+
+> Independent third-party project. YOOtheme® is a registered trademark of YOOtheme GmbH
+> ([yootheme.com](https://yootheme.com)). YT Builder MCP is built by WootsUp (getimo
+> productions) and is not affiliated with, endorsed by, or sponsored by YOOtheme.
+> The integration uses YOOtheme Pro's public extension points.
 
 This guide takes you from "I have a WordPress site with YOOtheme Pro" to "my AI assistant can drive my page builder" in under 10 minutes.
 
@@ -12,7 +17,7 @@ This guide takes you from "I have a WordPress site with YOOtheme Pro" to "my AI 
 ## Step 1 — Install the WordPress plugin
 
 Download the latest plugin ZIP from the GitHub Releases page:
-[github.com/wootsup/yootheme-builder-mcp/releases](https://github.com/wootsup/yootheme-builder-mcp/releases)
+[github.com/wootsup/yt-builder-mcp/releases](https://github.com/wootsup/yt-builder-mcp/releases)
 
 (A WordPress.org listing is planned once the plugin leaves alpha.)
 
@@ -52,7 +57,7 @@ The box pre-builds an `npx ... setup --pickup <URL> --nonce <CODE> --client <id>
 
 Open a terminal and run:
 ```bash
-npx -y @wootsup/yootheme-builder-mcp setup
+npx -y @wootsup/yt-builder-mcp setup
 ```
 Paste the site URL + token when prompted.
 
@@ -65,7 +70,7 @@ Use this if you want to wire the MCP server yourself (eg. your client uses a con
 On your local machine:
 
 ```bash
-npx -y @wootsup/yootheme-builder-mcp setup
+npx -y @wootsup/yt-builder-mcp setup
 ```
 
 The wizard walks you through four questions:
@@ -90,7 +95,7 @@ step.
 
 Press Enter to accept, or paste a different URL if you are pointing
 the wizard at a staging mirror. The wizard probes
-`https://example.com/wp-json/yootheme-builder-mcp/v1/identity` to
+`https://example.com/wp-json/yt-builder-mcp/v1/identity` to
 confirm the plugin is installed, and then `/v1/health` with the key
 to confirm auth. If either fails, the wizard prints a precise error
 and exits without writing anything.
@@ -135,7 +140,7 @@ client's config file:
 | Codex CLI | `~/.codex/config.toml` |
 | Gemini CLI | `~/.gemini/settings.json` |
 
-If a config file already has an `yootheme-builder-mcp` entry, the wizard **merges** it — your existing entries for other MCP servers are preserved.
+If a config file already has an `yt-builder-mcp` entry, the wizard **merges** it — your existing entries for other MCP servers are preserved.
 
 ## Step 4 — Restart your AI client
 
@@ -143,14 +148,14 @@ Quit and re-open Claude Desktop (or Cursor, etc.). The MCP server loads on start
 
 You can verify the server is connected:
 
-- **Claude Desktop:** The slash-menu shows `yootheme-builder-mcp` as a connected server with 21 tools.
+- **Claude Desktop:** The slash-menu shows `yt-builder-mcp` as a connected server with 21 tools.
 - **Cursor:** Settings → MCP servers shows the entry as `running`.
 
 ## Step 5 — Your first prompt
 
 Open a new chat and try:
 
-> List my YOOtheme pages.
+> List my pages.
 
 Your assistant should respond by calling `yootheme_builder_pages_list` and showing you all your templates.
 

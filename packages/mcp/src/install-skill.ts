@@ -32,7 +32,7 @@ export const MARKER_LINE = '<!-- yt-builder-mcp:skill-installed -->';
 
 const MARKER_BLOCK = `
 
-## YOOtheme Builder MCP
+## YT Builder MCP
 
 ${MARKER_LINE}
 The YOOtheme Builder skill is installed at \`~/.claude/skills/yootheme-builder/\`

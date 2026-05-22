@@ -42,7 +42,7 @@ export function buildHealthDetail(payload: HealthPayload): {
     const endpointPreview = summarizeEndpoints(endpoints);
 
     return {
-        title: 'YOOtheme Builder MCP — Health',
+        title: 'YT Builder MCP — Health',
         groups: [
             {
                 label: 'Plugin',
@@ -120,7 +120,7 @@ function summarizeEndpoints(endpoints: readonly string[]): string {
  */
 export function buildHealthStats(payload: HealthPayload): StatsResultOptions {
     return {
-        title: 'YOOtheme Builder MCP — Health',
+        title: 'YT Builder MCP — Health',
         stats: [
             {
                 key: 'plugin_version',
@@ -208,7 +208,7 @@ export function buildDiagnoseDetail(checks: DiagnoseChecks): {
         bearerEntries.push({ key: 'bearer_error', label: 'Bearer error', value: checks.bearer_error, format: 'code' });
 
     return {
-        title: 'YOOtheme Builder MCP — Diagnose',
+        title: 'YT Builder MCP — Diagnose',
         groups: [
             { label: 'Plugin probe', entries: pluginEntries },
             { label: 'Bearer probe', entries: bearerEntries },

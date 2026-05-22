@@ -1,6 +1,6 @@
 <?php
 /**
- * SettingsPage — WP-Admin "Rich Brand Page" for YOOtheme Builder MCP.
+ * SettingsPage — WP-Admin "Rich Brand Page" for YT Builder MCP.
  *
  * Top-level menu (was: Tools submenu; promoted 2026-05-22 per Plugin-Audit
  * Round 2) with three tabs:
@@ -114,7 +114,7 @@ final class SettingsPage
         // Diagnostics, About) live inside the page itself via ?tab=.
         \add_submenu_page(
             'tools.php',
-            \__('YOOtheme Builder MCP (unofficial)', 'yt-builder-mcp'),
+            \__('YT Builder MCP for YOOtheme Pro (unofficial)', 'yt-builder-mcp'),
             \__('YT Builder MCP', 'yt-builder-mcp'),
             'manage_options',
             self::SLUG,
@@ -181,12 +181,12 @@ final class SettingsPage
         echo '<div class="ytb-brand-header__mark">' . BrandAssets::renderLogo(48) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG
         echo '<div class="ytb-brand-header__body">';
         echo '<h1 class="ytb-brand-header__title">';
-        echo \esc_html__('YOOtheme Builder MCP', 'yt-builder-mcp');
+        echo \esc_html__('YT Builder MCP for YOOtheme Pro', 'yt-builder-mcp');
         echo ' <span class="ytb-version-badge">v' . \esc_html($version) . '</span>';
         echo ' <span class="ytb-unofficial-badge" title="' . \esc_attr__('Independent third-party plugin. Not affiliated with or endorsed by YOOtheme GmbH.', 'yt-builder-mcp') . '">' . \esc_html__('unofficial', 'yt-builder-mcp') . '</span>';
         echo '</h1>';
         echo '<p class="ytb-brand-header__tagline">';
-        echo \esc_html__('Drive YOOtheme Page Builder programmatically from Claude, Cursor, ChatGPT, and other AI assistants via the Model Context Protocol.', 'yt-builder-mcp');
+        echo \esc_html__('Drive your YOOtheme Pro page builder programmatically from Claude, Cursor, ChatGPT, and other AI assistants via the Model Context Protocol.', 'yt-builder-mcp');
         echo '</p>';
         echo '<div class="ytb-brand-header__ctas">';
         echo '<a class="button ytb-brand-cta-primary" href="' . \esc_url(\add_query_arg(['page' => self::SLUG], \admin_url('admin.php'))) . '">';
@@ -642,9 +642,9 @@ final class SettingsPage
     {
         $pluginVersion = defined('YTB_MCP_VERSION') ? (string) \YTB_MCP_VERSION : 'dev';
 
-        echo '<h2 style="margin-top:0;">' . \esc_html__('About YOOtheme Builder MCP (unofficial)', 'yt-builder-mcp') . '</h2>';
+        echo '<h2 style="margin-top:0;">' . \esc_html__('About YT Builder MCP for YOOtheme Pro (unofficial)', 'yt-builder-mcp') . '</h2>';
 
-        echo '<p>' . \esc_html__('Model Context Protocol (MCP) is an open standard that lets AI assistants talk to tools and data. This plugin exposes a Bearer-authenticated REST dialect of the YOOtheme Page Builder; the companion NPM server, run locally next to your AI client, translates AI tool-calls into REST requests.', 'yt-builder-mcp') . '</p>';
+        echo '<p>' . \esc_html__('Model Context Protocol (MCP) is an open standard that lets AI assistants talk to tools and data. YT Builder MCP exposes a Bearer-authenticated REST dialect of your YOOtheme Pro page builder; the companion NPM server, run locally next to your AI client, translates AI tool-calls into REST requests.', 'yt-builder-mcp') . '</p>';
 
         echo '<p>' . \esc_html__('Once both halves are configured you can ask Claude, Cursor, ChatGPT and others to read your templates, add or edit elements, bind dynamic sources, and save / publish pages — all under the optimistic-lock + scope-hierarchy guardrails the plugin enforces server-side.', 'yt-builder-mcp') . '</p>';
 
@@ -1027,7 +1027,7 @@ final class SettingsPage
         array $endpoints,
     ): string {
         $lines = [];
-        $lines[] = '## YOOtheme Builder MCP (unofficial) — Diagnostics';
+        $lines[] = '## YT Builder MCP for YOOtheme Pro (unofficial) — Diagnostics';
         $lines[] = '';
         $lines[] = '### Versions';
         $lines[] = '';

@@ -1,5 +1,5 @@
 /**
- * Gateway-Hub — single source of truth for the YOOtheme Builder MCP
+ * Gateway-Hub — single source of truth for the YT Builder MCP
  * 3-lane registration surface.
  *
  * Lanes (Wave G.1 / Design-Doc §3.1.1):

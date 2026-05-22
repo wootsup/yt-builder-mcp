@@ -149,7 +149,7 @@ final class SettingsPageTabsTest extends TestCase
         $_GET['tab'] = SettingsPage::TAB_ABOUT;
         $output = $this->renderOutput($this->page());
 
-        self::assertStringContainsString('About YOOtheme Builder MCP (unofficial)', $output);
+        self::assertStringContainsString('About YT Builder MCP for YOOtheme Pro (unofficial)', $output);
         self::assertStringContainsString('npx -y @wootsup/yt-builder-mcp setup', $output);
         // Wave B (2026-05-22) expanded the auto-configure surface from 6 → 9
         // clients. All 9 must appear in the About-tab pill list.

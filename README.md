@@ -1,21 +1,23 @@
-# YOOtheme Builder MCP (unofficial)
+# YT Builder MCP for YOOtheme Pro (unofficial)
 
-> **Drive YOOtheme Pro Page Builder from AI assistants — Claude Desktop, Claude Code, Cursor, Zed, Continue, Cline, Roo Code, Codex CLI, Gemini CLI.**
+> **Drive your page builder via MCP.** Built for YOOtheme Pro 4.0+ — connect Claude Desktop, Claude Code, Cursor, Zed, Continue, Cline, Roo Code, Codex CLI or Gemini CLI in one command.
 > Free WordPress plugin + NPM package. GPLv2 + MIT.
 
 [![Version](https://img.shields.io/badge/version-0.2.0--alpha.1-blue)]() [![Status](https://img.shields.io/badge/Wave%20A%2FB%2FC%2FD-shipped-brightgreen)]() [![License: GPLv2 / MIT](https://img.shields.io/badge/license-GPLv2%20%2B%20MIT-blue)]()
 
-> **Independent third-party project.**
-> *YOOtheme®* is a registered trademark of [YOOtheme GmbH](https://yootheme.com). This plugin is an independent project by [WootsUp](https://wootsup.com) (getimo productions) and is **not affiliated with, endorsed by, or sponsored by** YOOtheme. The name is used purely to describe what the plugin integrates with.
+> Independent third-party project. YOOtheme® is a registered trademark of YOOtheme GmbH
+> ([yootheme.com](https://yootheme.com)). YT Builder MCP is built by WootsUp (getimo
+> productions) and is not affiliated with, endorsed by, or sponsored by YOOtheme.
+> The integration uses YOOtheme Pro's public extension points.
 
 ---
 
 ## TL;DR
 
-`yootheme-builder-mcp` exposes the YOOtheme Page Builder as a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server. Once installed, your AI assistant can:
+`yt-builder-mcp` exposes your page builder as a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server. Once installed, your AI assistant can:
 
 - **List pages**, walk element trees, inspect layouts.
-- **Add, update, move, clone, delete** any element — grids, headlines, images, lists, gallery — anything YOOtheme supports.
+- **Add, update, move, clone, delete** any element — grids, headlines, images, lists, gallery — anything the builder supports.
 - **Bind Dynamic Sources** to elements (e.g. an [API Mapper](https://wootsup.com/products/api-mapper) source).
 - **Save & publish** pages, with proper cache invalidation.
 - **Discover element types** and their JSON schemas at runtime.
@@ -33,12 +35,10 @@ The plugin speaks a REST dialect (Bearer-authenticated, ETag-guarded). The NPM p
 
 ## Why does this exist?
 
-YOOtheme Pro is one of the most powerful Page Builders for WordPress and Joomla, but until now it had **no programmatic interface** for AI agents. You could click in the visual builder, or you could write themes by hand. There was no middle ground.
-
-`yootheme-builder-mcp` is that middle ground. The use case it was built for:
+YT Builder MCP is the middle ground between clicking in the visual builder and writing themes by hand. The use case it was built for:
 
 - **AI-assisted page construction** — describe a page in natural language, your AI assistant builds it. End customers get the power-user experience without learning the builder.
-- **Headless / automation workflows** — drive YOOtheme from any tool that speaks MCP (Claude Desktop, Cursor, a CI worker, your own AI agent) over a stable Bearer-authenticated REST surface.
+- **Headless / automation workflows** — drive your page builder from any tool that speaks MCP (Claude Desktop, Cursor, a CI worker, your own AI agent) over a stable Bearer-authenticated REST surface.
 
 ---
 
@@ -86,7 +86,7 @@ Claude:  → yootheme_builder_pages_list
 ### 1 — Install the WordPress plugin
 
 Download the latest plugin ZIP from
-[GitHub Releases](https://github.com/wootsup/yootheme-builder-mcp/releases),
+[GitHub Releases](https://github.com/wootsup/yt-builder-mcp/releases),
 then upload it via **WP-Admin → Plugins → Add New → Upload Plugin**.
 
 (A WordPress.org listing is planned once the plugin leaves alpha.)
@@ -108,7 +108,7 @@ Click **Generate New Key**. Copy it. You will paste it into the wizard in the ne
 ### 3 — Run the wizard
 
 ```bash
-npx -y @wootsup/yootheme-builder-mcp setup
+npx -y @wootsup/yt-builder-mcp setup
 ```
 
 The wizard asks you for:
@@ -118,7 +118,7 @@ The wizard asks you for:
 3. A profile name (use `default` if you only have one site)
 4. Which AI clients to configure (multi-select: Claude Desktop, Claude Code, Cursor, Zed, Continue, Cline, Roo Code, Codex CLI, Gemini CLI)
 
-It probes `/wp-json/yootheme-builder-mcp/v1/health` to confirm the plugin is reachable, then writes the MCP server entry into each selected client's config file.
+It probes `/wp-json/yt-builder-mcp/v1/health` to confirm the plugin is reachable, then writes the MCP server entry into each selected client's config file.
 
 Restart your AI client. You should see ~21 new tools prefixed with `yootheme_builder_*`.
 
@@ -126,7 +126,7 @@ Restart your AI client. You should see ~21 new tools prefixed with `yootheme_bui
 
 Open Claude (or any configured client) and try:
 
-> List my YOOtheme pages.
+> List my pages.
 
 You should see all your templates.
 
@@ -140,7 +140,7 @@ The MCP server exposes 21 tools, grouped by domain:
 
 | Tool | Description |
 |------|-------------|
-| `yootheme_builder_health` | Plugin version, YOOtheme version, WP version, storage backend, list of available REST endpoints. |
+| `yootheme_builder_health` | Plugin version, theme version, WP version, storage backend, list of available REST endpoints. |
 | `yootheme_builder_diagnose` | Connectivity + auth check. Returns hints when things are misconfigured. |
 
 ### Pages (6)
@@ -179,7 +179,7 @@ The MCP server exposes 21 tools, grouped by domain:
 
 | Tool | Description |
 |------|-------------|
-| `yootheme_builder_element_types_list` | List all element types YOOtheme exposes (grid, headline, image, …). |
+| `yootheme_builder_element_types_list` | List all element types the builder exposes (grid, headline, image, …). |
 | `yootheme_builder_element_type_get_schema` | Get the JSON schema for one element type — what settings exist, what types, what defaults. |
 
 See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/output schemas.
@@ -197,7 +197,7 @@ See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/
                │ MCP stdio
                ▼
 ┌─────────────────────────────────────────┐
-│  @wootsup/yootheme-builder-mcp  (NPM)   │
+│  @wootsup/yt-builder-mcp  (NPM)         │
 │  — TypeScript                           │
 │  — @modelcontextprotocol/sdk            │
 │  — 21 tools (Zod schemas)               │
@@ -205,9 +205,9 @@ See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/
                │ HTTPS + Bearer-token
                ▼
 ┌─────────────────────────────────────────┐
-│  yootheme-builder-mcp.php  (WP Plugin)  │
+│  yt-builder-mcp.php  (WP Plugin)        │
 │  — PHP 8.2+, GPLv2                      │
-│  — REST namespace: yootheme-builder-mcp │
+│  — REST namespace: yt-builder-mcp       │
 │  — Modules:                             │
 │      core-auth   (Bearer + HMAC)        │
 │      builder-state                      │
@@ -227,7 +227,7 @@ See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/
 
 **Design principles**
 
-- **State-only.** The plugin reads and writes YOOtheme's existing layout JSON. It does not register new element types or define new schemas.
+- **State-only.** The plugin reads and writes the existing layout JSON. It does not register new element types or define new schemas.
 - **Optimistic locking.** Every write requires an `If-Match: <etag>` header — concurrent edits return `412 Precondition Failed`.
 - **Bearer + HMAC.** Keys are generated server-side, hashed at rest, and verified with constant-time `hash_equals()`.
 - **Bring-your-own-AI.** No SaaS lock-in. The MCP server runs locally next to your AI client.
@@ -258,7 +258,7 @@ The dual-license is intentional. The plugin must be GPL to live in the WordPress
 
 ## Status & roadmap
 
-This is the official **WootsUp yootheme-builder-mcp** repository. Stable releases are tagged here for public consumption (GitHub Releases + NPM `@wootsup/yootheme-builder-mcp`).
+This is the official **WootsUp yt-builder-mcp** repository. Stable releases are tagged here for public consumption (GitHub Releases + NPM `@wootsup/yt-builder-mcp`).
 
 | Wave | Status |
 |------|--------|
@@ -285,7 +285,7 @@ Test coverage: **240 PHPUnit tests / 519 assertions** (plugin) + **62 vitest tes
 
 ## Want to know more?
 
-- [github.com/wootsup/yootheme-builder-mcp](https://github.com/wootsup/yootheme-builder-mcp) — source, releases, issue tracker
-- [wootsup.com/api-mapper](https://wootsup.com/api-mapper) — companion product: bring any REST API into YOOtheme as a Dynamic Source
+- [github.com/wootsup/yt-builder-mcp](https://github.com/wootsup/yt-builder-mcp) — source, releases, issue tracker
+- [wootsup.com/api-mapper](https://wootsup.com/api-mapper) — companion product: bring any REST API into your page builder as a Dynamic Source
 
 Built with care by [WootsUp](https://wootsup.com) — getimo productions.

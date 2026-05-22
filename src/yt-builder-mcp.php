@@ -2,7 +2,7 @@
 /**
  * Plugin Name: YT Builder MCP for YOOtheme Pro (unofficial)
  * Plugin URI: https://github.com/wootsup/yt-builder-mcp
- * Description: Independent third-party plugin. Drive YOOtheme Page Builder programmatically from 9 MCP-capable AI assistants (Claude Desktop, Claude Code, Cursor, Zed, Continue, Cline, Roo Code, Codex CLI, Gemini CLI) via Model Context Protocol. YOOtheme® is a trademark of YOOtheme GmbH; this plugin is not affiliated with or endorsed by YOOtheme GmbH. Free, GPL-2.0-or-later.
+ * Description: Drive your page builder programmatically from Claude, Cursor, Codex, Gemini and 6 other MCP-capable AI assistants. Built for YOOtheme Pro® 4.0+. Independent third-party project, not affiliated with YOOtheme GmbH. Free, GPL-2.0-or-later.
  * Version: 0.2.0-alpha.1
  * Author: WootsUp
  * Author URI: https://wootsup.com
@@ -47,7 +47,7 @@ register_activation_hook(__FILE__, static function (): void {
         \wp_die(
             \wp_kses_post(
                 sprintf(
-                    '<h1>YOOtheme Builder MCP (unofficial)</h1>' .
+                    '<h1>YT Builder MCP for YOOtheme Pro (unofficial)</h1>' .
                     '<p>This plugin requires <strong>PHP %s</strong> or higher.</p>' .
                     '<p>Your current PHP version is <strong>%s</strong>.</p>' .
                     '<p>Please upgrade your PHP version or contact your hosting provider.</p>' .
@@ -57,7 +57,7 @@ register_activation_hook(__FILE__, static function (): void {
                     \esc_url(\admin_url('plugins.php')),
                 ),
             ),
-            \esc_html__('YOOtheme Builder MCP (unofficial) — PHP version too low', 'yt-builder-mcp'),
+            \esc_html__('YT Builder MCP for YOOtheme Pro (unofficial) — PHP version too low', 'yt-builder-mcp'),
             ['back_link' => true],
         );
     }
@@ -67,7 +67,7 @@ register_activation_hook(__FILE__, static function (): void {
         \wp_die(
             \wp_kses_post(
                 sprintf(
-                    '<h1>YOOtheme Builder MCP (unofficial)</h1>' .
+                    '<h1>YT Builder MCP for YOOtheme Pro (unofficial)</h1>' .
                     '<p>This plugin requires <strong>WordPress %s</strong> or higher.</p>' .
                     '<p>Your current WordPress version is <strong>%s</strong>.</p>' .
                     '<p>Please upgrade WordPress before activating this plugin.</p>' .
@@ -77,7 +77,7 @@ register_activation_hook(__FILE__, static function (): void {
                     \esc_url(\admin_url('plugins.php')),
                 ),
             ),
-            \esc_html__('YOOtheme Builder MCP (unofficial) — WordPress version too low', 'yt-builder-mcp'),
+            \esc_html__('YT Builder MCP for YOOtheme Pro (unofficial) — WordPress version too low', 'yt-builder-mcp'),
             ['back_link' => true],
         );
     }
@@ -160,20 +160,20 @@ add_action('after_setup_theme', static function (): void {
     add_action('admin_menu', static function (): void {
         \add_submenu_page(
             'tools.php',
-            \esc_html__('YOOtheme Builder MCP (unofficial)', 'yt-builder-mcp'),
+            \esc_html__('YT Builder MCP for YOOtheme Pro (unofficial)', 'yt-builder-mcp'),
             \esc_html__('YT Builder MCP', 'yt-builder-mcp'),
             'manage_options',
             'ytb-mcp-settings',
             static function (): void {
                 ?>
                 <div class="wrap">
-                    <h1><?php echo \esc_html__('YOOtheme Builder MCP (unofficial)', 'yt-builder-mcp'); ?></h1>
+                    <h1><?php echo \esc_html__('YT Builder MCP for YOOtheme Pro (unofficial)', 'yt-builder-mcp'); ?></h1>
                     <div class="notice notice-error">
                         <p><strong><?php echo \esc_html__('YOOtheme Pro is required', 'yt-builder-mcp'); ?></strong></p>
                         <p><?php
                             printf(
                                 /* translators: %s: minimum YOOtheme Pro version */
-                                \esc_html__('YOOtheme Builder MCP (unofficial) needs %s or later as your active theme to drive its page builder.', 'yt-builder-mcp'),
+                                \esc_html__('YT Builder MCP needs %s or later as your active theme to drive its page builder.', 'yt-builder-mcp'),
                                 '<strong>YOOtheme Pro ' . \esc_html(YTB_MCP_MIN_YT_VERSION) . '</strong>',
                             );
                         ?></p>
@@ -190,7 +190,7 @@ add_action('after_setup_theme', static function (): void {
             return;
         }
         echo '<div class="notice notice-warning"><p>';
-        echo '<strong>YOOtheme Builder MCP (unofficial)</strong> requires the ';
+        echo '<strong>YT Builder MCP</strong> requires the ';
         echo '<a href="https://yootheme.com/" target="_blank" rel="noopener">YOOtheme Pro</a> ';
         echo 'theme (version ' . esc_html(YTB_MCP_MIN_YT_VERSION) . ' or later). ';
         echo 'The plugin remains inactive until YOOtheme Pro is installed and active.';

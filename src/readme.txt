@@ -1,4 +1,4 @@
-=== YOOtheme Builder MCP (unofficial) ===
+=== YT Builder MCP for YOOtheme Pro (unofficial) ===
 Contributors: wootsup, getimo
 Tags: mcp, ai, claude, yootheme, builder, automation, model-context-protocol
 Requires at least: 6.0
@@ -8,29 +8,29 @@ Stable tag: 0.2.0-alpha.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Drive YOOtheme Pro Page Builder from AI assistants — Claude Desktop, Cursor, Continue, Zed — via Model Context Protocol.
+Drive your page builder via MCP. Built for YOOtheme Pro 4.0+ — connect Claude Desktop, Cursor, Continue, Zed and other AI assistants.
 
 == Description ==
 
-**Independent third-party project.** *YOOtheme®* is a registered trademark of YOOtheme GmbH (https://yootheme.com). This plugin is an independent project by WootsUp (getimo productions) and is **not affiliated with, endorsed by, or sponsored by** YOOtheme. The name is used purely to describe what the plugin integrates with.
+Independent third-party project. YOOtheme® is a registered trademark of YOOtheme GmbH (https://yootheme.com). YT Builder MCP is built by WootsUp (getimo productions) and is not affiliated with, endorsed by, or sponsored by YOOtheme. The integration uses YOOtheme Pro's public extension points.
 
-**YOOtheme Builder MCP** turns your YOOtheme Pro page builder into a tool your AI assistant can use directly. Once installed, you can ask Claude Desktop, Cursor, Continue, or Zed to:
+**YT Builder MCP** turns your page builder into a tool your AI assistant can use directly. Once installed, you can ask Claude Desktop, Cursor, Continue, or Zed to:
 
-* List your YOOtheme templates
-* Add, modify, move, clone, and delete elements (grids, headlines, images, lists, gallery — anything YOOtheme supports)
+* List your templates
+* Add, modify, move, clone, and delete elements (grids, headlines, images, lists, gallery — anything the builder supports)
 * Bind Dynamic Sources to elements (e.g. an API Mapper source)
 * Save and publish pages with proper cache invalidation
 * Inspect element types and JSON schemas
 
 **Two parts, one product:**
 
-* This **WordPress plugin** (GPLv2) exposes a Bearer-authenticated REST dialect for YOOtheme builder state.
-* A companion **NPM package** `@wootsup/yootheme-builder-mcp` (MIT) runs locally next to your AI client and translates AI tool-calls into REST requests.
+* This **WordPress plugin** (GPLv2) exposes a Bearer-authenticated REST dialect for builder state.
+* A companion **NPM package** `@wootsup/yt-builder-mcp` (MIT) runs locally next to your AI client and translates AI tool-calls into REST requests.
 
 **Use cases:**
 
 * AI-assisted page construction — describe a page in natural language, your AI builds it.
-* Headless / automation workflows — drive YOOtheme from any tool that speaks MCP (Claude Desktop, Cursor, a CI worker, your own AI agent).
+* Headless / automation workflows — drive your page builder from any tool that speaks MCP (Claude Desktop, Cursor, a CI worker, your own AI agent).
 
 **21 tools, grouped by domain:**
 
@@ -56,15 +56,15 @@ This plugin is free and open source. The companion NPM package is MIT-licensed �
 
 **Companion products:**
 
-* [API Mapper](https://wootsup.com/api-mapper) — bring any REST API into YOOtheme as a Dynamic Source
+* [API Mapper](https://wootsup.com/api-mapper) — bring any REST API into your page builder as a Dynamic Source
 
 == Installation ==
 
-1. Upload the plugin ZIP via Plugins → Add New → Upload Plugin, or download from the [GitHub Releases page](https://github.com/wootsup/yootheme-builder-mcp/releases).
+1. Upload the plugin ZIP via Plugins → Add New → Upload Plugin, or download from the [GitHub Releases page](https://github.com/wootsup/yt-builder-mcp/releases).
 2. Activate the plugin. If YOOtheme Pro is not the active theme, you'll see a warning notice — the plugin stays inactive until YOOtheme Pro is active.
 3. Go to **Tools → YT Builder MCP** and click **Generate New Key**. Copy the key.
 4. On your local machine, run:
-   `npx -y @wootsup/yootheme-builder-mcp setup`
+   `npx -y @wootsup/yt-builder-mcp setup`
 5. The wizard asks for your site URL, your Bearer key, and which AI clients to configure. It writes the MCP server entry into each client's config file.
 6. Restart your AI client. You should see 21 new tools prefixed with `yootheme_builder_`.
 
@@ -72,9 +72,9 @@ This plugin is free and open source. The companion NPM package is MIT-licensed �
 
 = Does this plugin work without YOOtheme Pro? =
 
-No. This plugin reads and writes YOOtheme's existing layout JSON. Without YOOtheme Pro as the active theme, there's no layout to drive. The plugin detects this and stays inactive with a clear admin notice.
+No. The plugin reads and writes the existing layout JSON of YOOtheme Pro. Without YOOtheme Pro as the active theme, there's no layout to drive. The plugin detects this and stays inactive with a clear admin notice.
 
-= Does this work with YOOtheme v4 (legacy) and v5? =
+= Does this work with v4 (legacy) and v5? =
 
 Yes. Both v4 and v5 are supported. Storage backend is `wp_option('yootheme')` JSON, which is the same shape in both versions.
 
@@ -84,7 +84,7 @@ Not yet. Phase 1 ships WordPress-only. A Joomla port is planned as Wave 7 — sa
 
 = Is my Bearer key safe? =
 
-The plaintext key is never stored. We hash it with HMAC-SHA256 and verify with constant-time `hash_equals()`. If you lose the key, you can revoke it in the settings page and generate a new one.
+The plaintext key is never stored. I hash it with HMAC-SHA256 and verify with constant-time `hash_equals()`. If you lose the key, you can revoke it in the settings page and generate a new one.
 
 = Does the plugin call out to the internet? =
 
@@ -100,7 +100,7 @@ Email security@wootsup.com — see SECURITY.md in the repo for details. Please d
 
 = Is this free? Forever? =
 
-The WordPress plugin is GPLv2 (free, forever). The companion NPM package is MIT (free, forever). There's no paid tier on this product — we built it because we needed it ourselves and it would be a waste not to share.
+The WordPress plugin is GPLv2 (free, forever). The companion NPM package is MIT (free, forever). There's no paid tier on this product — I built it because I needed it myself and it would be a waste not to share.
 
 == Screenshots ==
 
@@ -118,7 +118,7 @@ Screenshots will be added in a future release (v0.2).
 * `structuredContent` + `outputSchema` on 11 read tools — typed Rich-Card responses for MCP hosts that support them.
 * Error sanitization: bearer-tokens and 32+ secret-shaped keys are masked at all 4 envelope-construction sites; grep-gate enforces 0 secret leaks in `dist/`.
 * `health` + `diagnose` registered as direct L3 tools (always available, no gateway round-trip).
-* DXT bundle (`@wootsup/yootheme-builder-mcp.dxt`, 0.20 MB) for one-click install in Claude Desktop.
+* DXT bundle (`@wootsup/yt-builder-mcp.dxt`, 0.20 MB) for one-click install in Claude Desktop.
 * Goldstandard refactor: 569 vitest tests (was 62; +9.2× scale), 98.23% line coverage. 22/22 tools live-verified against `https://dev.wootsup.com/wordpress` (YOOtheme Pro 4.5.33).
 
 = 0.1.0-alpha.1 — Pre-release =

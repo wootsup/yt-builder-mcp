@@ -1,12 +1,17 @@
 ---
 name: yootheme-builder
-description: Drive the YOOtheme Page Builder programmatically — discover pages, inspect layouts, add/move/clone/delete elements, bind dynamic sources, diagnose 401/403 auth failures. Use when the user wants to build, modify, audit, or troubleshoot a YOOtheme-powered WordPress site through the YOOtheme Builder MCP server.
+description: Drive the YOOtheme Pro page builder programmatically — discover pages, inspect layouts, add/move/clone/delete elements, bind dynamic sources, diagnose 401/403 auth failures. Use when the user wants to build, modify, audit, or troubleshoot a YOOtheme-powered WordPress site through the YT Builder MCP server.
 ---
 
-# YOOtheme Builder MCP — Skill
+# YT Builder MCP for YOOtheme Pro (unofficial) — Skill
 
-This skill helps AI assistants drive the YOOtheme Page Builder through the
-`@wootsup/yootheme-builder-mcp` server. The server exposes 22 typed,
+> Independent third-party project. YOOtheme® is a registered trademark of YOOtheme GmbH
+> ([yootheme.com](https://yootheme.com)). YT Builder MCP is built by WootsUp (getimo
+> productions) and is not affiliated with, endorsed by, or sponsored by YOOtheme.
+> The integration uses YOOtheme Pro's public extension points.
+
+This skill helps AI assistants drive the YOOtheme Pro page builder through the
+`@wootsup/yt-builder-mcp` server. The server exposes 22 typed,
 scoped, idempotent tools behind a 10-entry Gateway-Hub (so it stays
 inside the 80-tool Cursor cap even when the catalogue grows).
 
@@ -16,9 +21,9 @@ The user invokes you through Claude Desktop, Cursor, Zed, Continue, or
 any other MCP-aware AI client. Setup looks like this:
 
 1. The user installs the WordPress plugin
-   (`https://wootsup.com/products/yootheme-builder-mcp`) and generates
-   a Bearer key in **wp-admin → "YOOtheme Builder MCP" → Settings**.
-2. The user runs `npx -y @wootsup/yootheme-builder-mcp setup` once;
+   (`https://wootsup.com/products/yt-builder-mcp`) and generates
+   a Bearer key in **wp-admin → Tools → "YT Builder MCP" → Bearer Keys**.
+2. The user runs `npx -y @wootsup/yt-builder-mcp setup` once;
    the wizard probes the plugin, validates the key, and writes the
    MCP server entry into every selected AI client's config file.
 3. The user restarts their AI client. The server is now visible.
@@ -347,11 +352,11 @@ guessing — and without rotating the user's key unnecessarily.
 2. **Interpret the result:**
    - `plugin_reachable: false` → the WordPress install is down OR the
      plugin is deactivated. Send the user to wp-admin → Plugins →
-     activate "YOOtheme Builder MCP". Do not retry until they confirm.
+     activate "YT Builder MCP". Do not retry until they confirm.
    - `plugin_reachable: true, bearer_valid: false` → the Bearer key is
      wrong (typo, revoked, or wrong key for this install). The
      `bearer_error` field carries the upstream HTTP status. Send the
-     user to wp-admin → "YOOtheme Builder MCP" → Settings → either
+     user to wp-admin → Tools → "YT Builder MCP" → Bearer Keys → either
      copy the existing key into their MCP client config, or generate
      a new one. Then they must restart the AI client.
    - `plugin_reachable: true, bearer_valid: true` but the original
@@ -360,12 +365,12 @@ guessing — and without rotating the user's key unnecessarily.
      destructive operations). Ask the user to regenerate the key with
      a higher scope and restart the AI client.
 3. **Walk the user through key rotation if needed:**
-   - "Go to wp-admin → YOOtheme Builder MCP → Settings."
-   - "Click 'Create Key', pick the scope (admin for full access)."
+   - "Go to wp-admin → Tools → YT Builder MCP → Bearer Keys."
+   - "Click 'Generate New Key', pick the scope (admin for full access)."
    - "Copy the key — it's shown ONCE; you cannot recover it later."
    - "Update your AI client config: replace `YTB_MCP_BEARER_TOKEN`
      with the new key. The fastest way is to re-run
-     `npx -y @wootsup/yootheme-builder-mcp setup`."
+     `npx -y @wootsup/yt-builder-mcp setup`."
    - "Restart Claude / Cursor / Zed / Continue / Cline / Roo Code."
    - "Confirm with `yootheme_builder_diagnose` that
      `bearer_valid: true` before retrying the original task."
@@ -566,7 +571,7 @@ fabricate tool calls.
 | `yootheme_builder_element_unbind_source` | destructive+openWorld | `confirm`, `element_path`, `etag`, `template_id` | Remove the source binding from an element. Clears `props.source`. Destructive in the sense that it may break dynamic-content rendering — always ask the user to confirm. Requires ETag. |
 | `yootheme_builder_element_update_settings` | idempotent+openWorld | `element_path`, `etag`, `props`, `template_id` | Replace the `props` on an element. Use this for any setting change — title, margins, classes, sources, etc. Requires ETag. Existing props NOT in the request are removed. |
 | `yootheme_builder_get_etag` | read+openWorld | _(none)_ | Get the current top-level state ETag. Pass this back via the `etag` parameter on any write tool to prevent overwriting concurrent edits. |
-| `yootheme_builder_health` | read+openWorld | _(none)_ | Check that the YOOtheme Builder MCP plugin is installed and reachable. Returns plugin version, YOOtheme Pro version (if loaded), and the list of available REST endpoints. Unauthenticated probe — call this first when troubleshooting connectivity. |
+| `yootheme_builder_health` | read+openWorld | _(none)_ | Check that the YT Builder MCP plugin is installed and reachable. Returns plugin version, YOOtheme Pro version (if loaded), and the list of available REST endpoints. Unauthenticated probe — call this first when troubleshooting connectivity. |
 | `yootheme_builder_page_get_layout` | read+openWorld | `fields`, `flat`, `template_id` | Get full layout tree for one template. Default nested `{layout, etag}`. Set `flat:true` for depth-first array `{elements:[...], etag}`; combine with `fields[]` to project per-element. |
 | `yootheme_builder_page_get_schema` | read+openWorld | `template_id` | Get the flat schema for a template — a list of nodes with their JSON-Pointer paths and element types. Best entry-point for navigation: lighter than page_get_layout, sufficient to locate elements before editing. |
 | `yootheme_builder_page_publish` | openWorld | `etag`, `template_id` | Publish a template. Currently behaves as save + sets `published: true` in the response. Requires ETag. |

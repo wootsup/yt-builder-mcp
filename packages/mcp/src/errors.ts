@@ -1,5 +1,5 @@
 /**
- * Error types for the YOOtheme Builder MCP package.
+ * Error types for the YT Builder MCP package.
  *
  * `RestError` wraps non-2xx responses from the WP REST API with the
  * status, the canonical WP_Error `code` (if present) and the human

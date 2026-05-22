@@ -66,7 +66,7 @@ export function buildHealthTools(client: RestClient): readonly AnyToolDefinition
         defineTool({
             name: 'yootheme_builder_health',
             description:
-                'Check that the YOOtheme Builder MCP plugin is installed and reachable. ' +
+                'Check that the YT Builder MCP plugin is installed and reachable. ' +
                 'Returns plugin version, YOOtheme Pro version (if loaded), and the list of ' +
                 'available REST endpoints. Unauthenticated probe — call this first when ' +
                 'troubleshooting connectivity.',
@@ -152,8 +152,8 @@ export function buildHealthTools(client: RestClient): readonly AnyToolDefinition
                     return jsonResult({
                         ...checks,
                         hint:
-                            'Bearer key rejected. Regenerate the key in wp-admin → ' +
-                            '"YOOtheme Builder MCP" → Settings and re-run ' +
+                            'Bearer key rejected. Regenerate the key in wp-admin → Tools → ' +
+                            '"YT Builder MCP" → Bearer Keys and re-run ' +
                             '`yt-builder-mcp setup`.',
                     }, { isError: true });
                 }

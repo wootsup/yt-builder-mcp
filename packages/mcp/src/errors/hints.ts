@@ -77,7 +77,7 @@ export function hintFor(code: YtbErrorCode): string {
         case 'auth_invalid':
             return (
                 'Bearer key rejected (HTTP 401, key signature invalid or revoked). ' +
-                'Open wp-admin → "YOOtheme Builder MCP" → Settings, regenerate the ' +
+                'Open wp-admin → Tools → "YT Builder MCP" → Bearer Keys, regenerate the ' +
                 'key, and update YTB_MCP_BEARER_TOKEN in your AI-client config. ' +
                 'Then restart the client.'
             );

@@ -88,7 +88,7 @@ Example (pickup):
 
 Environment (when launched by an AI client):
   YTB_MCP_WP_URL         WordPress base URL (e.g. https://example.com).
-  YTB_MCP_BEARER_TOKEN   Bearer key from wp-admin → "YOOtheme Builder MCP".
+  YTB_MCP_BEARER_TOKEN   Bearer key from wp-admin → Tools → "YT Builder MCP".
                          Format: ytb_(live|test)_<payload>.<signature>
   YTB_MCP_TEST_MODE=1    Skip stdio loop (used by smoke tests).
 

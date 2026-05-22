@@ -1,6 +1,11 @@
-# @wootsup/yootheme-builder-mcp
+# @wootsup/yt-builder-mcp — YT Builder MCP for YOOtheme Pro (unofficial)
 
-> MCP Server for YOOtheme Page Builder. Drive your YOOtheme Pro site programmatically from **Claude Desktop**, **Cursor**, **Continue**, **Zed**, **Cline**, or **Roo Code**.
+> Drive your page builder via MCP. Built for YOOtheme Pro 4.0+ — connect **Claude Desktop**, **Cursor**, **Continue**, **Zed**, **Cline**, or **Roo Code** in one command.
+
+> Independent third-party project. YOOtheme® is a registered trademark of YOOtheme GmbH
+> ([yootheme.com](https://yootheme.com)). YT Builder MCP is built by WootsUp (getimo
+> productions) and is not affiliated with, endorsed by, or sponsored by YOOtheme.
+> The integration uses YOOtheme Pro's public extension points.
 
 **License:** MIT
 **Status:** Pre-alpha — under active development.
@@ -10,19 +15,19 @@
 ## Quick start
 
 ```bash
-# 1. Install the WordPress plugin (yootheme-builder-mcp).
-#    See https://wootsup.com/products/yootheme-builder-mcp
+# 1. Install the WordPress plugin (yt-builder-mcp).
+#    See https://wootsup.com/products/yt-builder-mcp
 
 # 2. Generate a Bearer key in
-#    wp-admin → "YOOtheme Builder MCP" → Settings → Create Key.
+#    wp-admin → Tools → "YT Builder MCP" → Bearer Keys → Generate New Key.
 #    Key format: ytb_(live|test)_<payloadB64Url>.<sigB64Url>
 #    The key is shown ONCE — copy it now; it cannot be recovered later.
 
 # 3. Run the wizard to configure your AI client(s):
-npx -y @wootsup/yootheme-builder-mcp setup
+npx -y @wootsup/yt-builder-mcp setup
 
 # 4. (Optional) Install the bundled agent skill:
-npx -y @wootsup/yootheme-builder-mcp install-skill
+npx -y @wootsup/yt-builder-mcp install-skill
 
 # 5. Restart your AI client.
 ```
@@ -33,7 +38,7 @@ The wizard prompts for:
 2. The Bearer key you just generated.
 3. Which AI client(s) to configure (multi-select).
 
-It probes `/wp-json/yootheme-builder-mcp/v1/health` to confirm the
+It probes `/wp-json/yt-builder-mcp/v1/health` to confirm the
 plugin is reachable, `/etag` to validate the Bearer key, then writes
 the MCP server entry into each selected client's config file. After
 restart you should see the new tools prefixed with `yootheme_builder_*`.
@@ -93,10 +98,10 @@ server boundary.
 ## Subcommands
 
 ```
-yootheme-builder-mcp setup            Interactive first-run wizard (default).
-yootheme-builder-mcp install-skill    Install the bundled agent skill.
-yootheme-builder-mcp --version, -v    Print package version.
-yootheme-builder-mcp --help, -h       Show usage.
+yt-builder-mcp setup            Interactive first-run wizard (default).
+yt-builder-mcp install-skill    Install the bundled agent skill.
+yt-builder-mcp --version, -v    Print package version.
+yt-builder-mcp --help, -h       Show usage.
 ```
 
 ### `install-skill` — bundled agent skill
@@ -118,14 +123,14 @@ source, clone section, diagnose 401, add custom element) plus a
 ## DXT bundle — Claude Desktop one-click install
 
 The repo includes a `manifest.json` and `scripts/build-dxt.js` that
-produces a `yootheme-builder-mcp.dxt` archive — the
+produces a `yt-builder-mcp.dxt` archive — the
 [Desktop Extension](https://github.com/anthropics/dxt) format used
 by Claude Desktop for one-click MCP installs. Build it from a
 source checkout:
 
 ```bash
 npm run build:dxt
-# → ./yootheme-builder-mcp.dxt
+# → ./yt-builder-mcp.dxt
 ```
 
 Drop the `.dxt` file onto Claude Desktop's Extensions screen to
@@ -153,7 +158,7 @@ client's MCP config file:
   "mcpServers": {
     "yootheme-builder": {
       "command": "npx",
-      "args": ["-y", "@wootsup/yootheme-builder-mcp"],
+      "args": ["-y", "@wootsup/yt-builder-mcp"],
       "env": {
         "YTB_MCP_WP_URL": "https://example.com",
         "YTB_MCP_BEARER_TOKEN": "ytb_live_…"
@@ -170,7 +175,7 @@ For scripted / CI installs, pass the answers as flags and add
 exit with code `2` and a clear error to stderr:
 
 ```bash
-npx -y @wootsup/yootheme-builder-mcp setup \
+npx -y @wootsup/yt-builder-mcp setup \
   --non-interactive \
   --client cursor --client claude-desktop \
   --url https://dev.wootsup.com/wordpress \
@@ -208,10 +213,9 @@ The CLI returns POSIX-style exit codes for scripting / CI:
 ## Documentation
 
 - [SKILL.md (bundled agent skill)](./skills/yootheme-builder/SKILL.md) — 5 canonical workflows, gateway model, tool catalog
-- [REST API Reference](https://github.com/wootsup/yootheme-builder-mcp/blob/main/docs/rest-api-reference.md)
-- [MCP Tool Reference](https://github.com/wootsup/yootheme-builder-mcp/blob/main/docs/mcp-tool-reference.md)
-- [Pipeline Studio Integration](https://github.com/wootsup/yootheme-builder-mcp/blob/main/docs/pipeline-studio-integration.md)
+- [REST API Reference](https://github.com/wootsup/yt-builder-mcp/blob/main/docs/rest-api-reference.md)
+- [MCP Tool Reference](https://github.com/wootsup/yt-builder-mcp/blob/main/docs/mcp-tool-reference.md)
 
 ## Repository
 
-https://github.com/wootsup/yootheme-builder-mcp
+https://github.com/wootsup/yt-builder-mcp

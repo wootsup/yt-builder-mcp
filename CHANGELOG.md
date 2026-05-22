@@ -1,10 +1,17 @@
 # Changelog
 
-All notable changes to `yootheme-builder-mcp` (both PHP plugin and NPM package) are documented here.
+All notable changes to `yt-builder-mcp` (both PHP plugin and NPM package) are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Renamed
+
+- **Plugin slug + display name** — yootheme-builder-mcp → yt-builder-mcp. The full display name is now "YT Builder MCP for YOOtheme Pro (unofficial)" — only used at the top of each surface (plugin header, README hero, About tab, getting-started intro). Body copy uses the short "YT Builder MCP" form. Why: reduces trademark density (~70 references → ~10) and matches the new wootsup/yt-builder-mcp GitHub repo + @wootsup/yt-builder-mcp NPM package.
+- **REST namespace** — `yootheme-builder-mcp/v1` → `yt-builder-mcp/v1`. Existing Bearer tokens stay valid (the wp_options key-store prefix `ytb_mcp_*` is unchanged), but customers running the npm wizard need to re-run setup once after upgrading — the wizard re-detects the new namespace automatically.
+- **GitHub repo** — wootsup/yootheme-builder-mcp → wootsup/yt-builder-mcp (separate release wave R6).
+- **NPM package** — @wootsup/yootheme-builder-mcp → @wootsup/yt-builder-mcp (separate release wave R6, old package will be deprecated with a clear migration message).
 
 ### Added
 
@@ -34,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - Nonce-shape validation (32–64 base64url chars) BEFORE transient lookup — prevents timing-oracle attack on the nonce space.
   - Same response shape (404) for "expired" / "consumed" / "never-existed" — no information leak.
 - wp-admin Reveal-Box redesigned to **3 ordered CTAs**:
-  1. **"Paste this prompt into your AI assistant"** — pre-built `npx -y @wootsup/yootheme-builder-mcp setup --pickup <URL> --nonce <CODE> --client <id>` snippet + Copy-as-AI-Prompt button. Token-free — the customer's AI chat history, the LLM provider's logs, and bash history see only an expired-after-claim URL.
+  1. **"Paste this prompt into your AI assistant"** — pre-built `npx -y @wootsup/yt-builder-mcp setup --pickup <URL> --nonce <CODE> --client <id>` snippet + Copy-as-AI-Prompt button. Token-free — the customer's AI chat history, the LLM provider's logs, and bash history see only an expired-after-claim URL.
   2. **"Or run the wizard manually"** — collapsed `<details>` with the interactive `npx ... setup` command + the site URL + the token as separate copy-snippets.
   3. **Token + Copy** — bottom-of-box, single source of truth, "save now, won't be shown again".
 - NPM wizard new flags `--pickup <url>` + `--nonce <code>`:
@@ -46,10 +53,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `scripts/release.php` + `scripts/publish.php` + `scripts/cleanup-releases.php` refactored from api-mapper-only to multi-plugin via new `build.<platform>.{plugin_entry,readme_path,zip_base_name,manifest_path,package_path}` config in `server/releases/<product>/product.json`.
 - `server/releases/_schema/product.schema.json` extended with optional `build` section + `repository` field.
-- New `server/releases/yootheme-builder-mcp/{product.json,releases.json}` (empty `releases: []` array — ready for first publish).
+- New `server/releases/yt-builder-mcp/{product.json,releases.json}` (empty `releases: []` array — ready for first publish).
 - 3 new helpers in `scripts/release.php`: `getBuildConfig`, `getReleasesPath`, `bumpNpmVersion`.
 - 2 new helpers in `scripts/publish.php`: `publishPaths()`, `publishUrls()` (replacing the now-removed `const PUBLISH_PATHS` / `PUBLISH_URLS`).
-- `cmdBuild` platform-gates Joomla build via `in_array('joomla', $productInfo['platforms'], true)` — yootheme-builder-mcp is WordPress-only by design.
+- `cmdBuild` platform-gates Joomla build via `in_array('joomla', $productInfo['platforms'], true)` — yt-builder-mcp is WordPress-only by design.
 - Backward-compat: api-mapper without a `build` section gets legacy paths via fallback, byte-identical to pre-refactor.
 - 23-assertion smoke test `scripts/__tests__/release-multi-product.test.php` covers backward-compat + platform-gating + schema-validate + filename parity.
 
