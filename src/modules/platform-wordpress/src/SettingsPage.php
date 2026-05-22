@@ -186,7 +186,7 @@ final class SettingsPage
         echo ' <span class="ytb-unofficial-badge" title="' . \esc_attr__('Independent third-party plugin. Not affiliated with or endorsed by YOOtheme GmbH.', 'yt-builder-mcp') . '">' . \esc_html__('unofficial', 'yt-builder-mcp') . '</span>';
         echo '</h1>';
         echo '<p class="ytb-brand-header__tagline">';
-        echo \esc_html__('Drive your YOOtheme Pro page builder programmatically from Claude, Cursor, ChatGPT, and other AI assistants via the Model Context Protocol.', 'yt-builder-mcp');
+        echo \esc_html__('Let Claude, Cursor and other AI assistants edit your YOOtheme Pro pages.', 'yt-builder-mcp');
         echo '</p>';
         echo '<div class="ytb-brand-header__ctas">';
         echo '<a class="button ytb-brand-cta-primary" href="' . \esc_url(\add_query_arg(['page' => self::SLUG], \admin_url('admin.php'))) . '">';
@@ -736,86 +736,89 @@ final class SettingsPage
             ? $siteUrl . '/wp-json/' . self::PICKUP_REST_PATH
             : '';
 
-        echo '<div class="notice notice-success ytb-reveal" role="alert" aria-live="polite" style="padding:14px 18px;">';
-        echo '<h3 style="margin:0 0 6px;font-size:15px;">' . \esc_html__('Your Bearer key is ready', 'yt-builder-mcp') . '</h3>';
-        echo '<p style="margin:0 0 14px;color:#444;">' . \esc_html__('Copy the AI prompt below and paste it into Claude Desktop, Cursor, or any AI client with a Bash tool. The setup runs automatically — your token is never sent through the chat.', 'yt-builder-mcp') . '</p>';
+        $dxtUrl = \plugins_url('assets/yt-builder-mcp.dxt', \YTB_MCP_FILE);
 
+        echo '<div class="notice notice-success ytb-reveal" role="alert" aria-live="polite" style="padding:18px 20px;">';
+
+        // Lead — one short line.
+        echo '<h3 style="margin:0 0 4px;font-size:16px;color:#111;">' . \esc_html__('Your key is ready', 'yt-builder-mcp') . '</h3>';
+        echo '<p style="margin:0 0 18px;color:#555;font-size:13px;">' . \esc_html__('Connect Claude Desktop in two clicks. Other AI clients shown below.', 'yt-builder-mcp') . '</p>';
+
+        // Primary CTA — big, single, obvious.
+        echo '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">';
+        echo '<a class="button button-hero ytb-brand-cta-primary" href="' . \esc_url($dxtUrl) . '" download style="padding:10px 22px;font-size:15px;height:auto;line-height:1.3;">';
+        echo '<span style="display:inline-block;vertical-align:middle;margin-right:6px;">↓</span>';
+        echo \esc_html__('Download for Claude Desktop', 'yt-builder-mcp');
+        echo '</a>';
+        echo '<span style="color:#666;font-size:12px;">' . \esc_html__('Double-click the file after download. Claude asks for the two values below.', 'yt-builder-mcp') . '</span>';
+        echo '</div>';
+
+        // Site URL + Token — labeled fields, no code-block-walls.
+        echo '<div style="display:grid;grid-template-columns:90px 1fr auto;gap:8px 12px;align-items:center;background:#f7f7f7;padding:12px 14px;border-radius:4px;margin-bottom:14px;">';
+
+        // URL row
+        echo '<label style="font-weight:600;font-size:13px;color:#333;">' . \esc_html__('Site URL', 'yt-builder-mcp') . '</label>';
+        echo '<input type="text" id="ytb-mcp-site-url" readonly value="' . \esc_attr($siteUrl) . '" style="font-family:Menlo,Consolas,monospace;font-size:13px;padding:6px 8px;border:1px solid #ddd;background:#fff;border-radius:3px;width:100%;">';
+        echo '<button type="button" class="button" data-ytb-copy="ytb-mcp-site-url" data-ytb-copy-status="ytb-mcp-copy-status-url">' . \esc_html__('Copy', 'yt-builder-mcp') . '</button>';
+
+        // Token row
+        echo '<label style="font-weight:600;font-size:13px;color:#333;">' . \esc_html__('Bearer token', 'yt-builder-mcp') . '</label>';
+        echo '<input type="text" id="ytb-mcp-revealed-token" readonly value="' . \esc_attr($token) . '" style="font-family:Menlo,Consolas,monospace;font-size:13px;padding:6px 8px;border:1px solid #ddd;background:#fff;border-radius:3px;width:100%;">';
+        echo '<button type="button" class="button button-primary" data-ytb-copy="ytb-mcp-revealed-token" data-ytb-copy-status="ytb-mcp-copy-status-token">' . \esc_html__('Copy', 'yt-builder-mcp') . '</button>';
+
+        echo '</div>';
+
+        // Save warning + copy-status (single line, low-key).
+        echo '<p style="margin:0 0 6px;color:#7a5b00;font-size:12px;">';
+        echo '<span style="font-weight:600;">⚠ ' . \esc_html__('Save the token now', 'yt-builder-mcp') . '</span>';
+        echo ' — ' . \esc_html__('it will not be shown again after you leave this page.', 'yt-builder-mcp');
+        echo ' <span id="ytb-mcp-copy-status-url" aria-live="polite" style="color:#46b450;"></span>';
+        echo ' <span id="ytb-mcp-copy-status-token" aria-live="polite" style="color:#46b450;"></span>';
+        echo '</p>';
+
+        // Advanced — collapsed by default. Hides AI prompt + manual npx.
+        $this->render_advanced_setup_section($pickupUrl, $pickupNonce, $siteUrl);
+
+        echo '</div>';
+    }
+
+    /**
+     * Advanced setup section — collapsed by default.
+     *
+     * For Stefan/Aisha-style power users on Cursor, Zed, Codex CLI, etc.
+     * Contains the AI-prompt pickup-URL flow (Cursor + Bash-tool clients)
+     * + the manual `npx ... setup` invocation. Hidden by default so Maria's
+     * eye doesn't bounce off five code-blocks on first reveal.
+     */
+    private function render_advanced_setup_section(string $pickupUrl, string $pickupNonce, string $siteUrl): void
+    {
+        echo '<details style="margin-top:10px;border-top:1px solid #e0e0e0;padding-top:10px;">';
+        echo '<summary style="cursor:pointer;font-size:13px;color:#0073aa;padding:4px 0;">';
+        echo \esc_html__('Using Cursor, Zed, or another AI client?', 'yt-builder-mcp');
+        echo '</summary>';
+        echo '<div style="padding:14px 0 4px;color:#444;font-size:13px;">';
+
+        // Manual npx — always available.
+        echo '<p style="margin:0 0 8px;"><strong>' . \esc_html__('Manual setup (terminal):', 'yt-builder-mcp') . '</strong></p>';
+        echo '<pre style="background:#0b3534;color:#e6f7f6;padding:10px 12px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:12px;overflow-x:auto;margin:0 0 12px;">npx -y @wootsup/yt-builder-mcp setup</pre>';
+        echo '<p style="margin:0 0 14px;color:#666;font-size:12px;">' . \esc_html__('The wizard will ask for your site URL, Bearer token, and which AI client to configure. Paste the values from above.', 'yt-builder-mcp') . '</p>';
+
+        // AI-prompt pickup — only if alive.
         if ($pickupUrl !== '' && $pickupNonce !== '') {
-            $this->render_ai_prompt_section($pickupUrl, $pickupNonce, $siteUrl);
+            $aiPrompt = $this->build_ai_prompt($pickupUrl, $pickupNonce, $siteUrl);
+            echo '<p style="margin:0 0 8px;"><strong>' . \esc_html__('Or have your AI run the setup itself:', 'yt-builder-mcp') . '</strong> ';
+            echo '<span style="color:#888;font-size:11px;">' . \esc_html__('— expires in 5 minutes, IP-bound, one-shot', 'yt-builder-mcp') . '</span></p>';
+            echo '<pre id="ytb-mcp-ai-prompt" style="background:#0b3534;color:#e6f7f6;padding:10px 12px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:12px;overflow-x:auto;white-space:pre-wrap;margin:0 0 8px;">' . \esc_html($aiPrompt) . '</pre>';
+            echo '<p style="margin:0;">';
+            echo '<button type="button" class="button" data-ytb-copy="ytb-mcp-ai-prompt" data-ytb-copy-status="ytb-mcp-copy-status-prompt">';
+            echo \esc_html__('Copy prompt', 'yt-builder-mcp');
+            echo '</button> ';
+            echo '<span id="ytb-mcp-copy-status-prompt" aria-live="polite" style="margin-left:0.5em;color:#46b450;font-size:12px;"></span>';
+            echo ' <span style="color:#888;font-size:11px;margin-left:8px;">' . \esc_html__('Some AI clients may refuse to auto-run external scripts — that\'s expected, use manual setup then.', 'yt-builder-mcp') . '</span>';
+            echo '</p>';
         }
-        $this->render_manual_fallback_section($siteUrl);
-        $this->render_token_section($token);
 
-        echo '</div>';
-    }
-
-    /**
-     * Section 1 — Copy AI prompt (recommended path).
-     *
-     * Only rendered when the pickup channel is alive (pickup-nonce stored
-     * successfully). Carries pickup-URL + nonce — NOT the token itself, so
-     * the prompt is safe to paste into AI-chat history / provider logs.
-     */
-    private function render_ai_prompt_section(string $pickupUrl, string $pickupNonce, string $siteUrl): void
-    {
-        $aiPrompt = $this->build_ai_prompt($pickupUrl, $pickupNonce, $siteUrl);
-        echo '<div class="ytb-reveal__section" style="background:#f0fbf9;border:1px solid #c5e9e3;border-radius:6px;padding:12px 14px;margin-bottom:14px;">';
-        echo '<p style="margin:0 0 8px;"><strong>' . \esc_html__('1. Paste this prompt into your AI assistant', 'yt-builder-mcp') . '</strong> ';
-        echo '<span style="color:#666;font-size:12px;">' . \esc_html__('— expires in 5 minutes, one-shot, IP-bound', 'yt-builder-mcp') . '</span></p>';
-        echo '<pre id="ytb-mcp-ai-prompt" style="background:#0b3534;color:#e6f7f6;padding:10px 12px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:12px;overflow-x:auto;white-space:pre-wrap;margin:0 0 10px;">' . \esc_html($aiPrompt) . '</pre>';
-        echo '<p style="margin:0;">';
-        echo '<button type="button" class="button button-primary ytb-brand-cta-primary" data-ytb-copy="ytb-mcp-ai-prompt" data-ytb-copy-status="ytb-mcp-copy-status-prompt">';
-        echo \esc_html__('Copy AI prompt', 'yt-builder-mcp');
-        echo '</button> ';
-        echo '<span id="ytb-mcp-copy-status-prompt" aria-live="polite" style="margin-left:0.5em;color:#46b450;"></span>';
-        echo '</p>';
-        echo '</div>';
-    }
-
-    /**
-     * Section 2 — Manual wizard fallback (collapsed by default).
-     *
-     * For customers whose pickup channel is unavailable or who prefer
-     * explicit interactive setup. Renders an `<details>` element with the
-     * npm-wizard incantation and the three prompts the wizard asks.
-     */
-    private function render_manual_fallback_section(string $siteUrl): void
-    {
-        echo '<details class="ytb-reveal__section" style="margin-bottom:14px;">';
-        echo '<summary style="cursor:pointer;font-weight:600;padding:6px 0;">' . \esc_html__('2. Or run the wizard manually', 'yt-builder-mcp') . '</summary>';
-        echo '<div style="padding:8px 0 0 16px;color:#444;">';
-        echo '<p style="margin:0 0 8px;">' . \esc_html__('In a terminal on the same machine as your AI client:', 'yt-builder-mcp') . '</p>';
-        echo '<pre style="background:#0b3534;color:#e6f7f6;padding:10px 12px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:12px;overflow-x:auto;margin:0 0 8px;">npx -y @wootsup/yt-builder-mcp setup</pre>';
-        echo '<p style="margin:0 0 4px;">' . \esc_html__('The wizard will ask for:', 'yt-builder-mcp') . '</p>';
-        echo '<ul style="margin:0 0 8px 18px;">';
-        /* translators: %s: site URL */
-        echo '<li>' . \sprintf(\esc_html__('Your site URL — paste: %s', 'yt-builder-mcp'), '<code>' . \esc_html($siteUrl) . '</code>') . '</li>';
-        echo '<li>' . \esc_html__('Your Bearer token — paste the token from section 3 below', 'yt-builder-mcp') . '</li>';
-        echo '<li>' . \esc_html__('Which AI client(s) to configure — pick from the detected list', 'yt-builder-mcp') . '</li>';
-        echo '</ul>';
         echo '</div></details>';
-    }
-
-    /**
-     * Section 3 — Bearer token + click-to-copy (single source of truth).
-     *
-     * Always rendered. Shows the raw token once, with a "save it now"
-     * warning. Token is not stored server-side once revealed (KeyStore
-     * keeps only the hash), so this is the operator's only chance.
-     */
-    private function render_token_section(string $token): void
-    {
-        echo '<div class="ytb-reveal__section" style="background:#fff8dc;border:1px solid #f0e0a0;border-radius:6px;padding:12px 14px;">';
-        echo '<p style="margin:0 0 8px;"><strong>' . \esc_html__('3. Your Bearer token', 'yt-builder-mcp') . '</strong> ';
-        echo '<span style="color:#7a5b00;font-size:12px;">' . \esc_html__('— save it now, it will not be shown again', 'yt-builder-mcp') . '</span></p>';
-        echo '<p style="margin:0 0 10px;"><code id="ytb-mcp-revealed-token" style="word-break:break-all;background:#fff;padding:6px 8px;border-radius:4px;display:inline-block;max-width:100%;">' . \esc_html($token) . '</code></p>';
-        echo '<p style="margin:0;">';
-        echo '<button type="button" class="button button-secondary" data-ytb-copy="ytb-mcp-revealed-token" data-ytb-copy-status="ytb-mcp-copy-status-token">';
-        echo \esc_html__('Copy token', 'yt-builder-mcp');
-        echo '</button> ';
-        echo '<span id="ytb-mcp-copy-status-token" aria-live="polite" style="margin-left:0.5em;color:#46b450;"></span>';
-        echo '</p>';
-        echo '</div>';
     }
 
     /**

@@ -226,30 +226,31 @@ final class SettingsPageTabsTest extends TestCase
 
         $output = $this->renderOutput($this->page());
 
-        // Section 1 — AI prompt
-        self::assertStringContainsString('Paste this prompt into your AI assistant', $output);
+        // Primary CTA — DXT download (Maria-path)
+        self::assertStringContainsString('Download for Claude Desktop', $output);
+        self::assertStringContainsString('assets/yt-builder-mcp.dxt', $output);
+
+        // Site URL + Token fields (labeled, not code-blocks)
+        self::assertStringContainsString('Site URL', $output);
+        self::assertStringContainsString('Bearer token', $output);
+        self::assertStringContainsString('ytb_live_payloadFOO.sigBAR', $output);
+
+        // Advanced section (collapsed by default) — contains AI prompt
+        self::assertStringContainsString('Using Cursor, Zed, or another AI client', $output);
+        self::assertStringContainsString('<details', $output);
         self::assertStringContainsString('--pickup', $output);
         self::assertStringContainsString('--nonce ' . $nonce, $output);
-        self::assertStringContainsString('Copy AI prompt', $output);
-        self::assertStringContainsString('/wp-json/yt-builder-mcp/v1/setup/pickup', $output);
-
-        // Section 2 — Manual fallback (collapsed details)
-        self::assertStringContainsString('<details', $output);
-        self::assertStringContainsString('Or run the wizard manually', $output);
         self::assertStringContainsString('npx -y @wootsup/yt-builder-mcp setup', $output);
-
-        // Section 3 — Token + copy button
-        self::assertStringContainsString('ytb_live_payloadFOO.sigBAR', $output);
-        self::assertStringContainsString('Copy token', $output);
+        self::assertStringContainsString('/wp-json/yt-builder-mcp/v1/setup/pickup', $output);
 
         // The token MUST NOT appear inside the AI-prompt code block — the
         // entire point of pickup mode is that the token never travels through
-        // chat. We assert the prompt-block contains the pickup URL but not
-        // the token string.
-        $promptStart = strpos($output, 'Paste this prompt into your AI assistant');
-        $promptEnd = strpos($output, 'Or run the wizard manually');
-        self::assertNotFalse($promptStart);
-        self::assertNotFalse($promptEnd);
+        // chat. The AI prompt lives inside <pre id="ytb-mcp-ai-prompt">…</pre>
+        // so we slice on those markers.
+        $promptStart = strpos($output, 'id="ytb-mcp-ai-prompt"');
+        self::assertNotFalse($promptStart, 'AI-prompt block not rendered');
+        $promptEnd = strpos($output, '</pre>', $promptStart);
+        self::assertNotFalse($promptEnd, 'AI-prompt block not closed');
         $promptSlice = substr($output, $promptStart, $promptEnd - $promptStart);
         self::assertStringNotContainsString('ytb_live_payloadFOO.sigBAR', $promptSlice, 'Token leaked into AI prompt');
     }
@@ -270,13 +271,13 @@ final class SettingsPageTabsTest extends TestCase
 
         $output = $this->renderOutput($this->page());
 
-        // AI-prompt section is absent (gated by pickup-nonce).
-        self::assertStringNotContainsString('Paste this prompt into your AI assistant', $output);
+        // AI-prompt block is absent (gated by pickup-nonce).
+        self::assertStringNotContainsString('ytb-mcp-ai-prompt', $output);
         self::assertStringNotContainsString('--pickup', $output);
-        // Manual + token sections still present.
-        self::assertStringContainsString('Or run the wizard manually', $output);
+        // DXT-CTA + manual setup + token field still present.
+        self::assertStringContainsString('Download for Claude Desktop', $output);
+        self::assertStringContainsString('Manual setup (terminal):', $output);
         self::assertStringContainsString('ytb_live_payloadAAA.sigBBB', $output);
-        self::assertStringContainsString('Copy token', $output);
     }
 
     /**
@@ -296,13 +297,13 @@ final class SettingsPageTabsTest extends TestCase
 
         $output = $this->renderOutput($this->page());
 
-        self::assertStringNotContainsString('Paste this prompt into your AI assistant', $output);
+        self::assertStringNotContainsString('ytb-mcp-ai-prompt', $output);
         self::assertStringNotContainsString('--pickup', $output);
         // The malformed payload must not appear verbatim anywhere (the
         // inline copy-script block contains a legit `<script>` tag — that's
         // expected and unrelated to the malformed nonce echo).
         self::assertStringNotContainsString('alert(1)', $output);
-        // Token section still works.
+        // Token field still works.
         self::assertStringContainsString('ytb_live_CCC.DDD', $output);
     }
 

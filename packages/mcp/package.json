@@ -28,7 +28,7 @@
         "wootsup"
     ],
     "bin": {
-        "yt-builder-mcp": "./bin/yt-builder-mcp.js"
+        "yt-builder-mcp": "bin/yt-builder-mcp.js"
     },
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",

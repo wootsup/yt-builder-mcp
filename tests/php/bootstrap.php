@@ -398,6 +398,17 @@ if (!function_exists('admin_url')) {
     }
 }
 
+if (!function_exists('plugins_url')) {
+    function plugins_url(string $path = '', string $plugin = ''): string
+    {
+        return 'https://example.test/wp-content/plugins/yt-builder-mcp/' . $path;
+    }
+}
+
+if (!defined('YTB_MCP_FILE')) {
+    define('YTB_MCP_FILE', '/test/wp-content/plugins/yt-builder-mcp/yt-builder-mcp.php');
+}
+
 if (!function_exists('wp_nonce_field')) {
     function wp_nonce_field(string $action): void
     {

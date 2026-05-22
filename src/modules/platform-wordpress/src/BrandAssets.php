@@ -119,7 +119,7 @@ final class BrandAssets
             . ' !important;border-color:' . self::COLOR_TEAL . ' !important;text-shadow:none !important;box-shadow:none !important;}'
             . '.ytb-brand-cta-primary:hover,.ytb-brand-cta-primary:focus{background:#26b8b4 !important;border-color:#26b8b4 !important;color:' . self::COLOR_INK . ' !important;}'
             . '.ytb-tab-panel{background:#fff;border:1px solid ' . self::COLOR_BORDER . ';border-top:none;padding:20px 24px;margin-bottom:24px;}'
-            . '.ytb-tab-panel .form-table select{min-width:160px;padding:4px 8px;font-size:14px;appearance:auto;-webkit-appearance:auto;}'
+            . '.ytb-tab-panel .form-table select{min-width:160px;max-width:240px;padding:4px 8px;font-size:14px;}'
             . '.ytb-diag-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:12px;}'
             . '.ytb-diag-card{border:1px solid ' . self::COLOR_BORDER . ';padding:14px 16px;border-radius:4px;background:#fafafa;}'
             . '.ytb-diag-card h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;color:' . self::COLOR_MUTED . ';}'
