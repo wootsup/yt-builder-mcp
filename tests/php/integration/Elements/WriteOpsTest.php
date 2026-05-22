@@ -427,6 +427,85 @@ final class WriteOpsTest extends TestCase
     }
 
     // ------------------------------------------------------------------
+    // T2 / N-01 — list_elements parses root_path/depth/limit/cursor query
+    // params and forwards the {items,next_cursor,total} pagination envelope.
+    // ------------------------------------------------------------------
+
+    public function test_list_elements_returns_flat_shape_without_pagination_params(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->list_elements($req);
+        $data = $resp->get_data();
+        // Backward-compat: plain `?` call keeps the flat `elements` shape.
+        self::assertArrayHasKey('elements', $data);
+        self::assertArrayNotHasKey('items', $data);
+        self::assertArrayNotHasKey('next_cursor', $data);
+    }
+
+    public function test_list_elements_limit_returns_pagination_envelope(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req->set_param('limit', 2);
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->list_elements($req);
+        $data = $resp->get_data();
+        // tpl flattens to section + headline + image = 3 → limit=2 pages.
+        self::assertArrayHasKey('items', $data);
+        self::assertCount(2, $data['items']);
+        self::assertSame(3, $data['total']);
+        self::assertNotNull($data['next_cursor']);
+        self::assertArrayHasKey('etag', $data);
+    }
+
+    public function test_list_elements_cursor_returns_final_page_without_next_cursor(): void
+    {
+        $controller = $this->controller();
+
+        $req1 = new \WP_REST_Request('GET', '/');
+        $req1['template_id'] = 'tpl';
+        $req1->set_param('limit', 2);
+        /** @var \WP_REST_Response $resp1 */
+        $resp1 = $controller->list_elements($req1);
+        $cursor = $resp1->get_data()['next_cursor'];
+        self::assertNotNull($cursor);
+
+        $req2 = new \WP_REST_Request('GET', '/');
+        $req2['template_id'] = 'tpl';
+        $req2->set_param('limit', 2);
+        $req2->set_param('cursor', $cursor);
+        /** @var \WP_REST_Response $resp2 */
+        $resp2 = $controller->list_elements($req2);
+        $data2 = $resp2->get_data();
+        self::assertCount(1, $data2['items']);
+        self::assertNull($data2['next_cursor']);
+    }
+
+    public function test_list_elements_root_path_scopes_to_subtree(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req->set_param('root_path', '/templates/tpl/layout/children/0');
+        $req->set_param('limit', 50);
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->list_elements($req);
+        $data = $resp->get_data();
+        // Subtree of the section node = the section + its headline child.
+        self::assertArrayHasKey('items', $data);
+        foreach ($data['items'] as $row) {
+            self::assertStringStartsWith('/templates/tpl/layout/children/0', $row['path']);
+        }
+    }
+
+    // ------------------------------------------------------------------
     // F-11 — element_add validates element_type against Inspector registry.
     // ------------------------------------------------------------------
 

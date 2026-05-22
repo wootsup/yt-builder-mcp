@@ -44,6 +44,8 @@ export const ELEMENT_LIST_OUTPUT_SCHEMA = z.object({
     items: z.array(z.record(z.string(), z.unknown())),
     total: z.number(),
     template_id: z.string(),
+    // N-01: present only when the call was paginated and more rows remain.
+    next_cursor: z.string().optional(),
     projected_fields: z.array(z.string()).optional(),
 });
 
@@ -74,14 +76,50 @@ export interface ElementsHandlerDeps {
 
 export async function handleElementList(
     { client }: ElementsHandlerDeps,
-    { template_id, fields }: { template_id: string; fields?: readonly string[] },
+    {
+        template_id,
+        fields,
+        root_path,
+        depth,
+        limit,
+        cursor,
+    }: {
+        template_id: string;
+        fields?: readonly string[];
+        root_path?: string;
+        depth?: number;
+        limit?: number;
+        cursor?: string;
+    },
 ): Promise<ToolResult> {
     try {
-        const data = await client.get<{ elements?: unknown }>(
-            `/pages/${encodeURIComponent(template_id)}/elements`,
+        // N-01 (Audit-v3): forward the transport-safe scoping params as
+        // query string. The REST layer returns the pagination envelope
+        // `{items, next_cursor, total}` when `limit` is set, else the flat
+        // `{elements, total}` shape — handle both.
+        const qs = new URLSearchParams();
+        if (typeof root_path === 'string' && root_path !== '') {
+            qs.set('root_path', root_path);
+        }
+        if (typeof depth === 'number') qs.set('depth', String(depth));
+        if (typeof limit === 'number') qs.set('limit', String(limit));
+        if (typeof cursor === 'string' && cursor !== '') qs.set('cursor', cursor);
+        const query = qs.toString();
+        const data = await client.get<{
+            elements?: unknown;
+            items?: unknown;
+            next_cursor?: string | null;
+            total?: number;
+        }>(
+            `/pages/${encodeURIComponent(template_id)}/elements${query !== '' ? `?${query}` : ''}`,
         );
-        const raw = Array.isArray(data.elements) ? data.elements : [];
-        const mapped = raw
+        // Paginated envelope uses `items`; flat shape uses `elements`.
+        const rawSource = Array.isArray(data.items)
+            ? data.items
+            : Array.isArray(data.elements)
+                ? data.elements
+                : [];
+        const mapped = rawSource
             .filter((x): x is Record<string, unknown> => x !== null && typeof x === 'object')
             .map(mapElementRow);
         const items = projectFields(mapped, fields, DEFAULT_FIELDS_ELEMENT_LIST);
@@ -94,8 +132,11 @@ export async function handleElementList(
         });
         return structuredResult(toolkitResult, {
             items,
-            total: items.length,
+            total: typeof data.total === 'number' ? data.total : items.length,
             template_id,
+            ...(typeof data.next_cursor === 'string' && data.next_cursor !== ''
+                ? { next_cursor: data.next_cursor }
+                : {}),
             ...(echo !== undefined ? { projected_fields: [...echo] } : {}),
         });
     } catch (e) {

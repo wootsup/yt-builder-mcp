@@ -183,6 +183,69 @@ describe('buildElementsTools — write endpoints', () => {
     });
 });
 
+describe('buildElementsTools — element_list pagination (T2 / N-01)', () => {
+    it('forwards limit + surfaces next_cursor from the paginated envelope', async () => {
+        let seenUrl: string | undefined;
+        const tools = buildElementsTools(
+            fakeClient((url) => {
+                seenUrl = url;
+                return jsonResponse({
+                    items: [
+                        { path: '/0', element_type: 'section' },
+                        { path: '/1', element_type: 'headline' },
+                    ],
+                    next_cursor: 'o:5',
+                    total: 96,
+                });
+            }),
+        );
+        const result = await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'tpl',
+            limit: 5,
+        });
+        expect(seenUrl).toContain('limit=5');
+        expect(result.structuredContent?.next_cursor).toBe('o:5');
+        expect(result.structuredContent?.total).toBe(96);
+    });
+
+    it('forwards root_path + depth as query params', async () => {
+        let seenUrl: string | undefined;
+        const tools = buildElementsTools(
+            fakeClient((url) => {
+                seenUrl = url;
+                return jsonResponse({ items: [], total: 0 });
+            }),
+        );
+        await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'tpl',
+            root_path: '/templates/tpl/layout/children/0',
+            depth: 2,
+        });
+        expect(seenUrl).toContain('root_path=');
+        expect(seenUrl).toContain('depth=2');
+    });
+
+    it('handles the flat (non-paginated) shape with no next_cursor', async () => {
+        const tools = buildElementsTools(
+            fakeClient(() =>
+                jsonResponse({
+                    elements: [
+                        { path: '/0', element_type: 'section' },
+                        { path: '/1', element_type: 'headline' },
+                        { path: '/2', element_type: 'image' },
+                    ],
+                    total: 3,
+                }),
+            ),
+        );
+        const result = await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'tpl',
+        });
+        expect(result.structuredContent?.next_cursor).toBeUndefined();
+        expect(result.structuredContent?.total).toBe(3);
+    });
+});
+
 describe('buildElementsTools — input schema', () => {
     it('every write tool requires an etag', () => {
         const tools = buildElementsTools(

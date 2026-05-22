@@ -152,12 +152,41 @@ final class ElementsController extends RestController
     }
 
     /**
+     * N-01 (Audit-v3): element_list accepts transport-safe query params —
+     * `root_path` (subtree scope), `depth` (recursion cap), `limit` +
+     * `cursor` (pagination). With `limit`, the response carries the
+     * pagination envelope `{items, next_cursor, total}`; without it the
+     * flat `{elements, total}` shape is preserved (backward-compatible).
+     *
      * @return \WP_REST_Response|\WP_Error
      */
     public function list_elements(\WP_REST_Request $request)
     {
         $id = (string) $request['template_id'];
-        $list = $this->ops->listOnTemplate($id);
+
+        // Collect the optional N-01 scoping/pagination params from the
+        // query string. Each is forwarded only when actually supplied so
+        // ElementOps::listOnTemplate keeps its backward-compatible
+        // flat-list shape for plain `?` calls.
+        $options = [];
+        $rootPath = $request->get_param('root_path');
+        if (is_string($rootPath) && $rootPath !== '') {
+            $options['root_path'] = $rootPath;
+        }
+        $depth = $request->get_param('depth');
+        if ($depth !== null && is_numeric($depth)) {
+            $options['depth'] = (int) $depth;
+        }
+        $limit = $request->get_param('limit');
+        if ($limit !== null && is_numeric($limit)) {
+            $options['limit'] = (int) $limit;
+        }
+        $cursor = $request->get_param('cursor');
+        if (is_string($cursor) && $cursor !== '') {
+            $options['cursor'] = $cursor;
+        }
+
+        $list = $this->ops->listOnTemplate($id, $options);
         if ($list === null) {
             return new \WP_Error(
                 'yootheme_builder_mcp.elements.not_found',
@@ -165,9 +194,24 @@ final class ElementsController extends RestController
                 ['status' => 404],
             );
         }
-        // F-02: `total` is the recursive count from the same walker that
-        // feeds pages_list.elements_count and page_get_schema.total — they
-        // are guaranteed to agree for any given state.
+
+        // Pagination envelope: ElementOps returns `{items, next_cursor,
+        // total}` when `limit` was supplied. Pass it through verbatim
+        // plus the ETag so clients can pin the snapshot the cursor is
+        // valid against.
+        if (isset($list['items']) && is_array($list['items'])) {
+            return new \WP_REST_Response([
+                'template_id' => $id,
+                'items' => $list['items'],
+                'next_cursor' => $list['next_cursor'] ?? null,
+                'total' => $list['total'] ?? count($list['items']),
+                'etag' => $this->reader->etag(),
+            ], 200);
+        }
+
+        // F-02: flat-list shape — `total` is the recursive count from the
+        // same walker that feeds pages_list.elements_count and
+        // page_get_schema.total, so all three agree for any given state.
         return new \WP_REST_Response([
             'template_id' => $id,
             'elements' => $list,

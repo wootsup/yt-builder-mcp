@@ -57,12 +57,38 @@ export function buildElementsTools(
         defineTool({
             name: 'yootheme_builder_element_list',
             description:
-                'List all elements in a template as a flat array with JSON-Pointer paths + ' +
-                'element types. Best starting-point for "find the element I want to edit". ' +
-                'Pass `fields:["path","element_type"]` to narrow each row.',
+                'List elements in a template as a flat array with JSON-Pointer paths + ' +
+                'types. Scope with `root_path`/`depth` for a subtree, paginate with ' +
+                '`limit`/`cursor` for large templates. `fields[]` narrows each row.',
             inputSchema: {
                 template_id: TEMPLATE_ID,
                 fields: FIELDS,
+                root_path: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Restrict the walk to the subtree at this JSON-Pointer ' +
+                            '(e.g. "/templates/<id>/layout/children/0"). Default: whole layout.',
+                    ),
+                depth: z
+                    .number()
+                    .int()
+                    .positive()
+                    .optional()
+                    .describe('Cap recursion to N levels of descendants. Default: unbounded.'),
+                limit: z
+                    .number()
+                    .int()
+                    .positive()
+                    .optional()
+                    .describe(
+                        'Page size. When set, the response is paginated — a ' +
+                            '`next_cursor` is returned while more rows remain.',
+                    ),
+                cursor: z
+                    .string()
+                    .optional()
+                    .describe('Continuation token from a prior call\'s `next_cursor`.'),
             },
             outputSchema: ELEMENT_LIST_OUTPUT_SCHEMA,
             annotations: readOnly('List Elements'),

@@ -57,7 +57,7 @@ final class PageQuery
      * are surfaced eagerly so the LLM-facing pages_list table is filled-in on
      * first call instead of forcing a follow-up page_get_layout per row.
      *
-     * @return list<array{id: string, name?: string, label?: string, title?: string, type: string, elements_count: int, modified_at?: string, etag: string}>
+     * @return list<array{id: string, name?: string, label?: string, title?: string, type: string, elements_count: int, modified_at: string|null, etag: string}>
      */
     public function list(): array
     {
@@ -106,9 +106,13 @@ final class PageQuery
             // non-null timestamp instead of an undefined key.
             if (!isset($entry['modified_at'])) {
                 $tracked = $this->meta->modifiedAt($id);
-                if ($tracked !== null) {
-                    $entry['modified_at'] = $tracked;
-                }
+                // T7 (Audit-v3 B.9): the `modified_at` key is ALWAYS present
+                // in the response — never a missing key. A template that
+                // has never been written through the MCP surface and
+                // carries no YT-side timestamp legitimately has an unknown
+                // modification time; `null` is the honest value (the MCP
+                // table mapper renders it as "—" rather than guessing).
+                $entry['modified_at'] = $tracked;
             }
             if (!isset($entry['type'])) {
                 // Default — YT-Pro distinguishes 'template' from 'layout';

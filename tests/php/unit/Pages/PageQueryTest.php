@@ -189,6 +189,26 @@ final class PageQueryTest extends TestCase
         self::assertSame('2026-05-22T12:34:56+00:00', $byId['tpl']['modified_at']);
     }
 
+    public function test_list_always_sets_modified_at_key_as_null_when_unknown(): void
+    {
+        // T7 (Audit-v3 B.9): when neither the YT blob nor the PagesMetaStore
+        // carry a timestamp, `modified_at` must still be present as a key
+        // with an explicit `null` value — never a missing key. The MCP TS
+        // table mapper renders `null` as "—" but throws on an absent key.
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'name' => 'Home',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        self::assertArrayHasKey('modified_at', $byId['tpl']);
+        self::assertNull($byId['tpl']['modified_at']);
+    }
+
     public function test_list_attaches_etag_to_each_entry(): void
     {
         $this->seedTwoTemplates();

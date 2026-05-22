@@ -97,8 +97,24 @@ final class SourcesController extends RestController
 
     public function list_sources(\WP_REST_Request $request): \WP_REST_Response
     {
+        // T7 (Audit-v3 B.9): each source row gains a `kind` alias of the
+        // GraphQL `type` field. The MCP TS table mapper reads `kind` for
+        // its KIND column; surfacing the alias server-side keeps that
+        // column populated without a client-side rename. `type` stays for
+        // backwards-compatibility with any caller pinned to the old key.
+        $grouped = $this->registry->listAll();
+        foreach ($grouped as $origin => $rows) {
+            if (!is_array($rows)) {
+                continue;
+            }
+            foreach ($rows as $i => $row) {
+                if (is_array($row) && !isset($row['kind']) && isset($row['type'])) {
+                    $grouped[$origin][$i]['kind'] = $row['type'];
+                }
+            }
+        }
         return new \WP_REST_Response([
-            'sources' => $this->registry->listAll(),
+            'sources' => $grouped,
         ], 200);
     }
 
