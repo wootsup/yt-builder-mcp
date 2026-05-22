@@ -95,8 +95,9 @@ export function buildSourcesTools(
                     .optional()
                     .describe(
                         'Optional {prop_name: source_field_name} map written to `source.props`. ' +
-                            'Use yootheme_builder_inspect_multi_items_binding to discover the ' +
-                            'right level for the mapping.',
+                            'Pass "__node_item__" (or "__node_item__:<field>") as the value to ' +
+                            'emit YT-Pro INHERIT bindings ("Node - Item (Source/Items)" picker ' +
+                            'entry) on child *_item elements.',
                     ),
                 bindingLevel: z
                     .enum(['auto', 'container', 'item'])

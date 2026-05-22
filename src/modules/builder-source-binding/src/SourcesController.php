@@ -499,6 +499,17 @@ final class SourcesController extends RestController
     }
 
     /**
+     * Sentinel string used in field_mappings to request a YT-Pro
+     * "Node - Item (Source/Items)" INHERIT binding on the child item.
+     *
+     * Plain sentinel `__node_item__` → field name defaults to the prop
+     * name itself.
+     * `__node_item__:<field>` → use `<field>` as the source-field name
+     * picked from the parent iteration source.
+     */
+    public const NODE_ITEM_SENTINEL = '__node_item__';
+
+    /**
      * Build the YT-canonical `source` value written to `props.source`.
      *
      * Shape:
@@ -508,6 +519,13 @@ final class SourcesController extends RestController
      * non-empty array — YT's renderer treats absence-of-`props` as
      * "let the element render with no field-bound props" (still iterates
      * the source).
+     *
+     * D5 — `__node_item__` sentinel emits the YT-Pro INHERIT shape:
+     *   `{name: '${builder.source}', field?: <field>, filters: {}, inherit: true}`
+     *
+     * The `${builder.source}` token resolves at runtime to the parent
+     * iteration source (see themes/yootheme/packages/builder/elements/
+     * grid_item/element.json:190 for YT's own pattern).
      *
      * @param array<string, string>|null $fieldMappings
      * @return array<string, mixed>
@@ -520,14 +538,44 @@ final class SourcesController extends RestController
         if ($fieldMappings !== null && $fieldMappings !== []) {
             $propsOut = [];
             foreach ($fieldMappings as $propName => $sourceField) {
-                $propsOut[$propName] = [
-                    'name' => $sourceField,
-                    'filters' => new \stdClass(),
-                ];
+                $propsOut[$propName] = self::buildPropMapping((string) $propName, $sourceField);
             }
             $value['props'] = $propsOut;
         }
         return $value;
+    }
+
+    /**
+     * Project a single field-mapping value into its on-disk shape.
+     * Honours the `__node_item__` sentinel for YT-Pro INHERIT bindings.
+     *
+     * @return array<string, mixed>
+     */
+    private static function buildPropMapping(string $propName, string $sourceField): array
+    {
+        if ($sourceField === self::NODE_ITEM_SENTINEL) {
+            // Plain sentinel: inherit from parent iteration source, use
+            // the prop name itself as the field name.
+            return [
+                'name' => '${builder.source}',
+                'filters' => new \stdClass(),
+                'inherit' => true,
+            ];
+        }
+        if (str_starts_with($sourceField, self::NODE_ITEM_SENTINEL . ':')) {
+            $field = substr($sourceField, strlen(self::NODE_ITEM_SENTINEL) + 1);
+            return [
+                'name' => '${builder.source}',
+                'field' => $field,
+                'filters' => new \stdClass(),
+                'inherit' => true,
+            ];
+        }
+        // Plain field reference — normal binding.
+        return [
+            'name' => $sourceField,
+            'filters' => new \stdClass(),
+        ];
     }
 
     /**
@@ -589,7 +637,20 @@ final class SourcesController extends RestController
                     if (!is_string($propName)) {
                         continue;
                     }
-                    if (is_array($propValue) && isset($propValue['name']) && is_string($propValue['name'])) {
+                    if (!is_array($propValue) || !isset($propValue['name']) || !is_string($propValue['name'])) {
+                        continue;
+                    }
+                    // D5 — surface the `__node_item__` sentinel when the
+                    // on-disk shape carries the YT INHERIT marker so
+                    // MCP-clients see the SAME value they wrote.
+                    $isInherit = isset($propValue['inherit']) && $propValue['inherit'] === true;
+                    if ($isInherit) {
+                        if (isset($propValue['field']) && is_string($propValue['field']) && $propValue['field'] !== '') {
+                            $fieldMappings[$propName] = self::NODE_ITEM_SENTINEL . ':' . $propValue['field'];
+                        } else {
+                            $fieldMappings[$propName] = self::NODE_ITEM_SENTINEL;
+                        }
+                    } else {
                         $fieldMappings[$propName] = $propValue['name'];
                     }
                 }
