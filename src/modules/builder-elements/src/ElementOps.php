@@ -47,18 +47,51 @@ final class ElementOps
      *  - has_binding:   true when the node carries a source binding.
      *  - child_count:   number of direct children.
      *
-     * @return list<array{path: string, element_type: string, type: string, label?: string, props_summary: list<string>, has_binding: bool, child_count: int}>|null
+     * N-01 (Audit-v3): the optional `$options` argument adds transport-safe
+     * scoping for deep templates. Recognised keys:
+     *  - root_path (string): only walk the subtree at this JSON-Pointer.
+     *  - depth     (int):    cap recursion to N levels of descendants.
+     *  - limit     (int):    page size — switches the return shape to the
+     *                        pagination envelope `{items, next_cursor, total}`.
+     *  - cursor    (string): opaque continuation token from a prior call.
+     *
+     * Return-shape contract:
+     *  - No `limit` key → flat list (backward-compatible, original shape).
+     *  - With `limit`   → envelope `{items: list<…>, next_cursor: ?string,
+     *                     total: int}`. `total` is the full count BEFORE
+     *                     pagination; `next_cursor` is null on the last page.
+     *
+     * @param array{root_path?: string, depth?: int, limit?: int, cursor?: string} $options
+     * @return list<array{path: string, element_type: string, type: string, label?: string, props_summary: list<string>, has_binding: bool, child_count: int}>|array{items: list<array<string, mixed>>, next_cursor: ?string, total: int}|null
      */
-    public function listOnTemplate(string $templateId): ?array
+    public function listOnTemplate(string $templateId, array $options = []): ?array
     {
         $tpl = $this->reader->readTemplate($templateId);
         if ($tpl === null) {
             return null;
         }
+
+        // Resolve the walk root: either the whole layout, or the subtree
+        // addressed by `root_path` (N-01 subtree-scoping).
+        $walkRoot = isset($tpl['layout']) && is_array($tpl['layout']) ? $tpl['layout'] : null;
+        $basePointer = JsonPointer::compile(['templates', $templateId, 'layout']);
+
+        $rootPath = isset($options['root_path']) && is_string($options['root_path'])
+            ? $options['root_path']
+            : '';
+        if ($rootPath !== '') {
+            $subtree = $this->reader->readByPointer($rootPath);
+            $walkRoot = is_array($subtree) ? $subtree : null;
+            $basePointer = $rootPath;
+        }
+
+        $maxDepth = isset($options['depth']) && is_int($options['depth'])
+            ? $options['depth']
+            : null;
+
         $out = [];
-        if (isset($tpl['layout']) && is_array($tpl['layout'])) {
-            $basePointer = JsonPointer::compile(['templates', $templateId, 'layout']);
-            foreach (TreeWalker::walk($tpl['layout'], $basePointer) as [$pointer, $node]) {
+        if ($walkRoot !== null) {
+            foreach (TreeWalker::walk($walkRoot, $basePointer, $maxDepth) as [$pointer, $node]) {
                 $type = isset($node['type']) && is_string($node['type'])
                     ? $node['type']
                     : 'unknown';
@@ -78,7 +111,55 @@ final class ElementOps
                 $out[] = $entry;
             }
         }
-        return $out;
+
+        // No `limit` → original flat-list shape (backward-compatible).
+        if (!isset($options['limit']) || !is_int($options['limit'])) {
+            return $out;
+        }
+
+        // Pagination envelope. The cursor is an opaque base64url-encoded
+        // integer offset; it is only valid within one state snapshot
+        // (callers re-paginate from scratch if the ETag changed).
+        $limit = max(1, $options['limit']);
+        $total = count($out);
+        $offset = 0;
+        if (isset($options['cursor']) && is_string($options['cursor']) && $options['cursor'] !== '') {
+            $decoded = self::decodeCursor($options['cursor']);
+            if ($decoded !== null) {
+                $offset = $decoded;
+            }
+        }
+        $items = array_slice($out, $offset, $limit);
+        $nextOffset = $offset + $limit;
+        $nextCursor = $nextOffset < $total ? self::encodeCursor($nextOffset) : null;
+
+        return [
+            'items' => array_values($items),
+            'next_cursor' => $nextCursor,
+            'total' => $total,
+        ];
+    }
+
+    /** Encode an integer offset as an opaque base64url cursor token. */
+    private static function encodeCursor(int $offset): string
+    {
+        return rtrim(strtr(base64_encode('o:' . (string) $offset), '+/', '-_'), '=');
+    }
+
+    /** Decode a base64url cursor token back to an integer offset, or null. */
+    private static function decodeCursor(string $cursor): ?int
+    {
+        $padded = strtr($cursor, '-_', '+/');
+        $padLen = (4 - (strlen($padded) % 4)) % 4;
+        $decoded = base64_decode($padded . str_repeat('=', $padLen), true);
+        if ($decoded === false || !str_starts_with($decoded, 'o:')) {
+            return null;
+        }
+        $n = substr($decoded, 2);
+        if (!ctype_digit($n)) {
+            return null;
+        }
+        return (int) $n;
     }
 
     /**

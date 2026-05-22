@@ -156,6 +156,77 @@ final class TreeWalkerTest extends TestCase
         self::assertSame(2, TreeWalker::countDescendants($tree));
     }
 
+    // ------------------------------------------------------------------
+    // T2 N-01 — walk() supports a depth cap. depth=1 means "yield only the
+    // root's direct children" (do not recurse). depth=0 means "yield
+    // nothing" (degenerate but well-defined). depth=PHP_INT_MAX (default
+    // 999 in the controller) preserves the prior unbounded recursion.
+    // ------------------------------------------------------------------
+
+    public function test_walk_depth_one_emits_direct_children_only(): void
+    {
+        $tree = [
+            'type' => 'layout',
+            'children' => [
+                ['type' => 'section', 'children' => [
+                    ['type' => 'row', 'children' => [
+                        ['type' => 'column'],
+                    ]],
+                ]],
+                ['type' => 'image'],
+            ],
+        ];
+        $entries = iterator_to_array(TreeWalker::walk($tree, '', 1), false);
+        $types = array_map(static fn (array $t): string => $t[1]['type'], $entries);
+        self::assertSame(['section', 'image'], $types);
+    }
+
+    public function test_walk_depth_two_recurses_one_level_in(): void
+    {
+        $tree = [
+            'type' => 'layout',
+            'children' => [
+                ['type' => 'section', 'children' => [
+                    ['type' => 'row', 'children' => [
+                        ['type' => 'column'],
+                    ]],
+                ]],
+            ],
+        ];
+        $entries = iterator_to_array(TreeWalker::walk($tree, '', 2), false);
+        $types = array_map(static fn (array $t): string => $t[1]['type'], $entries);
+        // section (depth 1), row (depth 2) — column is at depth 3 and skipped.
+        self::assertSame(['section', 'row'], $types);
+    }
+
+    public function test_walk_depth_zero_emits_nothing(): void
+    {
+        $tree = [
+            'type' => 'layout',
+            'children' => [['type' => 'section']],
+        ];
+        $entries = iterator_to_array(TreeWalker::walk($tree, '', 0), false);
+        self::assertSame([], $entries);
+    }
+
+    public function test_walk_depth_default_is_unbounded(): void
+    {
+        // No depth → behaves like the original walker.
+        $tree = [
+            'type' => 'layout',
+            'children' => [
+                ['type' => 'section', 'children' => [
+                    ['type' => 'row', 'children' => [
+                        ['type' => 'column'],
+                    ]],
+                ]],
+            ],
+        ];
+        $entries = iterator_to_array(TreeWalker::walk($tree, ''), false);
+        $types = array_map(static fn (array $t): string => $t[1]['type'], $entries);
+        self::assertSame(['section', 'row', 'column'], $types);
+    }
+
     public function test_count_descendants_matches_walk_count(): void
     {
         // Pin: countDescendants() and walk() must agree on every tree —

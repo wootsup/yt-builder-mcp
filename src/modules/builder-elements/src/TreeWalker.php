@@ -21,14 +21,30 @@ namespace WootsUp\BuilderMcp\Elements;
 final class TreeWalker
 {
     /**
+     * Depth-first pre-order walk over a layout node's descendants.
+     *
+     * N-01 (Audit-v3): the optional `$maxDepth` argument caps recursion so
+     * `element_list` callers can request only the top N levels of a deep
+     * 96-node template. `$maxDepth` counts levels of descendants below the
+     * supplied node:
+     *   - `null` (default) → unbounded, original behaviour.
+     *   - `0` → emit nothing.
+     *   - `1` → direct children only.
+     *   - `2` → children + grandchildren, etc.
+     *
      * @param array<string, mixed> $node
+     * @param int|null $maxDepth Recursion cap (levels of descendants); null = unbounded.
      * @return \Generator<int, array{0: string, 1: array<string, mixed>}>
      */
-    public static function walk(array $node, string $basePointer): \Generator
+    public static function walk(array $node, string $basePointer, ?int $maxDepth = null): \Generator
     {
+        if ($maxDepth !== null && $maxDepth <= 0) {
+            return;
+        }
         if (!isset($node['children']) || !is_array($node['children'])) {
             return;
         }
+        $childDepth = $maxDepth === null ? null : $maxDepth - 1;
         foreach ($node['children'] as $index => $child) {
             if (!is_array($child)) {
                 continue;
@@ -36,7 +52,7 @@ final class TreeWalker
             $childPointer = $basePointer . '/children/' . (string) $index;
             /** @var array<string, mixed> $child */
             yield [$childPointer, $child];
-            yield from self::walk($child, $childPointer);
+            yield from self::walk($child, $childPointer, $childDepth);
         }
     }
 

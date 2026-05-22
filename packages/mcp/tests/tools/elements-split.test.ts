@@ -44,7 +44,9 @@ describe('elements-split snapshot — public surface preserved', () => {
           [
             {
               "annotations": {
-                "openWorldHint": true,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
                 "readOnlyHint": true,
                 "title": "List Elements",
               },
@@ -58,7 +60,9 @@ describe('elements-split snapshot — public surface preserved', () => {
             },
             {
               "annotations": {
-                "openWorldHint": true,
+                "destructiveHint": false,
+                "idempotentHint": true,
+                "openWorldHint": false,
                 "readOnlyHint": true,
                 "title": "Get Element",
               },
@@ -72,8 +76,9 @@ describe('elements-split snapshot — public surface preserved', () => {
             },
             {
               "annotations": {
+                "destructiveHint": false,
                 "idempotentHint": false,
-                "openWorldHint": true,
+                "openWorldHint": false,
                 "readOnlyHint": false,
                 "title": "Add Element",
               },
@@ -91,16 +96,18 @@ describe('elements-split snapshot — public surface preserved', () => {
             },
             {
               "annotations": {
+                "destructiveHint": false,
                 "idempotentHint": true,
-                "openWorldHint": true,
+                "openWorldHint": false,
                 "readOnlyHint": false,
                 "title": "Update Element Settings",
               },
-              "description": "Replace the \`props\` on an element. Use this for any setting change — title, margins, classes, sources, etc. Requires ETag. Existing props NOT in the request are removed.",
+              "description": "Update \`props\` on an element. Default replaces all props; pass \`merge:true\` for server-side deep-merge (only request keys overwritten, others survive — avoids read-modify-write races). Requires ETag.",
               "hasOutputSchema": false,
               "inputSchemaKeys": [
                 "element_path",
                 "etag",
+                "merge",
                 "props",
                 "template_id",
               ],
@@ -108,8 +115,9 @@ describe('elements-split snapshot — public surface preserved', () => {
             },
             {
               "annotations": {
+                "destructiveHint": false,
                 "idempotentHint": true,
-                "openWorldHint": true,
+                "openWorldHint": false,
                 "readOnlyHint": false,
                 "title": "Move Element",
               },
@@ -126,8 +134,9 @@ describe('elements-split snapshot — public surface preserved', () => {
             },
             {
               "annotations": {
+                "destructiveHint": false,
                 "idempotentHint": false,
-                "openWorldHint": true,
+                "openWorldHint": false,
                 "readOnlyHint": false,
                 "title": "Clone Element",
               },
@@ -144,7 +153,7 @@ describe('elements-split snapshot — public surface preserved', () => {
               "annotations": {
                 "destructiveHint": true,
                 "idempotentHint": false,
-                "openWorldHint": true,
+                "openWorldHint": false,
                 "readOnlyHint": false,
                 "title": "Delete Element",
               },

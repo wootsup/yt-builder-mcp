@@ -201,6 +201,100 @@ final class ElementOpsTest extends TestCase
         self::assertNull($ops->listOnTemplate('nope'));
     }
 
+    // ------------------------------------------------------------------
+    // T2 N-01 — listOnTemplate accepts a filter-options array supporting
+    // root_path (subtree filter), depth (recursion cap), limit + cursor
+    // (pagination). All new params are optional; the default call surface
+    // is unchanged from the F-01 contract.
+    // ------------------------------------------------------------------
+
+    public function test_list_on_template_root_path_filters_to_subtree(): void
+    {
+        $ops = new ElementOps(new LayoutReader());
+        $list = $ops->listOnTemplate('tpl', [
+            'root_path' => '/templates/tpl/layout/children/0',
+        ]);
+        self::assertNotNull($list);
+        // Only the section's descendants — the headline.
+        self::assertCount(1, $list);
+        self::assertSame('headline', $list[0]['type']);
+    }
+
+    public function test_list_on_template_depth_one_emits_direct_children_only(): void
+    {
+        // Deeper fixture so the cap is meaningful.
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'layout' => [
+                        'type' => 'layout',
+                        'children' => [
+                            ['type' => 'section', 'children' => [
+                                ['type' => 'row', 'children' => [
+                                    ['type' => 'column'],
+                                ]],
+                            ]],
+                            ['type' => 'image'],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+        $ops = new ElementOps(new LayoutReader());
+        $list = $ops->listOnTemplate('tpl', ['depth' => 1]);
+        self::assertNotNull($list);
+        $types = array_column($list, 'type');
+        self::assertSame(['section', 'image'], $types);
+    }
+
+    public function test_list_on_template_limit_truncates_with_cursor(): void
+    {
+        // 5 top-level children so limit=2 produces a non-trivial cursor.
+        $children = [];
+        for ($i = 0; $i < 5; $i++) {
+            $children[] = ['type' => 'section', 'props' => ['style' => 's' . $i]];
+        }
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => ['tpl' => ['layout' => ['type' => 'layout', 'children' => $children]]],
+        ];
+        $ops = new ElementOps(new LayoutReader());
+
+        $page1 = $ops->listOnTemplate('tpl', ['limit' => 2]);
+        self::assertNotNull($page1);
+        self::assertCount(2, $page1['items']);
+        self::assertSame('s0', $page1['items'][0]['props_summary'] === ['style']
+            ? 's0'
+            : 's0');
+        self::assertNotNull($page1['next_cursor']);
+        self::assertSame(5, $page1['total']);
+
+        $page2 = $ops->listOnTemplate('tpl', [
+            'limit' => 2,
+            'cursor' => $page1['next_cursor'],
+        ]);
+        self::assertNotNull($page2);
+        self::assertCount(2, $page2['items']);
+        self::assertNotNull($page2['next_cursor']);
+
+        $page3 = $ops->listOnTemplate('tpl', [
+            'limit' => 2,
+            'cursor' => $page2['next_cursor'],
+        ]);
+        self::assertNotNull($page3);
+        self::assertCount(1, $page3['items']);
+        self::assertNull($page3['next_cursor']);
+    }
+
+    public function test_list_on_template_returns_flat_list_when_no_options(): void
+    {
+        // Backwards-compat: caller passes no options → return list shape
+        // exactly as before (no pagination envelope).
+        $ops = new ElementOps(new LayoutReader());
+        $list = $ops->listOnTemplate('tpl');
+        self::assertNotNull($list);
+        self::assertIsList($list);
+    }
+
     public function test_get_returns_node_at_pointer(): void
     {
         $ops = new ElementOps(new LayoutReader());

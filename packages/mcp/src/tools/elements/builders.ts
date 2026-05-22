@@ -119,11 +119,9 @@ export function buildElementsTools(
         defineTool({
             name: 'yootheme_builder_element_update_settings',
             description:
-                'Update `props` on an element. Default: full replace (existing props NOT in ' +
-                'the request are removed). Pass `merge:true` for server-side deep-merge — only ' +
-                'keys present in the request body are overwritten, all other keys survive ' +
-                'unchanged. Use merge mode to extend a sub-key (e.g. `source.props.title`) ' +
-                'without a client-side read-modify-write race. Requires ETag.',
+                'Update `props` on an element. Default replaces all props; pass ' +
+                '`merge:true` for server-side deep-merge (only request keys overwritten, ' +
+                'others survive — avoids read-modify-write races). Requires ETag.',
             inputSchema: {
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
