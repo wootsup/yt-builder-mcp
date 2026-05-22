@@ -36,6 +36,13 @@ import type { RestClient } from './client.js';
 import { registerAdvancedTool } from './gateway/advanced-tool.js';
 import { CapturingServer, type ToolRegistrar } from './gateway/capturing-server.js';
 import { isDirectTopLevel } from './gateway/essentials.js';
+import {
+    loadSkillContent,
+    SKILL_RESOURCE_DESCRIPTION,
+    SKILL_RESOURCE_MIME_TYPE,
+    SKILL_RESOURCE_NAME,
+    SKILL_RESOURCE_URI,
+} from './skill-loader.js';
 import { toElicitationCapability } from './tools/elicitation.js';
 import { buildAllTools, type ToolDefinition } from './tools/index.js';
 
@@ -57,10 +64,55 @@ export interface CreatedServer {
 }
 
 export function createServer(options: CreateServerOptions): CreatedServer {
-    const mcp = new McpServer({
-        name: SERVER_NAME,
-        version: SERVER_VERSION,
-    });
+    // Stream B1 — Skill-Distribution via MCP-Protocol.
+    //
+    // The bundled SKILL.md is published through two MCP-native channels:
+    //
+    //   (a) `instructions` field on the `initialize` response. MCP-spec
+    //       hosts (Claude Desktop, Cursor, …) surface this string as
+    //       auto-context so Maria-the-Claude-Desktop-user receives the
+    //       skill narrative without ever calling a tool.
+    //
+    //   (b) `skill://yt-builder-mcp` resource exposed via
+    //       `resources/list` + `resources/read`. Backup for hosts that
+    //       ignore `instructions` but honor the resources API.
+    //
+    // Reading SKILL.md is synchronous (small file, ~17 KB) and cached
+    // after first call by `loadSkillContent` — no async cost.
+    const instructions = loadSkillContent();
+
+    const mcp = new McpServer(
+        {
+            name: SERVER_NAME,
+            version: SERVER_VERSION,
+        },
+        {
+            instructions,
+        },
+    );
+
+    // Register the SKILL.md as a static MCP resource. The capability
+    // (`resources: { listChanged: true }` etc.) is auto-advertised by
+    // McpServer the moment the first resource is registered, so MCP
+    // hosts see `resources` in `initialize.capabilities`.
+    mcp.registerResource(
+        SKILL_RESOURCE_NAME,
+        SKILL_RESOURCE_URI,
+        {
+            title: SKILL_RESOURCE_NAME,
+            description: SKILL_RESOURCE_DESCRIPTION,
+            mimeType: SKILL_RESOURCE_MIME_TYPE,
+        },
+        async (uri: URL) => ({
+            contents: [
+                {
+                    uri: uri.toString(),
+                    mimeType: SKILL_RESOURCE_MIME_TYPE,
+                    text: instructions,
+                },
+            ],
+        }),
+    );
 
     // Wave G.4.5 — MCP elicitation capability wiring.
     //
