@@ -56,6 +56,15 @@ trait PointerControllerTrait
      */
     protected function assertPointerWithinTemplate(string $templateId, string $pointer): ?\WP_Error
     {
+        // Tool-sweep live-bug 2026-05-22: parent_path supplied without
+        // leading "/" (e.g. `templates/<id>/layout/...`) caused
+        // JsonPointer::parse to throw `InvalidArgumentException` →
+        // uncaught 500 instead of structured 400. Normalize defensively:
+        // accept both `/foo/bar` and `foo/bar` user input forms. The
+        // empty string remains valid (root pointer).
+        if ($pointer !== '' && $pointer[0] !== '/') {
+            $pointer = '/' . $pointer;
+        }
         $allowedPrefix = JsonPointer::compile(['templates', $templateId]);
         if (JsonPointer::isWithinPrefix($pointer, $allowedPrefix)) {
             return null;

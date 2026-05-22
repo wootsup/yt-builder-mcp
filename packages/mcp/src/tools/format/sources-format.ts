@@ -34,7 +34,12 @@ export function mapSourceRow(input: Record<string, unknown>): SourceRow {
         name: asString(input.name),
         label: asString(input.label),
         origin: asString(input.origin),
-        kind: asString(input.kind),
+        // F-04 Kleinkram (Audit v2): BE returns `type` (GraphQL type name
+        // from the YT source-provider), not `kind`. Fall back so the
+        // column populates without needing a BE rename.
+        kind: asString(
+            input.kind !== undefined && input.kind !== '' ? input.kind : input.type,
+        ),
     };
 }
 

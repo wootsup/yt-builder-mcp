@@ -241,6 +241,12 @@ final class ElementsController extends RestController
 
         $params = $request->get_json_params();
         $parentPath = isset($params['parent_path']) && is_string($params['parent_path']) ? $params['parent_path'] : '';
+        // Normalize leading slash defensively (tool-sweep 2026-05-22):
+        // both `templates/<id>/layout/...` and `/templates/<id>/layout/...`
+        // are valid user input — JsonPointer downstream needs the slash.
+        if ($parentPath !== '' && $parentPath[0] !== '/') {
+            $parentPath = '/' . $parentPath;
+        }
         $elementType = isset($params['element_type']) && is_string($params['element_type']) ? $params['element_type'] : '';
         if ($elementType === '') {
             return new \WP_Error(
@@ -364,6 +370,10 @@ final class ElementsController extends RestController
 
         $params = $request->get_json_params();
         $toParentPath = isset($params['to_parent_path']) && is_string($params['to_parent_path']) ? $params['to_parent_path'] : '';
+        // Same defensive normalisation as element_add parent_path.
+        if ($toParentPath !== '' && $toParentPath[0] !== '/') {
+            $toParentPath = '/' . $toParentPath;
+        }
         $toIndex = isset($params['to_index']) && is_int($params['to_index']) ? $params['to_index'] : null;
         if ($toIndex === null) {
             return new \WP_Error(

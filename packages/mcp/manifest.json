@@ -2,7 +2,7 @@
     "dxt_version": "0.1",
     "name": "@wootsup/yt-builder-mcp",
     "display_name": "YT Builder MCP for YOOtheme Pro (unofficial)",
-    "version": "0.2.0-alpha.5",
+    "version": "0.2.0-alpha.6",
     "description": "Drive your page builder programmatically from Claude, Cursor, Codex, Gemini and 5 other MCP-capable AI assistants — read layouts, edit settings, add elements, bind dynamic sources. Built for YOOtheme Pro 4.0+. Independent third-party project, not affiliated with YOOtheme GmbH.",
     "long_description": "YT Builder MCP gives AI assistants a typed, scoped, and idempotent surface for your YOOtheme Pro page builder. Tools cover page discovery, layout inspection, element CRUD, source binding, and diagnostics. Bearer auth, optimistic locking via ETag, scope hierarchy (read < write < admin), and structured-error responses keep the agent safe and the workflow correct on first try. Independent third-party project — YOOtheme® is a registered trademark of YOOtheme GmbH (yootheme.com); YT Builder MCP is built by WootsUp (getimo productions) and is not affiliated with, endorsed by, or sponsored by YOOtheme.",
     "icon": "icon.png",

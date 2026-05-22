@@ -45,6 +45,15 @@ export const ESSENTIAL_TOOLS = [
     // child should carry it. Frequent first-call when diagnosing
     // Grid/Slider/Switcher rendering issues.
     'yootheme_builder_inspect_multi_items_binding',
+    // F-16 hot-path promotions (Maria-Audit v2 re-confirmed) — the 5
+    // most-used read/mutate operations skip the advanced-router
+    // discovery roundtrip. Cursor cap is ~40; we sit at 13 L1 + 2 L3 +
+    // 1 gateway = 16, comfortable below the limit.
+    'yootheme_builder_element_get',
+    'yootheme_builder_element_delete',
+    'yootheme_builder_element_clone',
+    'yootheme_builder_element_move',
+    'yootheme_builder_page_get_layout',
 ] as const;
 
 /**
