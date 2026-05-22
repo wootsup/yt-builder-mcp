@@ -147,4 +147,42 @@ describe('flattenLayout', () => {
             '/layout/0/children/2',
         ]);
     });
+
+    // ─── N-01 (Audit v4) — projection-relevant fields ────────────────
+    // page_get_layout(flat:true) with fields:["rel_path",...] must
+    // project rel_path / has_binding. Those fields have to be EMITTED
+    // by flattenLayout for the projection to find them — same shape
+    // element_list exposes.
+
+    it('emits rel_path mirroring the path (no /layout prefix)', () => {
+        const layout = {
+            '0': { type: 'section', children: [{ type: 'text' }] },
+        };
+        const flat = flattenLayout(layout);
+        expect(flat[0]?.rel_path).toBe('/0');
+        expect(flat[1]?.rel_path).toBe('/0/children/0');
+    });
+
+    it('emits has_binding=false for an unbound node', () => {
+        const layout = { '0': { type: 'text', props: { content: 'Hi' } } };
+        const flat = flattenLayout(layout);
+        expect(flat[0]?.has_binding).toBe(false);
+    });
+
+    it('emits has_binding=true when props.source carries a query name', () => {
+        const layout = {
+            '0': {
+                type: 'grid',
+                props: { source: { query: { name: 'posts.posts' } } },
+            },
+        };
+        const flat = flattenLayout(layout);
+        expect(flat[0]?.has_binding).toBe(true);
+    });
+
+    it('honours an explicit has_binding boolean from the REST plugin', () => {
+        const layout = { '0': { type: 'grid', has_binding: true } };
+        const flat = flattenLayout(layout);
+        expect(flat[0]?.has_binding).toBe(true);
+    });
 });

@@ -103,8 +103,15 @@ export async function handleElementGetBinding(
             `/pages/${encodeURIComponent(template_id)}/elements/${encoded}/binding`,
         );
         const binding = data !== null && typeof data === 'object' ? data : {};
+        // F-01-Mapping (Audit v4): trust the BE-computed `has_binding`
+        // flag (BindingSerializer SSoT) — it also flips true for an
+        // item-level binding that has field_mappings but no source_name.
+        // Fall back to the source_name heuristic only when absent.
         const hasBinding =
-            typeof binding.source_name === 'string' && binding.source_name.length > 0;
+            typeof binding.has_binding === 'boolean'
+                ? binding.has_binding
+                : typeof binding.source_name === 'string' &&
+                  binding.source_name.length > 0;
         const toolkitResult = detailResult(
             buildBindingDetail({ template_id, element_path, binding }),
         );

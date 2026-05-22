@@ -16,7 +16,7 @@
  * @license MIT
  */
 
-import { detailResult, tableResult } from '@getimo/mcp-toolkit';
+import { detailResult, tableResult, type TableColumn } from '@getimo/mcp-toolkit';
 import { z } from 'zod';
 
 import { encodeElementPath, type RestClient } from '../../client.js';
@@ -74,6 +74,27 @@ export interface ElementsHandlerDeps {
 
 // ─── element_list ────────────────────────────────────────────────────
 
+/**
+ * N-01 (Audit v4): build slim text-table columns from a caller-supplied
+ * `fields[]` projection. The default compact text table truncates at
+ * 2000 chars (~26 of 96 nodes); projecting to a couple of narrow
+ * columns lets the FULL node list fit in the 8000-char `full` budget.
+ *
+ * Width heuristic: paths get a wide column, everything else a modest
+ * one. Labels are uppercased for the header to match the toolkit style.
+ */
+function columnsFromFields(fields: readonly string[]): TableColumn[] {
+    return fields.map((key): TableColumn => {
+        const isPath = key === 'path' || key === 'rel_path' || key === 'parent_path';
+        return {
+            key,
+            label: key.replace(/_/g, ' ').toUpperCase(),
+            width: isPath ? 48 : 16,
+        };
+    });
+}
+
+
 export async function handleElementList(
     { client }: ElementsHandlerDeps,
     {
@@ -124,12 +145,33 @@ export async function handleElementList(
             .map(mapElementRow);
         const items = projectFields(mapped, fields, DEFAULT_FIELDS_ELEMENT_LIST);
         const echo = projectedFieldsEcho(fields, DEFAULT_FIELDS_ELEMENT_LIST);
-        const toolkitResult = tableResult(mapped, {
-            columns: [...ELEMENTS_TABLE_COLUMNS],
-            compactColumns: [...ELEMENTS_COMPACT_COLUMNS],
-            header: (count) => `${String(count)} elements in template "${template_id}"`,
-            footer: 'Use yootheme_builder_element_get <path> for full data.',
-        });
+
+        // N-01 (Audit v4): when the caller passes an explicit narrow
+        // `fields[]`, render the text table from the projected (slim)
+        // rows with `full` detail (8000 chars) so the WHOLE node list
+        // survives — the default compact table caps at 2000 chars and
+        // hides ~70 of a 96-node template. Without `fields[]` keep the
+        // auto-scaling behaviour (full columns, count-driven level).
+        const hasNarrowProjection =
+            Array.isArray(fields) && fields.length > 0;
+        const toolkitResult = hasNarrowProjection
+            ? tableResult(
+                  items as Record<string, unknown>[],
+                  {
+                      columns: columnsFromFields(fields),
+                      header: (count) =>
+                          `${String(count)} elements in template "${template_id}"`,
+                      footer: 'Use yootheme_builder_element_get <path> for full data.',
+                  },
+                  'full',
+              )
+            : tableResult(mapped, {
+                  columns: [...ELEMENTS_TABLE_COLUMNS],
+                  compactColumns: [...ELEMENTS_COMPACT_COLUMNS],
+                  header: (count) =>
+                      `${String(count)} elements in template "${template_id}"`,
+                  footer: 'Use yootheme_builder_element_get <path> for full data.',
+              });
         return structuredResult(toolkitResult, {
             items,
             total: typeof data.total === 'number' ? data.total : items.length,

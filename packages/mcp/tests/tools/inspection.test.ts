@@ -53,4 +53,36 @@ describe('buildInspectionTools', () => {
         await tool!.handler({ type_name: 'headline' });
         expect(seenUrl).toContain('/element-types/headline/schema');
     });
+
+    // Audit v4 F-05 — the REST endpoint nests the schema under `schema` and
+    // returns `fields` as a LIST. The handler must read schema.fields, not
+    // the (non-existent) top-level data.fields, else field_count is always 0.
+    it('element_type_get_schema extracts the nested schema.fields list', async () => {
+        const tools = buildInspectionTools(
+            fakeClient(() =>
+                jsonResponse({
+                    type_name: 'headline',
+                    schema: {
+                        name: 'headline',
+                        label: 'Headline',
+                        origin: 'core',
+                        has_children: false,
+                        fields: [
+                            { name: 'content', type: 'editor', label: 'Content' },
+                            { name: 'link', type: 'link', label: 'Link' },
+                            { name: 'link_target', type: 'checkbox' },
+                        ],
+                    },
+                }),
+            ),
+        );
+        const tool = tools.find((t) => t.name === 'yootheme_builder_element_type_get_schema');
+        const result = (await tool!.handler({ type_name: 'headline' })) as {
+            structuredContent?: { field_count?: number; fields?: unknown; label?: string };
+        };
+        expect(result.structuredContent?.field_count).toBe(3);
+        expect(result.structuredContent?.label).toBe('Headline');
+        expect(Array.isArray(result.structuredContent?.fields)).toBe(true);
+        expect((result.structuredContent?.fields as unknown[]).length).toBe(3);
+    });
 });

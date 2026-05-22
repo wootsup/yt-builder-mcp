@@ -6,10 +6,12 @@
  * success path. This guards against a regression where a tool author
  * tightens the schema but forgets to update the handler (or vice versa).
  *
- * Coverage: 11 tools migrated in G.2 (health × 2, pages × 3, elements × 2,
- * sources × 2, inspection × 2). Write-tools without success-shaped output
- * schemas (page_save, page_publish, element_add, …) are excluded —
- * those return free-form `jsonResult`.
+ * Coverage: 13 tools (health × 2, pages × 3, elements × 2, sources × 2,
+ * inspection × 2, multi-items × 2). Write-tools without success-shaped
+ * output schemas (page_save, page_publish, element_add, …) are excluded —
+ * those return free-form `jsonResult`. `clean_implode_directives` IS
+ * included: it is a write tool, but it declares an outputSchema and so
+ * MUST emit structuredContent (audit v4 N-03).
  *
  * @license MIT
  */
@@ -21,6 +23,7 @@ import { RestClient } from '../../src/client.js';
 import { buildElementsTools } from '../../src/tools/elements.js';
 import { buildHealthTools } from '../../src/tools/health.js';
 import { buildInspectionTools } from '../../src/tools/inspection.js';
+import { buildMultiItemsTools } from '../../src/tools/multi-items/index.js';
 import { buildPagesTools } from '../../src/tools/pages.js';
 import { buildSourcesTools } from '../../src/tools/sources.js';
 import type { AnyToolDefinition } from '../../src/tools/tool-builder.js';
@@ -47,7 +50,7 @@ interface ShapePinCase {
     readonly toolName: string;
     readonly args: Record<string, unknown>;
     readonly responseBody: unknown;
-    readonly group: 'health' | 'pages' | 'elements' | 'sources' | 'inspection';
+    readonly group: 'health' | 'pages' | 'elements' | 'sources' | 'inspection' | 'multi-items';
 }
 
 const HEALTH_BODY = {
@@ -148,13 +151,53 @@ const CASES: readonly ShapePinCase[] = [
     {
         toolName: 'yootheme_builder_element_type_get_schema',
         args: { type_name: 'headline' },
+        // Real REST shape: the schema is nested under `schema`, and
+        // `fields` is a LIST of {name,type,label?} descriptors (audit v4 F-05).
         responseBody: {
-            name: 'headline',
-            label: 'Headline',
-            origin: 'core',
-            fields: { content: { type: 'string' } },
+            type_name: 'headline',
+            schema: {
+                name: 'headline',
+                label: 'Headline',
+                origin: 'core',
+                has_children: false,
+                fields: [
+                    { name: 'content', type: 'editor', label: 'Content' },
+                    { name: 'link', type: 'link', label: 'Link' },
+                ],
+            },
         },
         group: 'inspection',
+    },
+    {
+        toolName: 'yootheme_builder_inspect_multi_items_binding',
+        args: { template_id: 'home', element_path: '/0' },
+        responseBody: {
+            template_id: 'home',
+            report: {
+                element_path: '/0',
+                element_type: 'grid',
+                is_container: true,
+                is_item: false,
+                container_type: 'grid',
+                item_type: 'grid_item',
+                current_binding_level: 'none',
+                has_implode_directives: false,
+            },
+            etag: '"e0"',
+        },
+        group: 'multi-items',
+    },
+    {
+        toolName: 'yootheme_builder_clean_implode_directives',
+        args: { template_id: 'home', element_path: '/0', etag: '"e0"' },
+        responseBody: {
+            template_id: 'home',
+            element_path: '/0',
+            cleaned_count: 0,
+            removed_directives: [],
+            new_etag: '"e1"',
+        },
+        group: 'multi-items',
     },
 ];
 
@@ -170,6 +213,8 @@ function buildToolsByGroup(group: ShapePinCase['group'], client: RestClient): re
             return buildSourcesTools(client);
         case 'inspection':
             return buildInspectionTools(client);
+        case 'multi-items':
+            return buildMultiItemsTools(client);
     }
 }
 
@@ -202,7 +247,7 @@ describe('structuredContent shape-pin — every outputSchema-declaring tool', ()
         });
     }
 
-    it('exactly 11 tools are pinned (the G.2-migrated read surface)', () => {
-        expect(CASES.length).toBe(11);
+    it('exactly 13 tools are pinned (G.2 read surface + multi-items)', () => {
+        expect(CASES.length).toBe(13);
     });
 });

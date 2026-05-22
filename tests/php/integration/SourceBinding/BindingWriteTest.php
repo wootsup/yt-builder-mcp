@@ -451,4 +451,69 @@ final class BindingWriteTest extends TestCase
             'title' => '__node_item__:post_title',
         ], $data['field_mappings']);
     }
+
+    // -------------------------------------------------------------
+    // F-01-Mapping (Audit v4) — get_binding must surface the FULL
+    // structured record: `field_mappings_structured` (list-of-objects),
+    // `query_field`, `query_arguments`, `directives`. An LLM needs to
+    // know WHICH source field feeds WHICH prop and WHICH query args
+    // are set, not just THAT a binding exists.
+    // -------------------------------------------------------------
+
+    public function test_get_binding_surfaces_structured_field_mappings_list(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][0]['props']['source'] = [
+            'query' => ['name' => 'posts.singlePost'],
+            'props' => [
+                'content' => ['name' => 'metaString', 'filters' => new \stdClass()],
+                'title' => ['name' => 'title', 'filters' => new \stdClass()],
+            ],
+        ];
+
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0/binding';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_binding($req);
+        $data = $resp->get_data();
+        self::assertArrayHasKey('field_mappings_structured', $data);
+        self::assertCount(2, $data['field_mappings_structured']);
+        $byProp = [];
+        foreach ($data['field_mappings_structured'] as $m) {
+            $byProp[$m['element_prop']] = $m['source_field'];
+        }
+        self::assertSame('metaString', $byProp['content']);
+        self::assertSame('title', $byProp['title']);
+    }
+
+    public function test_get_binding_surfaces_query_field_arguments_and_directives(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][0]['props']['source'] = [
+            'query' => [
+                'name' => 'posts.posts',
+                'field' => [
+                    'name' => 'posts',
+                    'arguments' => ['limit' => 5, 'orderby' => 'date'],
+                    'directives' => [
+                        ['name' => 'include', 'arguments' => ['if' => true]],
+                    ],
+                ],
+            ],
+        ];
+
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0/binding';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_binding($req);
+        $data = $resp->get_data();
+        self::assertSame('posts', $data['query_field']);
+        self::assertSame(['limit' => 5, 'orderby' => 'date'], $data['query_arguments']);
+        self::assertCount(1, $data['directives']);
+        self::assertSame('include', $data['directives'][0]['name']);
+    }
 }

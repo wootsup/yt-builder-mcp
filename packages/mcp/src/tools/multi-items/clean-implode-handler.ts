@@ -8,7 +8,7 @@
 import { z } from 'zod';
 
 import { encodeElementPath, type RestClient } from '../../client.js';
-import { errorResult, jsonResult, type ToolResult } from '../tool-builder.js';
+import { errorResult, jsonResult, structuredResult, type ToolResult } from '../tool-builder.js';
 
 export const CLEAN_IMPLODE_OUTPUT_SCHEMA = z.object({
     template_id: z.string(),
@@ -37,11 +37,16 @@ export async function handleCleanImplodeDirectives(
 ): Promise<ToolResult> {
     const encoded = encodeElementPath(element_path);
     try {
-        const data = await client.post(
+        const data = await client.post<Record<string, unknown>>(
             `/pages/${encodeURIComponent(template_id)}/elements/${encoded}/multi-items/clean-implode`,
             { body: {}, etag },
         );
-        return jsonResult(data);
+        // The REST endpoint returns the canonical CLEAN_IMPLODE_OUTPUT_SCHEMA
+        // shape ({template_id, element_path, cleaned_count, removed_directives,
+        // new_etag}) — pass it through as structuredContent so the declared
+        // outputSchema is satisfied (a tool with an outputSchema MUST emit
+        // structuredContent, else the MCP SDK rejects with -32602).
+        return structuredResult(jsonResult(data), data);
     } catch (e) {
         return errorResult({
             error: e,

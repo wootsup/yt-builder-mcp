@@ -128,7 +128,17 @@ function normalizeTypeEntry(entry: unknown): Record<string, unknown> | null {
 
 function summarizeFieldKeys(fields: unknown): string {
     if (fields === null || typeof fields !== 'object') return '—';
-    const keys = Object.keys(fields as Record<string, unknown>);
+    // `fields` is a list of {name,…} descriptors (canonical REST shape);
+    // a plain record is also tolerated for back-compat.
+    const keys = Array.isArray(fields)
+        ? fields.map((f) => {
+              if (f !== null && typeof f === 'object') {
+                  const n = (f as Record<string, unknown>).name;
+                  if (typeof n === 'string') return n;
+              }
+              return '?';
+          })
+        : Object.keys(fields as Record<string, unknown>);
     if (keys.length === 0) return '—';
     if (keys.length <= 8) return keys.join(', ');
     return `${keys.slice(0, 8).join(', ')}, …(+${String(keys.length - 8)} more)`;
@@ -136,6 +146,7 @@ function summarizeFieldKeys(fields: unknown): string {
 
 function countFields(fields: unknown): number {
     if (fields === null || typeof fields !== 'object') return 0;
+    if (Array.isArray(fields)) return fields.length;
     return Object.keys(fields as Record<string, unknown>).length;
 }
 

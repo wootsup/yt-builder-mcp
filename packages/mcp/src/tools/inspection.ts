@@ -45,7 +45,10 @@ const TYPE_SCHEMA_OUTPUT_SCHEMA = z.object({
     name: z.string(),
     label: z.string().optional(),
     origin: z.string().optional(),
-    fields: z.record(z.string(), z.unknown()).optional(),
+    // The REST endpoint returns `fields` as a list of {name,type,label?}
+    // field descriptors — each `name` is a valid prop key for element_add /
+    // _update_settings.
+    fields: z.array(z.record(z.string(), z.unknown())).optional(),
     field_count: z.number(),
 });
 
@@ -113,14 +116,21 @@ export function buildInspectionTools(client: RestClient): readonly AnyToolDefini
                     const data = await client.get<Record<string, unknown>>(
                         `/element-types/${encodeURIComponent(type_name)}/schema`,
                     );
-                    const name = typeof data.name === 'string' ? data.name : type_name;
-                    const label = typeof data.label === 'string' ? data.label : undefined;
-                    const origin = typeof data.origin === 'string' ? data.origin : undefined;
-                    const fields =
-                        data.fields !== null && typeof data.fields === 'object'
-                            ? (data.fields as Record<string, unknown>)
-                            : undefined;
-                    const fieldCount = fields !== undefined ? Object.keys(fields).length : 0;
+                    // The REST endpoint nests the type schema under `schema`:
+                    // {type_name, schema:{name,label,origin,has_children,fields:[…]}}.
+                    // Fall back to the top-level object for older backends.
+                    const schema =
+                        data.schema !== null && typeof data.schema === 'object'
+                            ? (data.schema as Record<string, unknown>)
+                            : data;
+                    const name = typeof schema.name === 'string' ? schema.name : type_name;
+                    const label = typeof schema.label === 'string' ? schema.label : undefined;
+                    const origin = typeof schema.origin === 'string' ? schema.origin : undefined;
+                    // `fields` is a list of {name,type,label?} field descriptors.
+                    const fields = Array.isArray(schema.fields)
+                        ? (schema.fields as Record<string, unknown>[])
+                        : undefined;
+                    const fieldCount = fields !== undefined ? fields.length : 0;
 
                     const toolkitResult = detailResult(
                         buildTypeSchemaDetail({ name, label, origin, fields }),

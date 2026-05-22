@@ -56,8 +56,9 @@ export function buildSourcesTools(
         defineTool({
             name: 'yootheme_builder_element_get_binding',
             description:
-                'Read the source binding (and source_config/source_args/etc.) attached to an ' +
-                'element. Returns the empty object if the element is not bound.',
+                'Read the source binding attached to an element — the bound source name, ' +
+                'the field-mappings (which source field feeds which element prop) and the ' +
+                'query arguments/directives. Returns the empty object if the element is not bound.',
             inputSchema: {
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,

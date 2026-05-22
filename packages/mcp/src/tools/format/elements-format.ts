@@ -71,7 +71,12 @@ function isStructuredBinding(src: unknown): boolean {
     return false;
 }
 
-function hasSourceBinding(node: unknown): boolean {
+/**
+ * True iff the node carries a source-binding. Exported so the
+ * layout-flatten helper (page_get_layout flat-mode) derives
+ * `has_binding` from the SAME logic element_list uses — one SSoT.
+ */
+export function hasSourceBinding(node: unknown): boolean {
     if (node === null || typeof node !== 'object') return false;
     const obj = node as Record<string, unknown>;
 

@@ -12,7 +12,7 @@
 import { z } from 'zod';
 
 import { encodeElementPath, type RestClient } from '../../client.js';
-import { errorResult, jsonResult, type ToolResult } from '../tool-builder.js';
+import { errorResult, jsonResult, structuredResult, type ToolResult } from '../tool-builder.js';
 
 export const INSPECT_MULTI_ITEMS_OUTPUT_SCHEMA = z.object({
     template_id: z.string(),
@@ -44,7 +44,12 @@ export async function handleInspectMultiItemsBinding(
         const data = await client.get<Record<string, unknown>>(
             `/pages/${encodeURIComponent(template_id)}/elements/${encoded}/multi-items/inspect`,
         );
-        return jsonResult(data);
+        // The REST endpoint already returns the canonical
+        // {template_id, report, etag} shape — pass it through as
+        // structuredContent so the declared outputSchema is satisfied
+        // (a tool with an outputSchema MUST emit structuredContent, else
+        // the MCP SDK rejects the call with -32602).
+        return structuredResult(jsonResult(data), data);
     } catch (e) {
         return errorResult({
             error: e,

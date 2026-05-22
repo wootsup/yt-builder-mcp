@@ -27,16 +27,30 @@
  * @license MIT
  */
 
+import { hasSourceBinding } from './format/elements-format.js';
+
 /** A single emitted record in the flattened layout. */
 export interface FlatElement {
     /** JSON-Pointer-style path, e.g. "/layout/0/children/2". */
     path: string;
+    /**
+     * Path with the `/layout` prefix stripped, e.g. "/0/children/2".
+     * N-01 (Audit v4): mirrors the `rel_path` column element_list emits
+     * so `fields:["rel_path",...]` projection works on the flat layout.
+     */
+    rel_path: string;
     /** Path of the parent element, or `null` for top-level entries. */
     parent_path: string | null;
     /** 0-based depth (top-level entries have depth 0). */
     depth: number;
     /** Element type string (the `type` field on the YT node, "" if missing). */
     element_type: string;
+    /**
+     * True iff the node carries a source-binding. N-01 (Audit v4):
+     * derived via the same `hasSourceBinding` SSoT element_list uses,
+     * or an explicit REST-plugin boolean when present.
+     */
+    has_binding: boolean;
     /** Element props (passthrough; `undefined` when the node has none). */
     props?: Record<string, unknown>;
     /**
@@ -104,17 +118,31 @@ function walk(
             ? (obj.props as Record<string, unknown>)
             : undefined;
 
+    // N-01: derive the projection-relevant fields up-front so a
+    // `fields:["rel_path","has_binding",...]` projection finds them.
+    // `rel_path` strips the `/layout` prefix; `has_binding` honours an
+    // explicit REST boolean else derives via the shared SSoT.
+    const relPath = path.replace(/^\/layout/, '') || '/';
+    const hasBinding =
+        typeof obj.has_binding === 'boolean'
+            ? obj.has_binding
+            : hasSourceBinding(obj);
+
     // Build a passthrough shallow-clone WITHOUT the children field. We
     // copy every other top-level key so future REST additions (label,
-    // has_binding, …) survive the flatten.
+    // …) survive the flatten.
     const emitted: FlatElement = {
         path,
+        rel_path: relPath,
         parent_path: parentPath,
         depth,
         element_type: elementType,
+        has_binding: hasBinding,
     };
     for (const [k, v] of Object.entries(obj)) {
-        if (k === 'children' || k === 'type' || k === 'props') continue;
+        if (k === 'children' || k === 'type' || k === 'props' || k === 'has_binding') {
+            continue;
+        }
         emitted[k] = v;
     }
     if (props !== undefined) emitted.props = props;

@@ -244,6 +244,33 @@ describe('buildElementsTools — element_list pagination (T2 / N-01)', () => {
         expect(result.structuredContent?.next_cursor).toBeUndefined();
         expect(result.structuredContent?.total).toBe(3);
     });
+
+    // ─── N-01 (Audit v4) — narrow fields[] projection fits in text ────
+    // A 96-node template truncates the compact text table at 2000 chars
+    // (~26 of 96 rows visible). When the caller passes a narrow
+    // `fields[]` projection, the text table must render those projected
+    // (slim) rows in full so a text-only reader sees EVERY node.
+
+    it('renders every node in the text table when a narrow fields[] is given', async () => {
+        const manyNodes = Array.from({ length: 96 }, (_, i) => ({
+            path: `/${String(i)}`,
+            element_type: i % 2 === 0 ? 'section' : 'headline',
+        }));
+        const tools = buildElementsTools(
+            fakeClient(() => jsonResponse({ elements: manyNodes, total: 96 })),
+        );
+        const result = await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'tpl',
+            fields: ['rel_path', 'element_type'],
+        });
+        const text = result.content[0]?.text ?? '';
+        // The last node's relative path must be present — proves the
+        // whole list survived (no 2000-char compact truncation).
+        expect(text).toContain('/95');
+        expect(text).not.toMatch(/TRUNCATED/i);
+        // structuredContent still carries all 96 projected rows.
+        expect(result.structuredContent?.total).toBe(96);
+    });
 });
 
 describe('buildElementsTools — input schema', () => {

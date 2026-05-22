@@ -79,6 +79,72 @@ export function flattenSourcesPayload(
 
 // ─── Detail builder (Design §3.2 row 17) ─────────────────────────────
 
+/** Render a primitive binding-value into a DetailEntry-safe scalar. */
+function scalarValue(v: unknown): string | number | boolean | null {
+    if (v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
+        return v;
+    }
+    // Objects / arrays (nested filters, directive args) — JSON-flatten so
+    // the LLM still sees the structure without an [object Object].
+    try {
+        return JSON.stringify(v);
+    } catch {
+        return String(v);
+    }
+}
+
+/**
+ * Normalise the field-mappings carried on the binding response into a
+ * `prop → source_field` dict.
+ *
+ * F-01-Mapping (Audit v4): the REST plugin surfaces field-mappings in
+ * TWO shapes — `field_mappings` (dict, back-compat) and
+ * `field_mappings_structured` (list of `{element_prop, source_field}`,
+ * the BindingSerializer SSoT output). The structured list is preferred
+ * because it preserves insertion order and field-level `filters`.
+ */
+function extractFieldMappings(
+    binding: Record<string, unknown>,
+): { prop: string; field: string }[] {
+    const structured = binding.field_mappings_structured;
+    if (Array.isArray(structured)) {
+        const out: { prop: string; field: string }[] = [];
+        for (const entry of structured) {
+            if (entry !== null && typeof entry === 'object') {
+                const rec = entry as Record<string, unknown>;
+                const prop = rec.element_prop;
+                const field = rec.source_field;
+                if (typeof prop === 'string' && prop !== '') {
+                    out.push({
+                        prop,
+                        field: typeof field === 'string' ? field : String(field ?? ''),
+                    });
+                }
+            }
+        }
+        return out;
+    }
+    const dict = binding.field_mappings;
+    if (dict !== null && typeof dict === 'object') {
+        return Object.entries(dict as Record<string, unknown>).map(([prop, field]) => ({
+            prop,
+            field: typeof field === 'string' ? field : String(field ?? ''),
+        }));
+    }
+    return [];
+}
+
+/** Pull `query_arguments` off the binding as a flat record. */
+function extractQueryArguments(
+    binding: Record<string, unknown>,
+): Record<string, unknown> {
+    const args = binding.query_arguments;
+    if (args !== null && typeof args === 'object' && !Array.isArray(args)) {
+        return args as Record<string, unknown>;
+    }
+    return {};
+}
+
 export function buildBindingDetail(payload: {
     template_id: string;
     element_path: string;
@@ -86,59 +152,97 @@ export function buildBindingDetail(payload: {
 }): { groups: DetailGroup[]; title?: string } {
     const b = payload.binding;
     const sourceName = typeof b.source_name === 'string' ? b.source_name : null;
-    const configCount =
-        b.source_config !== null && typeof b.source_config === 'object'
-            ? Object.keys(b.source_config as Record<string, unknown>).length
-            : 0;
-    const argsCount =
-        b.source_args !== null && typeof b.source_args === 'object'
-            ? Object.keys(b.source_args as Record<string, unknown>).length
-            : 0;
+    const queryField = typeof b.query_field === 'string' ? b.query_field : null;
+
+    const fieldMappings = extractFieldMappings(b);
+    const queryArgs = extractQueryArguments(b);
+    const argEntries = Object.entries(queryArgs);
+
+    const bindingEntries: DetailGroup['entries'] = [
+        {
+            key: 'source_name',
+            label: 'Source',
+            value: sourceName,
+            format: 'badge',
+        },
+    ];
+    if (queryField !== null) {
+        bindingEntries.push({
+            key: 'query_field',
+            label: 'Query field',
+            value: queryField,
+            format: 'code',
+        });
+    }
+    bindingEntries.push(
+        {
+            key: 'mapping_count',
+            label: 'Field mappings',
+            value: fieldMappings.length,
+            format: 'text',
+        },
+        {
+            key: 'arg_count',
+            label: 'Query arguments',
+            value: argEntries.length,
+            format: 'text',
+        },
+    );
+
+    const groups: DetailGroup[] = [
+        {
+            label: 'Element',
+            entries: [
+                {
+                    key: 'template_id',
+                    label: 'Template',
+                    value: payload.template_id,
+                    format: 'badge',
+                },
+                {
+                    key: 'element_path',
+                    label: 'Path',
+                    value: payload.element_path,
+                    format: 'code',
+                    copyable: true,
+                },
+            ],
+        },
+        {
+            label: 'Binding',
+            entries: bindingEntries,
+        },
+    ];
+
+    // Field-mapping group — one entry per element-prop → source-field
+    // pair so the LLM sees exactly WHICH source field feeds WHICH prop.
+    if (fieldMappings.length > 0) {
+        groups.push({
+            label: 'Field mappings',
+            entries: fieldMappings.map((m, i) => ({
+                key: `mapping_${String(i)}`,
+                label: m.prop,
+                value: m.field,
+                format: 'code',
+            })),
+        });
+    }
+
+    // Query-arguments group — the GraphQL `query.field.arguments`.
+    if (argEntries.length > 0) {
+        groups.push({
+            label: 'Query arguments',
+            entries: argEntries.map(([key, value], i) => ({
+                key: `arg_${String(i)}`,
+                label: key,
+                value: scalarValue(value),
+                format: 'text',
+            })),
+        });
+    }
 
     return {
         title: `Binding for ${payload.element_path}`,
-        groups: [
-            {
-                label: 'Element',
-                entries: [
-                    {
-                        key: 'template_id',
-                        label: 'Template',
-                        value: payload.template_id,
-                        format: 'badge',
-                    },
-                    {
-                        key: 'element_path',
-                        label: 'Path',
-                        value: payload.element_path,
-                        format: 'code',
-                        copyable: true,
-                    },
-                ],
-            },
-            {
-                label: 'Binding',
-                entries: [
-                    {
-                        key: 'source_name',
-                        label: 'Source',
-                        value: sourceName,
-                        format: 'badge',
-                    },
-                    {
-                        key: 'config_keys',
-                        label: 'Config keys',
-                        value: configCount,
-                        format: 'text',
-                    },
-                    {
-                        key: 'args_keys',
-                        label: 'Args keys',
-                        value: argsCount,
-                        format: 'text',
-                    },
-                ],
-            },
-        ],
+        groups,
     };
 }
