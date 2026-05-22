@@ -58,14 +58,30 @@ final class InspectionController extends RestController
         // has_children}, ...] under `items`. Keep `element_types` as the
         // legacy flat name-only list for back-compat with older MCP-TS
         // builds that may still read it.
+        //
+        // F-03 v2 (Maria-Audit Stream C2 2026-05-22): expose
+        // `has_children_support` as an alias of `has_children` on every
+        // row. MCP-TS `inspection-format.mapTypeRow` reads the
+        // `has_children_support` key (its canonical column name); without
+        // this alias every row landed in the table with CHILDREN="false",
+        // including canonical containers like grid/section/tabs.
         $catalog = $this->inspector->listCatalog();
+        $items = [];
         $names = [];
         foreach ($catalog as $entry) {
+            $items[] = [
+                'name' => $entry['name'],
+                'label' => $entry['label'],
+                'origin' => $entry['origin'],
+                'has_children' => $entry['has_children'],
+                // MCP-TS alias (read by inspection-format.mapTypeRow).
+                'has_children_support' => $entry['has_children'],
+            ];
             $names[] = $entry['name'];
         }
         return new \WP_REST_Response([
-            'items' => $catalog,
-            'total' => count($catalog),
+            'items' => $items,
+            'total' => count($items),
             'element_types' => $names,
         ], 200);
     }

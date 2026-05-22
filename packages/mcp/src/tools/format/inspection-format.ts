@@ -47,15 +47,25 @@ export interface TypeRow {
 /**
  * Maps an `/element-types` row to the table shape.
  *
- * - `has_children_support` honours an explicit boolean, else falls back to
- *   presence of a `children` field on the type definition.
+ * - `has_children_support` honours an explicit boolean (the canonical
+ *   column key on the MCP-TS side). The PHP REST envelope surfaces both
+ *   `has_children` (its canonical key) AND `has_children_support` (this
+ *   alias) for every row — accept either to ride out a deploy skew where
+ *   the wp-plugin and npm-package versions are temporarily out of step.
+ *   Maria-Audit Stream C2 F-03 v2 (2026-05-22).
+ * - Falls back to presence of a `children` field on the type definition.
  * - Missing fields default to empty.
  */
 export function mapTypeRow(input: Record<string, unknown>): TypeRow {
-    const explicitChildren =
-        typeof input.has_children_support === 'boolean'
-            ? input.has_children_support
-            : undefined;
+    let explicitChildren: boolean | undefined;
+    if (typeof input.has_children_support === 'boolean') {
+        explicitChildren = input.has_children_support;
+    } else if (typeof input.has_children === 'boolean') {
+        // F-03 v2: PHP wire-shape uses `has_children`; older wp-plugins
+        // may surface only this key. MCP-TS keeps `has_children_support`
+        // as the canonical column-key but accepts the PHP-side spelling.
+        explicitChildren = input.has_children;
+    }
 
     return {
         name: asString(input.name),
@@ -75,10 +85,18 @@ function hasChildrenField(v: unknown): boolean {
 }
 
 /**
- * The REST plugin exposes element types EITHER as a flat array of
- * `{name, label, origin, …}` objects OR as a wrapper object with an
- * `element_types` array. Tolerate both. Also tolerate string-only
- * entries (older shape — just the name) by promoting to `{name}`.
+ * The REST plugin exposes element types in one of three shapes:
+ *
+ *   1. F-03 v2 (current — Maria-Audit Stream C2 2026-05-22): wrapper object
+ *      `{items: [{name, label, origin, has_children, has_children_support,
+ *      …}], total, element_types: [<string>, …]}`. This is the richest
+ *      shape and the only one carrying label/origin/has_children — prefer
+ *      it always.
+ *   2. Legacy F-03 v1: wrapper object `{element_types: [<string>, …]}`
+ *      with name-only entries (older WP-plugin versions). Used as the
+ *      back-compat fallback when `items` is absent.
+ *   3. Flat array of `{name, …}` objects — never seen on the live
+ *      yt-builder-mcp REST but kept for paranoia.
  */
 export function flattenTypesPayload(payload: unknown): Record<string, unknown>[] {
     if (Array.isArray(payload)) {
@@ -86,9 +104,15 @@ export function flattenTypesPayload(payload: unknown): Record<string, unknown>[]
     }
     if (payload !== null && typeof payload === 'object') {
         const obj = payload as Record<string, unknown>;
-        const list = obj.element_types;
-        if (Array.isArray(list)) {
-            return list.map(normalizeTypeEntry).filter((x): x is Record<string, unknown> => x !== null);
+        // F-03 v2 preferred shape: `items[]` carries the full row.
+        // Reading from `element_types` (plain string list) drops every
+        // label/origin/has_children value before mapTypeRow ever sees
+        // them, which is the root-cause of the audit-finding.
+        if (Array.isArray(obj.items)) {
+            return obj.items.map(normalizeTypeEntry).filter((x): x is Record<string, unknown> => x !== null);
+        }
+        if (Array.isArray(obj.element_types)) {
+            return obj.element_types.map(normalizeTypeEntry).filter((x): x is Record<string, unknown> => x !== null);
         }
     }
     return [];

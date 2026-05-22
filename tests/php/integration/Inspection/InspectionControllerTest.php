@@ -100,6 +100,57 @@ final class InspectionControllerTest extends TestCase
             self::assertArrayHasKey('label', $item);
             self::assertArrayHasKey('origin', $item);
             self::assertArrayHasKey('has_children', $item);
+            // F-03 v2: MCP-TS reads `has_children_support` as the canonical
+            // column key (inspection-format.mapTypeRow). The REST envelope
+            // surfaces both `has_children` (PHP-side / legacy) and
+            // `has_children_support` (TS alias) — every row must carry both.
+            self::assertArrayHasKey('has_children_support', $item);
+            self::assertSame(
+                $item['has_children'],
+                $item['has_children_support'],
+                "has_children and has_children_support must agree per row"
+            );
+        }
+    }
+
+    public function test_list_types_no_item_has_empty_label_or_origin(): void
+    {
+        // Maria-Audit v2 F-03: regression pin against the audit-finding
+        // "label: """ / "origin: """ on the live REST.
+        $req = new \WP_REST_Request('GET', '/');
+        $resp = $this->controller()->list_types($req);
+        /** @var \WP_REST_Response $resp */
+        $data = $resp->get_data();
+        foreach ($data['items'] as $item) {
+            self::assertNotSame('', $item['label'], "label empty for '{$item['name']}'");
+            self::assertNotSame('', $item['origin'], "origin empty for '{$item['name']}'");
+        }
+    }
+
+    public function test_list_types_surfaces_item_children_with_has_children_true(): void
+    {
+        // Maria-Audit v2 F-03: the 16 *_item types from ItemContainerMap
+        // must report has_children=true — they are valid binding targets
+        // for the Multi-Items pattern and accept inner field-bindings.
+        $req = new \WP_REST_Request('GET', '/');
+        $resp = $this->controller()->list_types($req);
+        /** @var \WP_REST_Response $resp */
+        $data = $resp->get_data();
+        $byName = [];
+        foreach ($data['items'] as $item) {
+            $byName[$item['name']] = $item;
+        }
+        foreach (\WootsUp\BuilderMcp\Elements\ItemContainerMap::MAP as $container => $item) {
+            self::assertArrayHasKey($container, $byName, "Missing container '$container'");
+            self::assertArrayHasKey($item, $byName, "Missing item-child '$item'");
+            self::assertTrue(
+                $byName[$container]['has_children'],
+                "$container must report has_children=true (it accepts $item children)"
+            );
+            self::assertTrue(
+                $byName[$item]['has_children'],
+                "$item must report has_children=true (it accepts arbitrary inner elements)"
+            );
         }
     }
 
