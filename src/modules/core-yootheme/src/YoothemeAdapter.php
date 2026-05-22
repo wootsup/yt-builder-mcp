@@ -176,8 +176,16 @@ class YoothemeAdapter
             return null;
         }
         try {
+            // F-04 fix (Maria-Audit T2.3 2026-05-22): YOOtheme's DI container
+            // (`\YOOtheme\Container`) keys services by raw string identity
+            // — `'\YOOtheme\Builder'` and `'YOOtheme\Builder'` are TWO
+            // distinct service keys. The leading-backslash form misses the
+            // registered service definition, falls through to
+            // `class_exists()` autoload and reflection-instantiates a
+            // *bare* Builder bypassing the factory closure that wires
+            // transforms. Pass the YT-canonical no-leading-backslash form.
             /** @var mixed $builder */
-            $builder = $appFn('\\YOOtheme\\Builder'); // @phpstan-ignore-line
+            $builder = $appFn('YOOtheme\\Builder'); // @phpstan-ignore-line
             return is_object($builder) ? $builder : null;
         } catch (\Throwable) {
             return null;
@@ -207,8 +215,21 @@ class YoothemeAdapter
             return null;
         }
         try {
+            // F-04 fix (Maria-Audit T2.3 2026-05-22): YOOtheme's DI container
+            // keys services by raw string identity — `'\YOOtheme\Builder\Source'`
+            // (with leading backslash) is a DIFFERENT key than the registered
+            // `'YOOtheme\Builder\Source'`. Asking for the leading-backslash form
+            // misses the service-definition cache; YT's `resolveService()` then
+            // falls through to `class_exists()` + reflection-instantiation
+            // which creates a bare `Source` object WITHOUT running the factory
+            // closure registered in `builder-source/bootstrap.php` —
+            // `Event::emit('source.init', $source)` never fires, no type
+            // listeners populate the schema, and `getQueryType()` returns
+            // null. Pass the YT-canonical no-leading-backslash identifier so
+            // the service-factory closure actually runs and the source-schema
+            // gets populated (live-verified 225 fields on dev).
             /** @var mixed $source */
-            $source = $appFn('\\YOOtheme\\Builder\\Source'); // @phpstan-ignore-line
+            $source = $appFn('YOOtheme\\Builder\\Source'); // @phpstan-ignore-line
             if (!is_object($source) || !method_exists($source, 'getSchema')) {
                 return null;
             }

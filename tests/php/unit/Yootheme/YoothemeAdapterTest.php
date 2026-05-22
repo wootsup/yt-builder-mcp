@@ -16,6 +16,8 @@ declare(strict_types=1);
 namespace WootsUp\BuilderMcp\Tests\Unit\Yootheme;
 
 use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\Attributes\PreserveGlobalState;
+use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use PHPUnit\Framework\TestCase;
 use WootsUp\BuilderMcp\Yootheme\YoothemeAdapter;
 
@@ -83,10 +85,142 @@ final class YoothemeAdapterTest extends TestCase
         self::assertNull($adapter->getBuilder());
     }
 
+    /**
+     * F-04 regression pin — same root-cause as the Source-id test, applied to
+     * the Builder service. YT's DI container is string-keyed (no leading-
+     * backslash normalisation); leading-backslash form bypasses the
+     * registered factory and reflection-instantiates a bare Builder
+     * without the transform-chain wiring.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function test_get_builder_uses_yt_canonical_service_id_without_leading_backslash(): void
+    {
+        $GLOBALS['ytb_test_yt_app_calls'] = [];
+
+        if (!class_exists('\\YOOtheme\\Application', false)) {
+            eval('namespace YOOtheme; class Application {}');
+        }
+        if (!class_exists('\\YOOtheme\\Builder', false)) {
+            eval('namespace YOOtheme; class Builder {}');
+        }
+        if (!function_exists('\\YOOtheme\\app')) {
+            eval('
+                namespace YOOtheme {
+                    function app($id = null) {
+                        $GLOBALS["ytb_test_yt_app_calls"][] = $id;
+                        if ($id === "YOOtheme\\\\Builder") {
+                            return new \\YOOtheme\\Builder();
+                        }
+                        return null;
+                    }
+                }
+            ');
+        }
+
+        $adapter = new YoothemeAdapter();
+        $builder = $adapter->getBuilder();
+
+        self::assertNotNull($builder, 'getBuilder() must reach the YT DI service-factory via the no-leading-backslash id.');
+        self::assertContains('YOOtheme\\Builder', $GLOBALS['ytb_test_yt_app_calls']);
+        foreach ($GLOBALS['ytb_test_yt_app_calls'] as $id) {
+            self::assertStringStartsNotWith('\\', (string) $id, sprintf('Leading-backslash service-id "%s" passed — F-04 regression!', $id));
+        }
+    }
+
     public function test_get_source_fields_returns_null_when_yt_missing(): void
     {
         $adapter = new YoothemeAdapter();
         self::assertNull($adapter->getSourceFields());
+    }
+
+    /**
+     * F-04 regression pin (Maria-Audit T2.3 2026-05-22).
+     *
+     * Bug history: the adapter used to call `\YOOtheme\app('\YOOtheme\Builder\Source')`
+     * with a LEADING backslash. YOOtheme's DI container (`\YOOtheme\Container`)
+     * keys services by raw string identity (no `ltrim('\\')`), so
+     * `'\YOOtheme\Builder\Source'` and `'YOOtheme\Builder\Source'` are TWO
+     * distinct keys. The leading-backslash form misses the service-definition
+     * cache, falls through to `class_exists()` + reflection-instantiation,
+     * and bypasses the factory closure registered in builder-source/bootstrap.php
+     * — `Event::emit('source.init', $source)` never fires, source listeners
+     * never register their types, and `$schema->getQueryType()` returns null.
+     * Result: `/sources` REST returns empty groups on YT 4.5.33.
+     *
+     * This test pins the service-id string the adapter sends so a regression
+     * (re-introducing the leading backslash) fails fast — independent of
+     * whether the live YT container is loaded.
+     */
+    #[RunInSeparateProcess]
+    #[PreserveGlobalState(false)]
+    public function test_get_source_fields_uses_yt_canonical_service_id_without_leading_backslash(): void
+    {
+        // Build a fake YOOtheme runtime that records every service-id the
+        // adapter requests via `\YOOtheme\app($id)`. The adapter calls the
+        // function dynamically by string `'\YOOtheme\app'` — define the
+        // global-namespace function in the YOOtheme namespace so the
+        // dynamic invocation hits our recorder.
+        $GLOBALS['ytb_test_yt_app_calls'] = [];
+
+        if (!class_exists('\\YOOtheme\\Application', false)) {
+            eval('namespace YOOtheme; class Application {}');
+        }
+        if (!class_exists('\\YOOtheme\\Builder\\Source', false)) {
+            // Stand-in Source object — `getSchema()` returns a stub Schema
+            // exposing a Query type with one field, so the happy-path also
+            // surfaces (catches "schema accessed but identifier wrong"
+            // regressions).
+            eval('
+                namespace YOOtheme\\Builder {
+                    class Source {
+                        public function getSchema(): object {
+                            return new class {
+                                public function getQueryType(): object {
+                                    return new class {
+                                        public function getFields(): array {
+                                            return ["posts.singlePost" => (object)["config" => ["metadata" => ["label" => "Post", "group" => "WordPress"]]]];
+                                        }
+                                    };
+                                }
+                            };
+                        }
+                    }
+                }
+            ');
+        }
+        if (!function_exists('\\YOOtheme\\app')) {
+            eval('
+                namespace YOOtheme {
+                    function app($id = null) {
+                        $GLOBALS["ytb_test_yt_app_calls"][] = $id;
+                        if ($id === "YOOtheme\\\\Builder\\\\Source") {
+                            return new \\YOOtheme\\Builder\\Source();
+                        }
+                        // Any leading-backslash request would land here and
+                        // — because we never satisfy it — the adapter would
+                        // see a non-object and return null. That negative
+                        // path is precisely the bug we are pinning against.
+                        return null;
+                    }
+                }
+            ');
+        }
+
+        $adapter = new YoothemeAdapter();
+        $fields = $adapter->getSourceFields();
+
+        // 1. The happy-path surfaced (1 field).
+        self::assertIsArray($fields, 'Source-schema must be reached via the no-leading-backslash service id.');
+        self::assertCount(1, $fields);
+        self::assertArrayHasKey('posts.singlePost', $fields);
+
+        // 2. No leading-backslash service request ever happened.
+        $calls = $GLOBALS['ytb_test_yt_app_calls'];
+        self::assertContains('YOOtheme\\Builder\\Source', $calls, 'Adapter MUST pass YT-canonical "YOOtheme\\Builder\\Source" (no leading backslash).');
+        foreach ($calls as $id) {
+            self::assertStringStartsNotWith('\\', (string) $id, sprintf('Leading-backslash service-id "%s" passed to \\YOOtheme\\app() — F-04 regression!', $id));
+        }
     }
 
     public function test_get_source_field_entries_returns_null_when_yt_missing(): void
