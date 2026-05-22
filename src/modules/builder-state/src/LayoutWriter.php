@@ -71,6 +71,10 @@ final class LayoutWriter
             $templates[$templateId] = $transformed;
             $state['templates'] = $templates;
             $this->persist($state);
+            // F-08 fix (Maria-Audit 2026-05-22): stamp the per-template
+            // tracking option so pages_list.modified_at is non-null even
+            // when the YT-side blob doesn't carry its own `modified` field.
+            (new \WootsUp\BuilderMcp\Pages\PagesMetaStore())->touch($templateId);
         });
     }
 

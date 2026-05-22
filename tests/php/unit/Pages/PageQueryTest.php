@@ -168,6 +168,27 @@ final class PageQueryTest extends TestCase
         self::assertSame('2023-11-14T22:13:20+00:00', $byId['tpl']['modified_at']);
     }
 
+    public function test_list_falls_back_to_pages_meta_when_blob_lacks_modified(): void
+    {
+        // F-08 fix (Maria-Audit 2026-05-22): when wp_option('yootheme').
+        // templates.<id> doesn't carry a `modified` field, fall back to
+        // the per-template tracking option populated by writeTemplate().
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'name' => 'Home',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+        $GLOBALS['ytb_test_options'][\WootsUp\BuilderMcp\Pages\PagesMetaStore::OPTION] = [
+            'tpl' => ['modified_at' => '2026-05-22T12:34:56+00:00'],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        self::assertSame('2026-05-22T12:34:56+00:00', $byId['tpl']['modified_at']);
+    }
+
     public function test_list_attaches_etag_to_each_entry(): void
     {
         $this->seedTwoTemplates();

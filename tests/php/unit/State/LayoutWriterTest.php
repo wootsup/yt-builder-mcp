@@ -148,4 +148,23 @@ final class LayoutWriterTest extends TestCase
         $after = (new LayoutReader())->etag();
         self::assertNotSame($before, $after);
     }
+
+    public function test_write_template_stamps_pages_meta_store(): void
+    {
+        // F-08 fix (Maria-Audit 2026-05-22): writeTemplate must touch the
+        // per-template tracking option so pages_list.modified_at is
+        // non-null on cold start even when the YT-blob has no `modified`.
+        $writer = new LayoutWriter(new LayoutReader());
+        $writer->writeTemplate('tpl', [
+            'name' => 'After',
+            'layout' => ['type' => 'layout', 'children' => []],
+        ]);
+        $store = new \WootsUp\BuilderMcp\Pages\PagesMetaStore();
+        $ts = $store->modifiedAt('tpl');
+        self::assertIsString($ts);
+        self::assertMatchesRegularExpression(
+            '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/',
+            (string) $ts,
+        );
+    }
 }

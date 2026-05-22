@@ -30,8 +30,13 @@ use WootsUp\BuilderMcp\State\LayoutReader;
 
 final class PageQuery
 {
-    public function __construct(private readonly LayoutReader $reader)
-    {
+    private readonly PagesMetaStore $meta;
+
+    public function __construct(
+        private readonly LayoutReader $reader,
+        ?PagesMetaStore $meta = null,
+    ) {
+        $this->meta = $meta ?? new PagesMetaStore();
     }
 
     /**
@@ -91,6 +96,17 @@ final class PageQuery
                     $entry['modified_at'] = self::iso8601From($tpl['modified']);
                 } elseif (isset($tpl['modified_at']) && is_string($tpl['modified_at'])) {
                     $entry['modified_at'] = $tpl['modified_at'];
+                }
+            }
+            // F-08 fix (Maria-Audit 2026-05-22): when the YT-side blob does
+            // not carry a `modified` / `modified_at` field, fall back to the
+            // per-template tracking option populated by
+            // LayoutWriter::writeTemplate(). Cold-start lookups still get a
+            // non-null timestamp instead of an undefined key.
+            if (!isset($entry['modified_at'])) {
+                $tracked = $this->meta->modifiedAt($id);
+                if ($tracked !== null) {
+                    $entry['modified_at'] = $tracked;
                 }
             }
             if (!isset($entry['type'])) {
