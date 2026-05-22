@@ -34,15 +34,19 @@ import {
     SCHEMA_OUTPUT_SCHEMA,
 } from './schemas.js';
 
-// Wave-6 Fix 20: pages.ts retains an OPTIONAL ETag (page-level save/publish
-// is allowed without a precondition; element/binding mutations REQUIRE
-// one via the strict ETAG in shared-schemas.ts).
+// F-14: page-level save/publish accept OPTIONAL ETag (no precondition lock
+// at template level — element/binding mutations REQUIRE one via the strict
+// ETAG in shared-schemas.ts). Schema and description now agree: optional
+// here, recommended for safety. When provided, 412 Precondition Failed is
+// raised on stale snapshots; when omitted, the save proceeds unconditionally.
 const ETAG = z
     .string()
     .optional()
     .describe(
-        'Optimistic-lock ETag (e.g. "abc123" from yootheme_builder_get_etag). ' +
-            'Required for write operations after the first call.',
+        'Optimistic-lock ETag (from yootheme_builder_get_etag). ' +
+            'Optional at template level — when provided, enforces precondition ' +
+            'and returns 412 on conflict; when omitted, save/publish proceeds ' +
+            'unconditionally. For safety in collaborative edits, pass the ETag.',
     );
 
 export function buildPagesTools(client: RestClient): readonly AnyToolDefinition[] {
@@ -104,7 +108,8 @@ export function buildPagesTools(client: RestClient): readonly AnyToolDefinition[
             name: 'yootheme_builder_page_save',
             description:
                 'Re-run save-transforms on a template and persist. Useful after a series of ' +
-                'low-level writes to trigger the Builder normalization pass. Requires ETag.',
+                'low-level writes to trigger the Builder normalization pass. ETag optional ' +
+                '(recommended for safety in collaborative edits).',
             inputSchema: {
                 template_id: TEMPLATE_ID,
                 etag: ETAG,
@@ -116,8 +121,9 @@ export function buildPagesTools(client: RestClient): readonly AnyToolDefinition[
         defineTool({
             name: 'yootheme_builder_page_publish',
             description:
-                'Publish a template. Currently behaves as save + sets `published: true` in the ' +
-                'response. Requires ETag.',
+                'Publish a template — persists state, flushes YOOtheme + WP caches, and ' +
+                'snapshots the published-state ETag. Subsequent reads serve the freshly ' +
+                'published layout. ETag optional (recommended for safety in collaborative edits).',
             inputSchema: {
                 template_id: TEMPLATE_ID,
                 etag: ETAG,

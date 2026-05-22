@@ -30,16 +30,19 @@ interface Manifest {
             env: Record<string, string>;
         };
     };
-    user_config: Array<{
-        key: string;
-        label: string;
+    // Claude Desktop 1.8555+ strict-validator requires user_config as an
+    // object map keyed by env-var name (not an array). See manifest.json.
+    user_config: Record<string, {
         type: string;
-        required: boolean;
+        title: string;
         description: string;
+        required: boolean;
+        sensitive?: boolean;
     }>;
     compatibility?: {
-        node?: string;
+        claude_desktop?: string;
         platforms?: string[];
+        runtimes?: { node?: string };
     };
 }
 
@@ -91,13 +94,18 @@ describe('manifest.json — schema sanity', () => {
 
     it('declares both required user_config env vars (URL + Bearer)', () => {
         const m = readManifest();
-        const keys = m.user_config.map((c) => c.key);
+        const keys = Object.keys(m.user_config);
         expect(keys).toContain('YTB_MCP_WP_URL');
         expect(keys).toContain('YTB_MCP_BEARER_TOKEN');
-        // Bearer must be marked as secret (so Claude Desktop masks input).
-        const bearer = m.user_config.find((c) => c.key === 'YTB_MCP_BEARER_TOKEN');
-        expect(bearer?.type).toBe('secret');
+        // Bearer must be marked as sensitive (Claude Desktop masks input).
+        const bearer = m.user_config.YTB_MCP_BEARER_TOKEN;
+        expect(bearer?.type).toBe('string');
+        expect(bearer?.sensitive).toBe(true);
         expect(bearer?.required).toBe(true);
+        // URL is non-sensitive but required.
+        const url = m.user_config.YTB_MCP_WP_URL;
+        expect(url?.type).toBe('string');
+        expect(url?.required).toBe(true);
     });
 
     it('wires the user_config keys through to the server env via ${user_config.X}', () => {

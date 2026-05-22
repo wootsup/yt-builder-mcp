@@ -109,8 +109,8 @@ if (manifest.version !== pkg.version) {
         `manifest.json version (${manifest.version}) does not match package.json version (${pkg.version})`,
     );
 }
-if (!Array.isArray(manifest.user_config) || manifest.user_config.length === 0) {
-    fail('manifest.json user_config must be a non-empty array');
+if (!manifest.user_config || typeof manifest.user_config !== 'object' || Array.isArray(manifest.user_config) || Object.keys(manifest.user_config).length === 0) {
+    fail('manifest.json user_config must be a non-empty object (Claude Desktop 1.8555+ strict-validator requires object, keyed by env-var name)');
 }
 
 // Grep: every user_config key must be referenced as process.env.<KEY> in src/.
@@ -129,11 +129,11 @@ function walkDir(dir, extensions, acc = []) {
 const srcFiles = walkDir(resolve(PKG_ROOT, 'src'), ['.ts']);
 const srcCombined = srcFiles.map((f) => readFileSync(f, 'utf-8')).join('\n');
 const missingKeys = [];
-for (const cfg of manifest.user_config) {
-    if (!srcCombined.includes(`process.env.${cfg.key}`) &&
-        !srcCombined.includes(`'${cfg.key}'`) &&
-        !srcCombined.includes(`"${cfg.key}"`)) {
-        missingKeys.push(cfg.key);
+for (const key of Object.keys(manifest.user_config)) {
+    if (!srcCombined.includes(`process.env.${key}`) &&
+        !srcCombined.includes(`'${key}'`) &&
+        !srcCombined.includes(`"${key}"`)) {
+        missingKeys.push(key);
     }
 }
 if (missingKeys.length > 0) {
@@ -168,6 +168,20 @@ writeFileSync(
     'utf-8',
 );
 
+// ── Step 3.5: install production deps into stage (DXT spec mandate) ────
+// Anthropic DXT spec requires node_modules bundled in the .dxt archive.
+// Claude Desktop's built-in Node.js cannot resolve `@modelcontextprotocol/sdk`
+// etc. from anywhere else — the unpacked extension dir is the only resolution
+// scope. Without this, server crashes at first `import` after `initialize`.
+log('Step 3.5: installing production deps into stage…');
+execSync('npm install --omit=dev --omit=optional --no-audit --no-fund --no-package-lock --prefer-offline', {
+    cwd: STAGE_DIR,
+    stdio: 'inherit',
+});
+if (!existsSync(resolve(STAGE_DIR, 'node_modules', '@modelcontextprotocol', 'sdk'))) {
+    fail('npm install did not produce node_modules/@modelcontextprotocol/sdk — bundle would crash on first import');
+}
+
 // ── Step 4: zip ────────────────────────────────────────────────────────
 log(`Step 4: creating ${DXT_PATH}…`);
 if (existsSync(DXT_PATH)) rmSync(DXT_PATH);
@@ -178,8 +192,8 @@ log('Step 5: verifying archive…');
 const sz = statSync(DXT_PATH).size;
 const sizeMb = (sz / 1024 / 1024).toFixed(2);
 log(`  → size: ${sizeMb} MB`);
-if (sz > 10 * 1024 * 1024) {
-    fail(`${DXT_PATH} is ${sizeMb} MB — bigger than 10 MB sanity cap`);
+if (sz > 25 * 1024 * 1024) {
+    fail(`${DXT_PATH} is ${sizeMb} MB — bigger than 25 MB sanity cap (DXT with bundled node_modules typically 2-10 MB)`);
 }
 const listing = execSync(`unzip -l "${DXT_PATH}"`).toString('utf-8');
 const requiredEntries = [
@@ -204,7 +218,13 @@ log('Step 6: grep-gate (secret-string scan)…');
 //   - The Bearer-prefixed token marker (`Bearer ` followed by ≥16 chars)
 //   - cookie sentinel strings (`Cookie:`)
 //   - KSEC- key-prefix
-const stageFiles = walkDir(STAGE_DIR, ['.js', '.json', '.md']);
+// Scope grep-gate to OUR code only (dist/, manifest, package.json) — bundled
+// node_modules contain unrelated regex/test fixtures matching Bearer/Cookie
+// patterns that are not actual secrets we ship.
+const ourFiles = walkDir(resolve(STAGE_DIR, 'dist'), ['.js', '.json', '.md']);
+ourFiles.push(resolve(STAGE_DIR, 'manifest.json'));
+ourFiles.push(resolve(STAGE_DIR, 'package.json'));
+const stageFiles = ourFiles.filter((f) => existsSync(f));
 const offenders = [];
 const PATTERNS = [
     { name: 'Bearer token literal', re: /Bearer\s+[A-Za-z0-9._-]{16,}/ },

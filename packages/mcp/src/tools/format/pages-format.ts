@@ -66,11 +66,14 @@ function asBool(v: unknown): boolean {
     return v === true;
 }
 
-/** Maps an `/pages` element to the table row shape. Missing fields default to empty. */
+/** Maps an `/pages` element to the table row shape. Missing fields default to empty.
+ *  REST returns `name` (YOOtheme's internal field name); we surface it as `label`
+ *  for LLM-friendly schemas. The legacy `label` fallback is for forward-compat
+ *  if the backend ever switches naming. */
 export function mapPageRow(input: Record<string, unknown>): Record<string, unknown> {
     return {
         id: asString(input.id),
-        label: asString(input.label),
+        label: asString(input.name ?? input.label),
         type: asString(input.type),
         elements_count: asInt(input.elements_count),
         modified_at: asString(input.modified_at),

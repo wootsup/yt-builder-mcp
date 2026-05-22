@@ -8,9 +8,12 @@
 import type { DetailGroup, TableColumn } from '@getimo/mcp-toolkit';
 
 // ─── Element-list columns (Design §3.2 row 9) ────────────────────────
+// F-06: PATH column widened to 64 chars + 'rel_path' shows just the
+// template-layout suffix so every row stays uniquely identifiable in
+// the text table. Full path remains available in structuredContent.
 
 export const ELEMENTS_TABLE_COLUMNS: readonly TableColumn[] = [
-    { key: 'path', label: 'PATH', width: 32, llmOnly: true },
+    { key: 'rel_path', label: 'PATH', width: 48, llmOnly: true },
     { key: 'element_type', label: 'TYPE', width: 16 },
     { key: 'label', label: 'LABEL', width: 28 },
     { key: 'has_binding', label: 'BIND', width: 8 },
@@ -18,7 +21,7 @@ export const ELEMENTS_TABLE_COLUMNS: readonly TableColumn[] = [
 
 /** Compact columns kick in at 21+ rows — keep path + type only. */
 export const ELEMENTS_COMPACT_COLUMNS: readonly TableColumn[] = [
-    { key: 'path', label: 'PATH', width: 32, llmOnly: true },
+    { key: 'rel_path', label: 'PATH', width: 48, llmOnly: true },
     { key: 'element_type', label: 'TYPE', width: 16 },
 ];
 
@@ -51,8 +54,14 @@ export function mapElementRow(input: Record<string, unknown>): Record<string, un
     const explicitBinding =
         typeof input.has_binding === 'boolean' ? input.has_binding : undefined;
 
+    const path = asString(input.path);
+    // F-06: derive relative path by stripping `/templates/<id>/layout` prefix
+    // so the LLM table column shows uniquely-identifying suffix.
+    const relPath = path.replace(/^\/templates\/[^/]+\/layout/, '') || '/';
+
     return {
-        path: asString(input.path),
+        path,
+        rel_path: relPath,
         element_type: asString(input.element_type),
         label,
         has_binding:

@@ -79,6 +79,36 @@ describe('pages-format sidecar', () => {
         });
     });
 
+    it('mapPageRow maps REST "name" field to "label" (YT 4.x backend shape)', () => {
+        // Real /pages REST endpoint returns {id, name, etag} — surface "name"
+        // as "label" so LLM-friendly schemas stay consistent with other tools.
+        expect(
+            mapPageRow({
+                id: 'I99YS8Ii',
+                name: 'Post',
+                etag: 'abc',
+            }),
+        ).toEqual({
+            id: 'I99YS8Ii',
+            label: 'Post',
+            type: '',
+            elements_count: 0,
+            modified_at: '',
+        });
+    });
+
+    it('mapPageRow prefers "name" over legacy "label" if both present', () => {
+        expect(
+            mapPageRow({ id: 'x', name: 'NewName', label: 'OldLabel' }),
+        ).toEqual({
+            id: 'x',
+            label: 'NewName',
+            type: '',
+            elements_count: 0,
+            modified_at: '',
+        });
+    });
+
     it('mapSchemaNodeRow normalizes has_binding to boolean', () => {
         expect(mapSchemaNodeRow({ path: '/0', element_type: 's', label: 'l' })).toEqual({
             path: '/0',

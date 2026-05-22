@@ -14,21 +14,25 @@ import {
 } from '../../../src/tools/format/elements-format.js';
 
 describe('elements-format sidecar', () => {
-    it('ELEMENTS_TABLE_COLUMNS keys = [path(llmOnly), element_type, label, has_binding]', () => {
-        const path = ELEMENTS_TABLE_COLUMNS.find((c) => c.key === 'path');
-        expect(path?.llmOnly).toBe(true);
+    it('ELEMENTS_TABLE_COLUMNS keys = [rel_path(llmOnly), element_type, label, has_binding]', () => {
+        // F-06: PATH column shows `rel_path` (path minus /templates/<id>/layout
+        // prefix) so each row stays uniquely identifiable inside the text
+        // width budget. Full `path` is still available in structuredContent.
+        const relPath = ELEMENTS_TABLE_COLUMNS.find((c) => c.key === 'rel_path');
+        expect(relPath?.llmOnly).toBe(true);
         const keys = ELEMENTS_TABLE_COLUMNS.map((c) => c.key);
-        expect(keys).toEqual(['path', 'element_type', 'label', 'has_binding']);
+        expect(keys).toEqual(['rel_path', 'element_type', 'label', 'has_binding']);
     });
 
-    it('ELEMENTS_COMPACT_COLUMNS keeps path + element_type only', () => {
+    it('ELEMENTS_COMPACT_COLUMNS keeps rel_path + element_type only', () => {
         const keys = ELEMENTS_COMPACT_COLUMNS.map((c) => c.key);
-        expect(keys).toEqual(['path', 'element_type']);
+        expect(keys).toEqual(['rel_path', 'element_type']);
     });
 
     it('mapElementRow handles `label` and `title` aliases', () => {
         expect(mapElementRow({ path: '/0', element_type: 's' })).toEqual({
             path: '/0',
+            rel_path: '/0',
             element_type: 's',
             label: '',
             has_binding: false,
@@ -38,6 +42,23 @@ describe('elements-format sidecar', () => {
         expect(
             mapElementRow({ path: '/2', element_type: 'h', title: 'Fallback Title' }).label,
         ).toBe('Fallback Title');
+    });
+
+    it('mapElementRow derives rel_path by stripping /templates/<id>/layout prefix (F-06)', () => {
+        const row = mapElementRow({
+            path: '/templates/I99YS8Ii/layout/children/0/children/2',
+            element_type: 'headline',
+        });
+        expect(row.path).toBe('/templates/I99YS8Ii/layout/children/0/children/2');
+        expect(row.rel_path).toBe('/children/0/children/2');
+    });
+
+    it('mapElementRow rel_path falls back to "/" for empty suffix', () => {
+        const row = mapElementRow({
+            path: '/templates/abc/layout',
+            element_type: 'root',
+        });
+        expect(row.rel_path).toBe('/');
     });
 
     it('mapElementRow marks has_binding=true when source is set', () => {
