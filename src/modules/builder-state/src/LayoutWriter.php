@@ -221,12 +221,23 @@ final class LayoutWriter
 
         /** @var mixed $verify */
         $verify = \get_option(LayoutReader::OPTION, null);
-        if ($verify !== $state) {
+        // Maria-Story E2E live-bug 2026-05-22: strict `!==` was too brittle —
+        // failed on benign PHP roundtrip differences (e.g. nested empty arrays
+        // surviving as `[]` here but coming back as `[]` from the get_option
+        // cache layer that uses a different array-vs-stdClass internal repr).
+        // Use serialise-comparison: identical bytes after maybe_serialize means
+        // the option holds an equivalent value. Real write failures still
+        // surface as different serialised forms.
+        $expected = \serialize($state);
+        $actual = \serialize($verify);
+        if ($expected !== $actual) {
             // R2.9 security-event breadcrumb so write-failures don't surface
             // only as opaque 500s without a forensics trail.
             SecurityLogger::log(SecurityLogger::EVENT_WRITE_FAILED, [
                 'option' => LayoutReader::OPTION,
                 'reason' => 'verify_read_did_not_match',
+                'expected_bytes' => strlen($expected),
+                'actual_bytes' => strlen($actual),
             ]);
             throw new \RuntimeException(
                 'LayoutWriter::persist failed — option value did not reflect write.',
