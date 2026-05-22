@@ -59,9 +59,12 @@ export async function handleElementBindSource(
         source_name: string;
         source_id?: string;
         etag: string;
+        bindingLevel?: 'auto' | 'container' | 'item';
+        field_mappings?: Record<string, string>;
     },
 ): Promise<ToolResult> {
-    const { template_id, element_path, source_name, source_id, etag } = input;
+    const { template_id, element_path, source_name, source_id, etag, bindingLevel, field_mappings } =
+        input;
     const encoded = encodeElementPath(element_path);
 
     // Wave G.4.3 — ambiguity resolution.
@@ -79,7 +82,18 @@ export async function handleElementBindSource(
     //     on supporting hosts; on unsupported hosts, return a
     //     structured `ambiguityFallbackError` listing every candidate
     //     so the agent can retry with `source_id`.
-    let resolvedBody: { source_name: string; source_id?: string } = { source_name };
+    let resolvedBody: {
+        source_name: string;
+        source_id?: string;
+        bindingLevel?: string;
+        field_mappings?: Record<string, string>;
+    } = { source_name };
+    if (bindingLevel !== undefined) {
+        resolvedBody.bindingLevel = bindingLevel;
+    }
+    if (field_mappings !== undefined) {
+        resolvedBody.field_mappings = field_mappings;
+    }
     if (source_id === undefined) {
         const candidates = await fetchSourceCandidates(client, source_name);
         if (candidates.length > 1) {
@@ -104,10 +118,10 @@ export async function handleElementBindSource(
                     context: { template_id, element_path, source_name },
                 });
             }
-            resolvedBody = { source_name, source_id: picked };
+            resolvedBody = { ...resolvedBody, source_id: picked };
         }
     } else {
-        resolvedBody = { source_name, source_id };
+        resolvedBody = { ...resolvedBody, source_id };
     }
 
     try {

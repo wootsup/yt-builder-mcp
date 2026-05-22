@@ -24,6 +24,7 @@ namespace WootsUp\BuilderMcp\SourceBinding;
 
 use WootsUp\BuilderMcp\Cache\CacheFlusher;
 use WootsUp\BuilderMcp\Elements\ElementOps;
+use WootsUp\BuilderMcp\Elements\ItemContainerMap;
 use WootsUp\BuilderMcp\Rest\EtagMiddleware;
 use WootsUp\BuilderMcp\Rest\PointerControllerTrait;
 use WootsUp\BuilderMcp\Rest\RestController;
@@ -211,7 +212,22 @@ final class SourcesController extends RestController
             $fieldMappings = $normalized;
         }
 
-        return $this->mutateBinding($templateId, $pointer, $sourceName, $fieldMappings);
+        // bindingLevel — steers the Multi-Items binding pattern.
+        $bindingLevel = 'auto';
+        if (array_key_exists('bindingLevel', $params)) {
+            /** @var mixed $rawLevel */
+            $rawLevel = $params['bindingLevel'];
+            if (!is_string($rawLevel) || !in_array($rawLevel, ['auto', 'container', 'item'], true)) {
+                return new \WP_Error(
+                    'yootheme_builder_mcp.source_binding.invalid_body',
+                    '`bindingLevel` must be one of "auto" | "container" | "item".',
+                    ['status' => 400],
+                );
+            }
+            $bindingLevel = $rawLevel;
+        }
+
+        return $this->mutateBinding($templateId, $pointer, $sourceName, $fieldMappings, $bindingLevel);
     }
 
     /**
@@ -254,6 +270,7 @@ final class SourcesController extends RestController
         string $pointer,
         ?string $sourceName,
         ?array $fieldMappings = null,
+        string $bindingLevel = 'auto',
     ) {
         // Wave-6 Fix 6: assert the pointer lives within the addressed template.
         $allowedPrefix = JsonPointer::compile(['templates', $templateId]);
@@ -285,6 +302,35 @@ final class SourcesController extends RestController
                 sprintf('Element at "%s" not found.', $pointer),
                 ['status' => 404],
             );
+        }
+
+        // D2 — Multi-Items pattern resolution. Only kicks in when we
+        // are setting a source (not on unbind).
+        $resolvedLevel = null;
+        $resolvedWarning = null;
+        if ($sourceName !== null) {
+            $resolution = self::resolveBindingLevel(
+                $bindingLevel,
+                $node,
+                $pointer,
+                $state,
+            );
+            if ($resolution instanceof \WP_Error) {
+                return $resolution;
+            }
+            // The resolver may have moved the pointer to a *_item child.
+            $pointer = $resolution['pointer'];
+            // Refresh the node so the post-mutation read sees the right one.
+            $node = $this->elements->get($pointer);
+            if ($node === null) {
+                return new \WP_Error(
+                    'yootheme_builder_mcp.source_binding.not_found',
+                    sprintf('Element at "%s" not found.', $pointer),
+                    ['status' => 404],
+                );
+            }
+            $resolvedLevel = $resolution['level'];
+            $resolvedWarning = $resolution['warning'] ?? null;
         }
 
         // Wave-6 Fix 5 (TOCTOU close): capture etag at start.
@@ -333,12 +379,123 @@ final class SourcesController extends RestController
                 ? ['source_name' => null, 'field_mappings' => []]
                 : self::buildBindingResponse($sourceName, $fieldMappings));
 
-        return new \WP_REST_Response([
+        $response = [
             'template_id' => $templateId,
             'element_path' => $pointer,
             'binding' => $binding,
             'etag' => $this->reader->etag(),
-        ], 200);
+        ];
+        if ($resolvedLevel !== null) {
+            $response['binding_level'] = $resolvedLevel;
+        }
+        if ($resolvedWarning !== null) {
+            $response['warning'] = $resolvedWarning;
+        }
+        return new \WP_REST_Response($response, 200);
+    }
+
+    /**
+     * Resolve the requested bindingLevel against the target node + state.
+     *
+     * Returns either:
+     *   - WP_Error  — bindingLevel='item' on a container with no *_item child
+     *   - array{pointer: string, level: 'item'|'container', warning?: string}
+     *
+     * @param array<string, mixed> $node
+     * @param array<string, mixed> $state
+     * @return array{pointer: string, level: string, warning?: string}|\WP_Error
+     */
+    private static function resolveBindingLevel(
+        string $requested,
+        array $node,
+        string $pointer,
+        array $state,
+    ) {
+        $type = isset($node['type']) && is_string($node['type']) ? $node['type'] : '';
+        $isContainer = ItemContainerMap::isContainer($type);
+        $isItem = ItemContainerMap::isItem($type);
+
+        // Targets that are neither container nor item — no Multi-Items
+        // resolution applies; pass through.
+        if (!$isContainer && !$isItem) {
+            return ['pointer' => $pointer, 'level' => 'container'];
+        }
+
+        // Normalise 'auto'.
+        if ($requested === 'auto') {
+            $requested = $isItem ? 'item' : 'container';
+        }
+
+        if ($requested === 'item') {
+            if ($isItem) {
+                return ['pointer' => $pointer, 'level' => 'item'];
+            }
+            // Container target — resolve to first *_item child.
+            $itemType = ItemContainerMap::itemOf($type);
+            $childPointer = self::firstChildOfType($node, $pointer, (string) $itemType);
+            if ($childPointer === null) {
+                return new \WP_Error(
+                    'yootheme_builder_mcp.source_binding.no_item_child',
+                    sprintf(
+                        'Container "%s" has no "%s" child element. Add one via element_add before binding at item level, or pass bindingLevel="container" to bind on the container itself.',
+                        $type,
+                        (string) $itemType,
+                    ),
+                    [
+                        'status' => 400,
+                        'container_type' => $type,
+                        'item_type' => $itemType,
+                        'hint' => sprintf(
+                            'Use element_add to insert a "%s" under this container, then re-call bind_source.',
+                            (string) $itemType,
+                        ),
+                    ],
+                );
+            }
+            return ['pointer' => $childPointer, 'level' => 'item'];
+        }
+
+        // requested === 'container'. Emit the structural-warning when
+        // the target has a matching *_item pair — caller asked for the
+        // legacy pattern explicitly.
+        if ($isContainer) {
+            $itemType = ItemContainerMap::itemOf($type);
+            return [
+                'pointer' => $pointer,
+                'level' => 'container',
+                'warning' => sprintf(
+                    'Binding lives on the container. YT-Pro SourceTransform::repeatSource clones the container N times instead of repeating items inside it. Move the binding to a "%s" child element for the canonical Multi-Items pattern.',
+                    (string) $itemType,
+                ),
+            ];
+        }
+
+        // Item target with explicit bindingLevel='container' — odd but
+        // legal; pass through without a warning (the user explicitly
+        // asked for it on a non-container).
+        return ['pointer' => $pointer, 'level' => 'container'];
+    }
+
+    /**
+     * Find the first direct child of $node whose `type` matches
+     * $itemType and return its JSON-Pointer; null if none.
+     *
+     * @param array<string, mixed> $node
+     */
+    private static function firstChildOfType(array $node, string $parentPointer, string $itemType): ?string
+    {
+        if (!isset($node['children']) || !is_array($node['children'])) {
+            return null;
+        }
+        foreach ($node['children'] as $index => $child) {
+            if (!is_array($child)) {
+                continue;
+            }
+            if (isset($child['type']) && is_string($child['type']) && $child['type'] === $itemType) {
+                return $parentPointer . '/children/' . (string) $index;
+            }
+        }
+        return null;
     }
 
     /**

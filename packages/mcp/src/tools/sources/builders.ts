@@ -70,9 +70,9 @@ export function buildSourcesTools(
         defineTool({
             name: 'yootheme_builder_element_bind_source',
             description:
-                'Bind a Builder source to an element (sets `props.source`). Pass ' +
-                'source_name from sources_list; pass source_id to disambiguate ' +
-                'cross-plugin name collisions. Requires ETag.',
+                'Binds a Builder source to an element (sets `props.source`). Use bindingLevel ' +
+                '"item" on Multi-Items containers (grid/slideshow/switcher/…) to bind on the ' +
+                'first *_item child instead of the container itself. Requires ETag.',
             inputSchema: {
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
@@ -89,6 +89,23 @@ export function buildSourcesTools(
                     .describe(
                         'Optional explicit "<origin>:<name>" id; skips ambiguity ' +
                             'resolution when ≥2 sources share `source_name`.',
+                    ),
+                field_mappings: z
+                    .record(z.string(), z.string())
+                    .optional()
+                    .describe(
+                        'Optional {prop_name: source_field_name} map written to `source.props`. ' +
+                            'Use yootheme_builder_inspect_multi_items_binding to discover the ' +
+                            'right level for the mapping.',
+                    ),
+                bindingLevel: z
+                    .enum(['auto', 'container', 'item'])
+                    .optional()
+                    .describe(
+                        'Multi-Items binding level. "auto" (default): item if target is a *_item, ' +
+                            'container otherwise. "item": container targets resolve to their first ' +
+                            '*_item child. "container": binds on the container, response carries a ' +
+                            'warning because YT-Pro will clone the container N times.',
                     ),
                 etag: ETAG,
             },
