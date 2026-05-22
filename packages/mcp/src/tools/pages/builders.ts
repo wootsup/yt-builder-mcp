@@ -15,7 +15,6 @@ import type { RestClient } from '../../client.js';
 import { TEMPLATE_ID } from '../shared-schemas.js';
 import { FIELDS, FLAT } from '../sparse-fields.js';
 import {
-    creating,
     defineTool,
     mutating,
     readOnly,
@@ -44,9 +43,8 @@ const ETAG = z
     .optional()
     .describe(
         'Optimistic-lock ETag (from yootheme_builder_get_etag). ' +
-            'Optional at template level — when provided, enforces precondition ' +
-            'and returns 412 on conflict; when omitted, save/publish proceeds ' +
-            'unconditionally. For safety in collaborative edits, pass the ETag.',
+            'Optional; when provided, optimistic-lock is enforced (412 on conflict). ' +
+            'When omitted, last-write-wins applies. Recommended for collaborative edits.',
     );
 
 export function buildPagesTools(client: RestClient): readonly AnyToolDefinition[] {
@@ -107,9 +105,9 @@ export function buildPagesTools(client: RestClient): readonly AnyToolDefinition[
         defineTool({
             name: 'yootheme_builder_page_save',
             description:
-                'Re-run save-transforms on a template and persist. Useful after a series of ' +
-                'low-level writes to trigger the Builder normalization pass. ETag optional ' +
-                '(recommended for safety in collaborative edits).',
+                'Re-run save-transforms and persist. ETag optional — when provided, 412 on ' +
+                'conflict; when omitted, last-write-wins. Recommended for collaborative edits. ' +
+                'No-op when state is byte-identical (returns `no_changes:true`, ETag unchanged).',
             inputSchema: {
                 template_id: TEMPLATE_ID,
                 etag: ETAG,
@@ -121,14 +119,17 @@ export function buildPagesTools(client: RestClient): readonly AnyToolDefinition[
         defineTool({
             name: 'yootheme_builder_page_publish',
             description:
-                'Publish a template — persists state, flushes YOOtheme + WP caches, and ' +
-                'snapshots the published-state ETag. Subsequent reads serve the freshly ' +
-                'published layout. ETag optional (recommended for safety in collaborative edits).',
+                'Publish a template — persist state, flush YT + WP caches, snapshot the ' +
+                'published-state ETag. ETag optional — when provided, 412 on conflict; when ' +
+                'omitted, last-write-wins. Recommended for collaborative edits.',
             inputSchema: {
                 template_id: TEMPLATE_ID,
                 etag: ETAG,
             },
-            annotations: creating('Publish Page'),
+            // Stream D3 T3: publish is idempotent — re-running on an
+            // unchanged template snapshots the same ETag and flushes
+            // the same caches. Matrix marks `idempotentHint:true`.
+            annotations: mutating('Publish Page'),
             handler: (input, extra) => handlePagePublish(client, input, extra),
         }),
     ];

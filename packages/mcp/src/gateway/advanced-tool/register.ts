@@ -55,11 +55,18 @@ export function registerAdvancedTool(
             title: 'Advanced Tool Gateway',
             description: buildDescription(advancedNames),
             inputSchema: gatewayInputSchema(enumValues),
+            // Stream D3 T3: gateway is the only L1 tool that retains
+            // `openWorldHint:true` — its effective behaviour is
+            // dynamic (target tool decided at call-time). Conservative
+            // spec-default marks it destructive because it can route
+            // into delete/unbind handlers; the destination tool's own
+            // confirm-guard still gates the actual mutation.
             annotations: {
                 title: 'Advanced Tool Gateway',
                 readOnlyHint: false,
-                openWorldHint: true,
+                destructiveHint: true,
                 idempotentHint: false,
+                openWorldHint: true,
             },
         },
         async (args, extra): Promise<CallToolResult> => {

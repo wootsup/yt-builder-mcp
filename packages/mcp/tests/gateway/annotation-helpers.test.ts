@@ -19,44 +19,55 @@ import {
     readOnly,
 } from '../../src/tools/tool-builder.js';
 
-describe('annotation helpers — shape pins', () => {
-    it('readOnly("X") sets readOnlyHint=true + openWorldHint=true, no mutation flags', () => {
+describe('annotation helpers — shape pins (D3 T3 — all 4 hints explicit)', () => {
+    // T3 (Audit-v3 / Anthropic MCP spec 2026-03-16):
+    // every registered tool MUST advertise ALL four behavioural hints
+    // (readOnly, destructive, idempotent, openWorld). Conservative
+    // spec-default treats absence as "potentially destructive" — so
+    // each helper now sets the full 4-tuple. `openWorldHint:false`
+    // reflects the closed Builder domain (REST is a local WordPress
+    // option store, no external world-side-effects).
+    it('readOnly("X") sets all 4 hints explicitly (closed-world)', () => {
         const ann = readOnly('X');
         expect(ann).toEqual({
             title: 'X',
             readOnlyHint: true,
-            openWorldHint: true,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: false,
         });
     });
 
-    it('mutating("X") sets readOnlyHint=false + idempotentHint=true + openWorldHint=true', () => {
+    it('mutating("X") sets all 4 hints (idempotent write, non-destructive)', () => {
         const ann = mutating('X');
         expect(ann).toEqual({
             title: 'X',
             readOnlyHint: false,
-            openWorldHint: true,
+            destructiveHint: false,
             idempotentHint: true,
+            openWorldHint: false,
         });
     });
 
-    it('creating("X") sets readOnlyHint=false + idempotentHint=false + openWorldHint=true', () => {
+    it('creating("X") sets all 4 hints (non-idempotent additive write)', () => {
         const ann = creating('X');
         expect(ann).toEqual({
             title: 'X',
             readOnlyHint: false,
-            openWorldHint: true,
+            destructiveHint: false,
             idempotentHint: false,
+            openWorldHint: false,
         });
     });
 
-    it('destructive("X") sets destructiveHint=true + readOnlyHint=false + idempotentHint=false + openWorldHint=true', () => {
+    it('destructive("X") sets all 4 hints (destructive, non-idempotent)', () => {
         const ann = destructive('X');
         expect(ann).toEqual({
             title: 'X',
             readOnlyHint: false,
             destructiveHint: true,
-            openWorldHint: true,
             idempotentHint: false,
+            openWorldHint: false,
         });
     });
 
@@ -67,10 +78,10 @@ describe('annotation helpers — shape pins', () => {
         expect(destructive().title).toBeUndefined();
     });
 
-    it('lane disjointness: destructive is the only helper that sets destructiveHint', () => {
-        expect(readOnly().destructiveHint).toBeUndefined();
-        expect(mutating().destructiveHint).toBeUndefined();
-        expect(creating().destructiveHint).toBeUndefined();
+    it('lane disjointness: destructive is the only helper that sets destructiveHint=true', () => {
+        expect(readOnly().destructiveHint).toBe(false);
+        expect(mutating().destructiveHint).toBe(false);
+        expect(creating().destructiveHint).toBe(false);
         expect(destructive().destructiveHint).toBe(true);
     });
 
@@ -81,10 +92,17 @@ describe('annotation helpers — shape pins', () => {
         expect(destructive().readOnlyHint).toBe(false);
     });
 
-    it('lane disjointness: mutating is the only helper that sets idempotentHint=true', () => {
-        expect(readOnly().idempotentHint).toBeUndefined();
+    it('lane disjointness: readOnly+mutating set idempotentHint=true; creating+destructive set false', () => {
+        expect(readOnly().idempotentHint).toBe(true);
         expect(mutating().idempotentHint).toBe(true);
         expect(creating().idempotentHint).toBe(false);
         expect(destructive().idempotentHint).toBe(false);
+    });
+
+    it('every helper sets openWorldHint=false (closed Builder domain)', () => {
+        expect(readOnly().openWorldHint).toBe(false);
+        expect(mutating().openWorldHint).toBe(false);
+        expect(creating().openWorldHint).toBe(false);
+        expect(destructive().openWorldHint).toBe(false);
     });
 });

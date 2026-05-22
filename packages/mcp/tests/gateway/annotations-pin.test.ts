@@ -32,6 +32,12 @@ describe('annotation pin tests (all lanes)', () => {
         const all = collectAllRegisteredTools(mcp, capturing);
         for (const [name, tool] of Object.entries(all)) {
             const ann = tool.annotations ?? {};
+            // Stream D3 T3: the gateway router carries `destructiveHint:
+            // true` because it can dispatch into delete/unbind handlers,
+            // but it is not itself the mutation site — the target tool's
+            // own confirm-guard enforces the prompt. Exempt from the
+            // per-tool confirm rule.
+            if (name === 'yootheme_builder_advanced') continue;
             if (ann.destructiveHint === true) {
                 // F-16 (2026-05-22): destructive tools now span lanes. L2
                 // advanced tools carry the raw `defineTool`-shape map; L1
@@ -85,16 +91,105 @@ describe('annotation pin tests (all lanes)', () => {
         }
     });
 
-    it('gateway tool annotations: non-readOnly, openWorld, non-idempotent', () => {
+    it('gateway tool annotations: non-readOnly, destructive, openWorld, non-idempotent', () => {
         const { mcp, capturing } = createServer({ client: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         const gw = all.yootheme_builder_advanced;
         expect(gw).toBeDefined();
         const ann = gw!.annotations ?? {};
-        expect(ann.openWorldHint).toBe(true);
-        // Gateway is a router; it may dispatch into mutating or destructive
-        // handlers. It should not advertise itself as read-only.
+        // Gateway is a router that can dispatch into delete/unbind
+        // handlers — conservative spec-default treats it as destructive.
+        // openWorld=true because the gateway's behaviour is dynamic
+        // (target tool decided at call-time), making it effectively
+        // open-world from the host's UI perspective.
         expect(ann.readOnlyHint).toBe(false);
+        expect(ann.destructiveHint).toBe(true);
+        expect(ann.idempotentHint).toBe(false);
+        expect(ann.openWorldHint).toBe(true);
+    });
+
+    // T3 (Audit-v3): every registered tool MUST carry the full 4-hint
+    // tuple (readOnly + destructive + idempotent + openWorld). Anthropic
+    // MCP spec 2026-03-16 — conservative default treats `undefined` hints
+    // as "potentially destructive". Setting all 4 explicitly removes that
+    // ambiguity.
+    it('every registered tool sets ALL four behavioural hints explicitly', () => {
+        const { mcp, capturing } = createServer({ client: makeClient() });
+        const all = collectAllRegisteredTools(mcp, capturing);
+        for (const [name, tool] of Object.entries(all)) {
+            const ann = tool.annotations ?? {};
+            expect(typeof ann.readOnlyHint, `${name}.readOnlyHint must be boolean`).toBe('boolean');
+            expect(typeof ann.destructiveHint, `${name}.destructiveHint must be boolean`).toBe(
+                'boolean',
+            );
+            expect(typeof ann.idempotentHint, `${name}.idempotentHint must be boolean`).toBe(
+                'boolean',
+            );
+            expect(typeof ann.openWorldHint, `${name}.openWorldHint must be boolean`).toBe(
+                'boolean',
+            );
+        }
+    });
+
+    // T3 per-tool matrix (Stream D3 spec — Audit-v3 Anthropic alignment).
+    // Builder domain is closed-world (REST is a local WP option store);
+    // gateway is the only open-world router.
+    const EXPECTED_MATRIX: Record<
+        string,
+        {
+            readOnlyHint: boolean;
+            destructiveHint: boolean;
+            idempotentHint: boolean;
+            openWorldHint: boolean;
+        }
+    > = {
+        // read-only L1 + L3
+        yootheme_builder_health: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_diagnose: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_get_etag: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_pages_list: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_page_get_layout: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_page_get_schema: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_element_list: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_element_get: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_element_types_list: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_element_type_get_schema: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_sources_list: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_element_get_binding: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_inspect_multi_items_binding: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+
+        // additive (creating) writes — not idempotent
+        yootheme_builder_element_add: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+        yootheme_builder_element_clone: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+
+        // idempotent mutating writes
+        yootheme_builder_element_bind_source: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_element_update_settings: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_element_move: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_page_save: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_page_publish: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+        yootheme_builder_clean_implode_directives: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+
+        // destructive writes
+        yootheme_builder_element_delete: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+        yootheme_builder_element_unbind_source: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+
+        // gateway — open-world router, dispatches into destructive handlers
+        yootheme_builder_advanced: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+    };
+
+    it('per-tool annotation matrix matches T3 spec (Audit-v3)', () => {
+        const { mcp, capturing } = createServer({ client: makeClient() });
+        const all = collectAllRegisteredTools(mcp, capturing);
+        for (const [name, expected] of Object.entries(EXPECTED_MATRIX)) {
+            const tool = all[name];
+            if (!tool) continue; // tool may not yet exist (D1 template_summary)
+            const ann = tool.annotations ?? {};
+            expect(ann.readOnlyHint, `${name}.readOnlyHint`).toBe(expected.readOnlyHint);
+            expect(ann.destructiveHint, `${name}.destructiveHint`).toBe(expected.destructiveHint);
+            expect(ann.idempotentHint, `${name}.idempotentHint`).toBe(expected.idempotentHint);
+            expect(ann.openWorldHint, `${name}.openWorldHint`).toBe(expected.openWorldHint);
+        }
     });
 
     it('pin snapshot: per-tool annotation shape (alphabetised)', () => {
@@ -104,18 +199,21 @@ describe('annotation pin tests (all lanes)', () => {
         for (const name of Object.keys(all).sort()) {
             snapshot[name] = all[name]!.annotations ?? {};
         }
-        // Inline snapshot pins the structure — any unintentional change
-        // shows up as a test diff. (Title strings excluded as they are
-        // free-form labels.)
-        expect(Object.keys(snapshot).length).toBe(24);
-        // Every entry has at minimum a hint flag set.
+        // Tool count is 24 (post-F-16 promotion). D1 may add
+        // `template_summary` — adjust expected count if/when it lands.
+        expect(Object.keys(snapshot).length).toBeGreaterThanOrEqual(24);
+        // Every entry advertises the full 4-tuple (T3 enforcement).
         for (const [name, ann] of Object.entries(snapshot)) {
-            const hasAnyHint =
-                ann.readOnlyHint !== undefined ||
-                ann.destructiveHint !== undefined ||
-                ann.idempotentHint !== undefined ||
-                ann.openWorldHint !== undefined;
-            expect(hasAnyHint, `${name} annotations carry no behavioural hint`).toBe(true);
+            expect(typeof ann.readOnlyHint, `${name}.readOnlyHint must be boolean`).toBe('boolean');
+            expect(typeof ann.destructiveHint, `${name}.destructiveHint must be boolean`).toBe(
+                'boolean',
+            );
+            expect(typeof ann.idempotentHint, `${name}.idempotentHint must be boolean`).toBe(
+                'boolean',
+            );
+            expect(typeof ann.openWorldHint, `${name}.openWorldHint must be boolean`).toBe(
+                'boolean',
+            );
         }
     });
 });
