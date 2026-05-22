@@ -114,7 +114,15 @@ final class HealthController extends PublicRestController
         return [
             'plugin_version' => defined('YTB_MCP_VERSION') ? (string) YTB_MCP_VERSION : 'dev',
             'status' => 'ok',
+            // F-09 fix (Maria-Audit 2026-05-22): getVersion() now walks
+            // every known YT-Pro version-surface (plugin constant,
+            // \YOOtheme\Theme::VERSION reflection, DI scalar) before
+            // surfacing null.
             'yootheme_version' => $this->yootheme->getVersion(),
+            // F-09 (cont.): surface YOOessentials version when present, so
+            // support can correlate element-type availability with the
+            // companion-plugin version.
+            'yooessentials_version' => $this->yootheme->getEssentialsVersion(),
             'wp_version' => $this->detect_wp_version(),
             // Spike-Outcomes (2026-05-21): real storage is wp_option('yootheme'),
             // not wp_posts.post_content. Surfaced here so the MCP-Setup-Wizard

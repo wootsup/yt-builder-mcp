@@ -70,9 +70,11 @@ class YoothemeAdapter
         // 2. Class-constant reflection. `\YOOtheme\Theme::VERSION` is the
         // canonical surface on theme-bundled YT 4 builds. Reflection
         // avoids a hard class-load when the class isn't autoloadable.
-        if (class_exists('\\YOOtheme\\Theme', false)) {
+        /** @var class-string $themeClass */
+        $themeClass = '\\YOOtheme\\Theme';
+        if (class_exists($themeClass, false)) {
             try {
-                $reflection = new \ReflectionClass('\\YOOtheme\\Theme');
+                $reflection = new \ReflectionClass($themeClass);
                 if ($reflection->hasConstant('VERSION')) {
                     $v = $reflection->getConstant('VERSION');
                     if (is_string($v) && $v !== '') {
@@ -120,7 +122,9 @@ class YoothemeAdapter
             }
         }
         // Class-constant reflection fallback.
-        foreach (['\\Yooessentials\\Plugin', '\\YOOessentials\\Plugin'] as $candidate) {
+        /** @var list<class-string> $candidates */
+        $candidates = ['\\Yooessentials\\Plugin', '\\YOOessentials\\Plugin'];
+        foreach ($candidates as $candidate) {
             if (class_exists($candidate, false)) {
                 try {
                     $reflection = new \ReflectionClass($candidate);

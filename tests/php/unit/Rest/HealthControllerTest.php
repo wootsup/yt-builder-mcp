@@ -81,4 +81,24 @@ final class HealthControllerTest extends TestCase
         self::assertSame('yt-builder-mcp/v1', RestController::NAMESPACE);
         self::assertSame('yt-builder-mcp/v1', PublicRestController::NAMESPACE);
     }
+
+    /**
+     * F-09 fix (Maria-Audit 2026-05-22): the authenticated payload must
+     * carry `yooessentials_version`. The value is null in the test
+     * environment (no companion plugin loaded) — what we pin here is
+     * the presence of the key, so the field is reliably surfaced and
+     * MCP clients/wizards can render an "n/a" badge instead of
+     * silently omitting the row.
+     */
+    public function test_authenticated_payload_exposes_essentials_version_key(): void
+    {
+        $bundle = \WootsUp\BuilderMcp\Tests\TestVerifierFactory::verifierWithKey('read');
+        $controller = new HealthController($bundle['verifier']);
+        $req = new \WP_REST_Request('GET', '/');
+        $req->set_header('Authorization', 'Bearer ' . $bundle['token']);
+        $payload = $controller->payload($req);
+
+        self::assertArrayHasKey('yooessentials_version', $payload);
+        self::assertArrayHasKey('yootheme_version', $payload);
+    }
 }

@@ -111,4 +111,52 @@ final class PagesWriteTest extends TestCase
         self::assertTrue($data['saved']);
         self::assertTrue($data['published']);
     }
+
+    /**
+     * F-10 fix (Maria-Audit 2026-05-22): GET /etag must carry a
+     * `generated_at` ISO-8601 timestamp so callers can distinguish a
+     * fresh server probe from a stale cached response.
+     */
+    public function test_get_etag_carries_generated_at_iso_timestamp(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_etag($req);
+        $data = $resp->get_data();
+
+        self::assertArrayHasKey('etag', $data);
+        self::assertArrayHasKey('generated_at', $data);
+        // RFC-3339 / ISO-8601 with explicit zone offset (`+00:00` or `Z`).
+        self::assertMatchesRegularExpression(
+            '/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:Z|[+-]\d{2}:\d{2})$/',
+            $data['generated_at'],
+        );
+    }
+
+    /**
+     * F-15 fix (Maria-Audit 2026-05-22): page_publish must surface a
+     * persisted "published-state etag" snapshot so callers can diff
+     * draft-vs-published, plus an explanatory `note` (YT Pro templates
+     * publish-on-save — this is a cache-flush + state-snapshot op).
+     */
+    public function test_publish_page_persists_published_state_etag_and_note(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('POST', '/');
+        $req['template_id'] = 'tpl';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->publish_page($req);
+        $data = $resp->get_data();
+
+        self::assertTrue($data['published']);
+        self::assertArrayHasKey('published_state_etag', $data);
+        self::assertSame($data['etag'], $data['published_state_etag']);
+        self::assertArrayHasKey('note', $data);
+
+        // The published_state_etag must persist to wp_option for diffing.
+        $persisted = $GLOBALS['ytb_test_options']['ytb_mcp_published_state_etag'] ?? null;
+        self::assertSame($data['etag'], $persisted);
+    }
 }
