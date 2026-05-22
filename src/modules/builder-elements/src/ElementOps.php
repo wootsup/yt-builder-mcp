@@ -35,13 +35,18 @@ final class ElementOps
      * Return a flat depth-first list of every element on the template, or
      * null if the template is unknown.
      *
-     * Each entry exposes:
+     * Each entry exposes (F-01 normalized):
      *  - path:          JSON-Pointer into the global wp_option document
-     *  - type:          element-type name (e.g. 'section', 'headline')
+     *  - element_type:  canonical wire field (lowercase element kind).
+     *                   The MCP TS row-mapper reads this directly.
+     *  - type:          legacy alias of element_type (back-compat).
+     *  - label?:        human-readable label (alias of node.name).
      *  - props_summary: list of prop keys present on the node, no values
      *                   (callers fetch full settings via getSettings()).
+     *  - has_binding:   true when the node carries a source binding.
+     *  - child_count:   number of direct children.
      *
-     * @return list<array{path: string, type: string, props_summary: list<string>}>|null
+     * @return list<array{path: string, element_type: string, type: string, label?: string, props_summary: list<string>, has_binding: bool, child_count: int}>|null
      */
     public function listOnTemplate(string $templateId): ?array
     {
@@ -53,13 +58,23 @@ final class ElementOps
         if (isset($tpl['layout']) && is_array($tpl['layout'])) {
             $basePointer = JsonPointer::compile(['templates', $templateId, 'layout']);
             foreach (TreeWalker::walk($tpl['layout'], $basePointer) as [$pointer, $node]) {
-                $out[] = [
+                $type = isset($node['type']) && is_string($node['type'])
+                    ? $node['type']
+                    : 'unknown';
+                $entry = [
                     'path' => $pointer,
-                    'type' => isset($node['type']) && is_string($node['type'])
-                        ? $node['type']
-                        : 'unknown',
+                    'element_type' => $type,
+                    'type' => $type,
                     'props_summary' => self::propKeys($node),
+                    'has_binding' => self::hasBinding($node),
+                    'child_count' => isset($node['children']) && is_array($node['children'])
+                        ? count(array_filter($node['children'], 'is_array'))
+                        : 0,
                 ];
+                if (isset($node['name']) && is_string($node['name'])) {
+                    $entry['label'] = $node['name'];
+                }
+                $out[] = $entry;
             }
         }
         return $out;
@@ -114,6 +129,110 @@ final class ElementOps
             $keys[] = (string) $key;
         }
         return $keys;
+    }
+
+    // ---------------------------------------------------------------------
+    // F-01 — canonical element-view normalizer.
+    //
+    // The raw YT layout-node stores its element kind under `type`. The MCP
+    // TS toolkit reads `element_type` (a wider, label-friendlier key —
+    // `type` collides with TS-table column keys and HTTP MIME types). The
+    // normalizer below produces ONE canonical wire shape consumed by:
+    //   • element_get  (full detail — keep nested children as raw)
+    //   • element_list (row shape — children/props summarised by upstream)
+    //   • page_get_schema (flat node list — element_type + has_binding)
+    //
+    // Maria-Audit 2026-05-22 surfaced that element_get was returning empty
+    // `type`/`props`/`children`/`binding` because PHP wrapped the node in
+    // `{element: <node>}` and the TS reader expected those keys at top-level.
+    // The structural fix is to expose a flat normalized record — `element`
+    // is kept as a legacy alias for back-compat with older builds.
+    // ---------------------------------------------------------------------
+
+    /**
+     * Project a raw layout node to the canonical MCP wire shape.
+     *
+     * Output fields:
+     *   - path:         JSON-Pointer into the global wp_option document
+     *                   (callers pass it in; never derived here).
+     *   - element_type: lowercase element-kind ('section', 'headline', ...).
+     *                   Canonical wire field — the raw layout-node uses
+     *                   `type`. We surface BOTH so legacy MCP-clients still
+     *                   work.
+     *   - type:         legacy alias of element_type.
+     *   - label:        human-readable label (alias of node.name, when present).
+     *   - props:        the raw `props` object (string-keyed; missing → {}).
+     *   - children:     the raw `children` array — list of nested nodes
+     *                   in their original (NOT normalized) shape so the
+     *                   detail-render in the TS layer can walk them.
+     *   - has_binding:  true when `props.source` is present (string or
+     *                   structured F-13 shape).
+     *   - child_count:  count(children).
+     *
+     * @param array<string, mixed> $node
+     * @return array{path: string, element_type: string, type: string, label?: string, props: array<string, mixed>, children: list<array<string, mixed>>, has_binding: bool, child_count: int}
+     */
+    public static function flattenNode(array $node, string $path): array
+    {
+        $type = isset($node['type']) && is_string($node['type']) ? $node['type'] : 'unknown';
+        $props = isset($node['props']) && is_array($node['props']) ? $node['props'] : [];
+        /** @var array<string, mixed> $props */
+
+        $children = [];
+        if (isset($node['children']) && is_array($node['children'])) {
+            foreach ($node['children'] as $child) {
+                if (!is_array($child)) {
+                    continue;
+                }
+                /** @var array<string, mixed> $child */
+                $children[] = $child;
+            }
+        }
+
+        $entry = [
+            'path' => $path,
+            'element_type' => $type,
+            'type' => $type,
+            'props' => $props,
+            'children' => $children,
+            'has_binding' => self::hasBinding($node),
+            'child_count' => count($children),
+        ];
+        if (isset($node['name']) && is_string($node['name'])) {
+            $entry['label'] = $node['name'];
+        }
+        return $entry;
+    }
+
+    /**
+     * F-01: same binding-presence heuristic used by PageQuery::schema() and
+     * the MCP TS `mapElementRow` mapper. Both the legacy plain-string and
+     * the F-13 structured shape count as a binding.
+     *
+     * @param array<string, mixed> $node
+     */
+    private static function hasBinding(array $node): bool
+    {
+        if (!isset($node['props']) || !is_array($node['props'])) {
+            return false;
+        }
+        /** @var array<string, mixed> $props */
+        $props = $node['props'];
+        if (!array_key_exists('source', $props)) {
+            return false;
+        }
+        $source = $props['source'];
+        if (is_string($source)) {
+            return $source !== '';
+        }
+        if (is_array($source)) {
+            // F-13 structured shape: {query: {name: ...}, ...} is "bound"
+            // when query.name is a non-empty string.
+            return isset($source['query']['name'])
+                && is_string($source['query']['name'])
+                && $source['query']['name'] !== '';
+        }
+        return false;
     }
 
     // ---------------------------------------------------------------------

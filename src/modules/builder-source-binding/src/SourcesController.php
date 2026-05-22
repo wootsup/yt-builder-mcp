@@ -130,9 +130,20 @@ final class SourcesController extends RestController
             );
         }
 
+        // F-01: surface the canonical binding fields at the top level so
+        // the MCP TS `handleElementGetBinding` reader sees `source_name`
+        // and `field_mappings` directly. We keep `binding` as a nested
+        // back-compat alias.
+        $binding = self::extractBinding($node);
         return new \WP_REST_Response([
+            'template_id' => (string) $request['template_id'],
             'path' => $pointer,
-            'binding' => self::extractBinding($node),
+            'element_path' => $pointer,
+            'source_name' => $binding['source_name'],
+            'field_mappings' => $binding['field_mappings'],
+            'has_binding' => is_string($binding['source_name']) && $binding['source_name'] !== '',
+            'binding' => $binding,
+            'etag' => $this->reader->etag(),
         ], 200);
     }
 

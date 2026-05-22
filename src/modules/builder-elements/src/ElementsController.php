@@ -156,9 +156,13 @@ final class ElementsController extends RestController
                 ['status' => 404],
             );
         }
+        // F-02: `total` is the recursive count from the same walker that
+        // feeds pages_list.elements_count and page_get_schema.total — they
+        // are guaranteed to agree for any given state.
         return new \WP_REST_Response([
             'template_id' => $id,
             'elements' => $list,
+            'total' => count($list),
             'etag' => $this->reader->etag(),
         ], 200);
     }
@@ -187,8 +191,23 @@ final class ElementsController extends RestController
                 ['status' => 404],
             );
         }
+        // F-01: surface the canonical normalized shape at the top level
+        // ({element_type, props, children, has_binding, child_count}) — the
+        // MCP TS handler reads these keys directly. We keep `element` as
+        // a legacy alias carrying the raw node for back-compat with older
+        // MCP-clients that may still walk the nested object.
+        $view = ElementOps::flattenNode($node, $pointer);
         return new \WP_REST_Response([
+            'template_id' => (string) $request['template_id'],
             'path' => $pointer,
+            'element_path' => $pointer,
+            'element_type' => $view['element_type'],
+            'type' => $view['type'],
+            'props' => $view['props'],
+            'children' => $view['children'],
+            'has_binding' => $view['has_binding'],
+            'child_count' => $view['child_count'],
+            'label' => $view['label'] ?? null,
             'element' => $node,
             'etag' => $this->reader->etag(),
         ], 200);

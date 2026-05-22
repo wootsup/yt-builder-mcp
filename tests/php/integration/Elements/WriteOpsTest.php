@@ -284,6 +284,64 @@ final class WriteOpsTest extends TestCase
         self::assertSame((new LayoutReader())->etag(), $data['etag']);
     }
 
+    // ------------------------------------------------------------------
+    // F-01 — get_element response shape (flat canonical fields).
+    // ------------------------------------------------------------------
+
+    public function test_get_element_returns_canonical_flat_shape(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_element($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        $data = $resp->get_data();
+        // Canonical top-level keys read by the MCP TS handler.
+        self::assertSame('section', $data['element_type']);
+        self::assertSame('section', $data['type']);
+        self::assertSame(['style' => 'default'], $data['props']);
+        self::assertCount(1, $data['children']);
+        self::assertSame('headline', $data['children'][0]['type']);
+        self::assertFalse($data['has_binding']);
+        self::assertSame(1, $data['child_count']);
+        // Legacy `element` alias preserved for back-compat.
+        self::assertArrayHasKey('element', $data);
+        self::assertSame('section', $data['element']['type']);
+    }
+
+    public function test_get_element_surfaces_has_binding_true_for_bound_node(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][1]['props']['source']
+            = ['query' => ['name' => 'posts.singlePost']];
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_element($req);
+        $data = $resp->get_data();
+        self::assertTrue($data['has_binding']);
+    }
+
+    public function test_list_elements_returns_total_matching_recursive_count(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->list_elements($req);
+        $data = $resp->get_data();
+        self::assertArrayHasKey('total', $data);
+        self::assertSame(count($data['elements']), $data['total']);
+        // tpl seeded with section + headline + image = 3.
+        self::assertSame(3, $data['total']);
+    }
+
     /**
      * F-07 fix (Maria-Audit 2026-05-22): a mutation cycle A→B→A must
      * surface three distinct ETags even when the final state byte-equals

@@ -289,4 +289,48 @@ final class BindingWriteTest extends TestCase
         self::assertNull($data['binding']['source_name']);
         self::assertSame([], $data['binding']['field_mappings']);
     }
+
+    // -------------------------------------------------------------
+    // F-01 — get_binding exposes canonical fields at the top level
+    // (`source_name`, `field_mappings`, `has_binding`) so the MCP TS
+    // `handleElementGetBinding` reader sees them directly.
+    // -------------------------------------------------------------
+
+    public function test_get_binding_surfaces_canonical_fields_at_top_level(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][0]['props']['source'] = [
+            'query' => ['name' => 'posts.posts'],
+            'props' => [
+                'title' => ['name' => 'post_title', 'filters' => new \stdClass()],
+            ],
+        ];
+
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0/binding';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_binding($req);
+        $data = $resp->get_data();
+        self::assertSame('posts.posts', $data['source_name']);
+        self::assertSame(['title' => 'post_title'], $data['field_mappings']);
+        self::assertTrue($data['has_binding']);
+        // ETag surfaced too (TS handler uses it for optimistic-lock chains).
+        self::assertArrayHasKey('etag', $data);
+    }
+
+    public function test_get_binding_unbound_returns_has_binding_false(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/binding';
+
+        $resp = $controller->get_binding($req);
+        $data = $resp->get_data();
+        self::assertNull($data['source_name']);
+        self::assertSame([], $data['field_mappings']);
+        self::assertFalse($data['has_binding']);
+    }
 }

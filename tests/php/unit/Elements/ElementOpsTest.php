@@ -81,6 +81,120 @@ final class ElementOpsTest extends TestCase
         self::assertSame(['source'], $byType['image']['props_summary']);
     }
 
+    // -------------------------------------------------------------
+    // F-01 — canonical normalized row shape
+    // (element_type / has_binding / child_count).
+    // -------------------------------------------------------------
+
+    public function test_list_on_template_exposes_canonical_element_type(): void
+    {
+        $ops = new ElementOps(new LayoutReader());
+        $list = $ops->listOnTemplate('tpl');
+        self::assertNotNull($list);
+        // Every entry must carry `element_type` (canonical) AND `type`
+        // (legacy alias) — they must agree.
+        foreach ($list as $entry) {
+            self::assertArrayHasKey('element_type', $entry);
+            self::assertArrayHasKey('type', $entry);
+            self::assertSame($entry['type'], $entry['element_type']);
+        }
+    }
+
+    public function test_list_on_template_exposes_child_count(): void
+    {
+        $ops = new ElementOps(new LayoutReader());
+        $list = $ops->listOnTemplate('tpl');
+        self::assertNotNull($list);
+        $byType = [];
+        foreach ($list as $entry) {
+            $byType[$entry['type']] = $entry;
+        }
+        // section has 1 direct child (the headline).
+        self::assertSame(1, $byType['section']['child_count']);
+        // headline + image are leaves.
+        self::assertSame(0, $byType['headline']['child_count']);
+        self::assertSame(0, $byType['image']['child_count']);
+    }
+
+    public function test_list_on_template_exposes_has_binding(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'layout' => [
+                        'type' => 'layout',
+                        'children' => [
+                            ['type' => 'headline', 'props' => ['source' => 'posts.posts', 'content' => 'X']],
+                            ['type' => 'image', 'props' => ['source' => ['query' => ['name' => 'posts.singlePost']]]],
+                            ['type' => 'text', 'props' => ['content' => 'plain']],
+                            ['type' => 'divider'],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+        $ops = new ElementOps(new LayoutReader());
+        $list = $ops->listOnTemplate('tpl');
+        self::assertNotNull($list);
+        $byType = [];
+        foreach ($list as $entry) {
+            $byType[$entry['type']] = $entry;
+        }
+        self::assertTrue($byType['headline']['has_binding']); // legacy string shape
+        self::assertTrue($byType['image']['has_binding']);    // F-13 structured shape
+        self::assertFalse($byType['text']['has_binding']);    // unbound
+        self::assertFalse($byType['divider']['has_binding']); // no props
+    }
+
+    public function test_flatten_node_emits_canonical_shape(): void
+    {
+        $node = [
+            'type' => 'headline',
+            'name' => 'Hero Headline',
+            'props' => ['content' => 'Hi', 'source' => 'posts.posts'],
+            'children' => [
+                ['type' => 'span'],
+            ],
+        ];
+        $view = ElementOps::flattenNode($node, '/x/0');
+        self::assertSame('/x/0', $view['path']);
+        self::assertSame('headline', $view['element_type']);
+        self::assertSame('headline', $view['type']);
+        self::assertSame('Hero Headline', $view['label']);
+        self::assertSame(['content' => 'Hi', 'source' => 'posts.posts'], $view['props']);
+        self::assertCount(1, $view['children']);
+        self::assertTrue($view['has_binding']);
+        self::assertSame(1, $view['child_count']);
+    }
+
+    public function test_flatten_node_handles_unknown_type(): void
+    {
+        $view = ElementOps::flattenNode(['props' => []], '/x');
+        self::assertSame('unknown', $view['element_type']);
+        self::assertSame('unknown', $view['type']);
+        self::assertSame([], $view['props']);
+        self::assertSame([], $view['children']);
+        self::assertSame(0, $view['child_count']);
+        self::assertFalse($view['has_binding']);
+        self::assertArrayNotHasKey('label', $view);
+    }
+
+    public function test_flatten_node_skips_non_array_children(): void
+    {
+        $node = [
+            'type' => 'row',
+            'children' => [
+                ['type' => 'column'],
+                'broken-scalar',
+                ['type' => 'column'],
+                42,
+            ],
+        ];
+        $view = ElementOps::flattenNode($node, '/x');
+        self::assertSame(2, $view['child_count']);
+        self::assertCount(2, $view['children']);
+    }
+
     public function test_list_on_template_returns_null_for_unknown_template(): void
     {
         $ops = new ElementOps(new LayoutReader());
