@@ -40,7 +40,7 @@ import { toElicitationCapability } from './tools/elicitation.js';
 import { buildAllTools, type ToolDefinition } from './tools/index.js';
 
 export const SERVER_NAME = '@wootsup/yt-builder-mcp';
-export const SERVER_VERSION = '0.1.0-alpha.1';
+export const SERVER_VERSION = '0.2.0-alpha.2';
 
 export interface CreateServerOptions {
     readonly client: RestClient;

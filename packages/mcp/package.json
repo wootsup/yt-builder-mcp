@@ -1,8 +1,8 @@
 {
     "name": "@wootsup/yt-builder-mcp",
-    "version": "0.2.0-alpha.1",
+    "version": "0.2.0-alpha.2",
     "type": "module",
-    "description": "MCP Server for YOOtheme Page Builder — drive your YOOtheme site programmatically from Claude, Cursor, ChatGPT, Continue, Cline, Roo Code",
+    "description": "YT Builder MCP — drive your page builder from Claude, Cursor, Codex, Gemini and 5 other MCP-capable AI assistants. Built for YOOtheme Pro 4.0+. Independent third-party project, not affiliated with YOOtheme GmbH.",
     "license": "MIT",
     "author": "WootsUp <hello@wootsup.com>",
     "homepage": "https://github.com/wootsup/yt-builder-mcp",
@@ -19,8 +19,10 @@
         "yootheme-pro",
         "wordpress",
         "claude",
+        "claude-code",
         "cursor",
-        "chatgpt",
+        "codex-cli",
+        "gemini-cli",
         "page-builder",
         "ai-assistant",
         "wootsup"
