@@ -283,4 +283,60 @@ final class WriteOpsTest extends TestCase
         self::assertNotSame($beforeEtag, $data['etag']);
         self::assertSame((new LayoutReader())->etag(), $data['etag']);
     }
+
+    /**
+     * F-07 fix (Maria-Audit 2026-05-22): a mutation cycle A→B→A must
+     * surface three distinct ETags even when the final state byte-equals
+     * the starting state. The monotonic revision counter in
+     * StateRevision guarantees this property.
+     *
+     * Scenario:
+     *  1. seedState() is state A.
+     *  2. add an element  → state B, etag_B != etag_A
+     *  3. delete that element → state A' (same shape as A), etag_A' must
+     *     differ from BOTH etag_A and etag_B.
+     */
+    public function test_aba_mutation_cycle_yields_three_distinct_etags(): void
+    {
+        $controller = $this->controller();
+
+        $etagA = (new LayoutReader())->etag();
+
+        // Step 2: add an element.
+        $addReq = $this->writeRequest('POST');
+        $addReq['template_id'] = 'tpl';
+        $addReq->set_param('parent_path', '/templates/tpl/layout');
+        $addReq->set_param('element_type', 'headline');
+        $addReq->set_param('props', ['content' => 'ABA-Test']);
+        $addReq->set_param('children', []);
+        /** @var \WP_REST_Response $addResp */
+        $addResp = $controller->add_element($addReq);
+        $addData = $addResp->get_data();
+        $etagB = $addData['etag'];
+        $newPath = $addData['element_path'];
+
+        self::assertNotSame($etagA, $etagB, 'A→B etag must differ.');
+
+        // Step 3: delete the just-added element.
+        $delReq = $this->writeRequest('DELETE');
+        $delReq['template_id'] = 'tpl';
+        // Strip the leading '/templates/tpl/elements/' framing: the
+        // controller stores element_path as a JSON-Pointer rooted at the
+        // wp_option document, so we feed back the value the controller
+        // returned. For pointerFromRequest the element_path arg is the
+        // raw path after `elements/` — we set it explicitly.
+        $delReq->set_param(
+            'element_path',
+            ltrim((string) $newPath, '/'),
+        );
+        /** @var \WP_REST_Response $delResp */
+        $delResp = $controller->delete_element($delReq);
+        $delData = $delResp->get_data();
+        $etagAPrime = $delData['etag'];
+
+        // The structural property the F-07 fix exists to guarantee.
+        self::assertNotSame($etagA, $etagAPrime, 'A→B→A etag must NOT collapse back to A.');
+        self::assertNotSame($etagB, $etagAPrime, 'A→B→A etag must also differ from B.');
+        self::assertNotSame($etagA, $etagB);
+    }
 }

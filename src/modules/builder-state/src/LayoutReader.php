@@ -29,6 +29,13 @@ final class LayoutReader
     /** wp_option key per spike-outcomes. */
     public const OPTION = 'yootheme';
 
+    private readonly StateRevision $revision;
+
+    public function __construct(?StateRevision $revision = null)
+    {
+        $this->revision = $revision ?? new StateRevision();
+    }
+
     /**
      * Return the entire builder state — `library` + `templates` top-level
      * keys — as an associative array. Returns the empty array if the
@@ -109,9 +116,17 @@ final class LayoutReader
     /**
      * Compute a deterministic ETag for the current state.
      *
+     * Format: `<sha256-of-state>-r<revision>`. The revision component is
+     * the monotonic counter maintained by {@see StateRevision} and bumped
+     * on every persisted mutation by LayoutWriter::persist(). This is the
+     * F-07 fix (Maria-Audit 2026-05-22): a pure content hash is
+     * ABA-vulnerable — `add → delete` collapses to the original state, so
+     * the second ETag equals the first and clients can lose intermediate
+     * progress on optimistic-lock writes. Appending the monotonic
+     * revision makes every committed mutation surface as a distinct ETag.
+     *
      * Spike-5 settled that we'll use this for optimistic-lock conflict
-     * detection on Wave-3 writes (`If-Match: <etag>` header). Wave 2 only
-     * surfaces it — no enforcement yet.
+     * detection on Wave-3 writes (`If-Match: <etag>` header).
      */
     public function etag(): string
     {
@@ -121,11 +136,17 @@ final class LayoutReader
         // save reorders keys, a different ETag is the correct outcome —
         // it correctly signals "something changed".
         $encoded = json_encode($state, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        if ($encoded === false) {
-            // Last-resort: deterministic empty-state hash.
-            return hash('sha256', '');
-        }
-        return hash('sha256', $encoded);
+        $hash = $encoded === false ? hash('sha256', '') : hash('sha256', $encoded);
+        return $hash . '-r' . (string) $this->revision->current();
+    }
+
+    /**
+     * Return the underlying StateRevision tracker. Exposed so writers
+     * (LayoutWriter::persist) can bump it inside their critical section.
+     */
+    public function getRevision(): StateRevision
+    {
+        return $this->revision;
     }
 
     /**

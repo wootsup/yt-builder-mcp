@@ -136,10 +136,10 @@ final class LayoutReaderTest extends TestCase
         $reader = new LayoutReader();
         $etag1 = $reader->etag();
         $etag2 = $reader->etag();
-        self::assertSame($etag1, $etag2, 'Same state must produce same ETag.');
-        // Lower-case hex sha256: 64 chars.
-        self::assertSame(64, strlen($etag1));
-        self::assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $etag1);
+        self::assertSame($etag1, $etag2, 'Same state + revision must produce same ETag.');
+        // F-07 (Maria-Audit 2026-05-22): ETag is `<sha256>-r<revision>`.
+        // sha256 is 64 hex chars, revision is `>=0`, separated by `-r`.
+        self::assertMatchesRegularExpression('/^[a-f0-9]{64}-r\d+$/', $etag1);
     }
 
     public function test_etag_changes_when_state_changes(): void
@@ -160,6 +160,18 @@ final class LayoutReaderTest extends TestCase
         $a = $reader->etag();
         $b = $reader->etag();
         self::assertSame($a, $b);
+    }
+
+    public function test_etag_carries_monotonic_revision_suffix(): void
+    {
+        // F-07 fix: ETag must encode the StateRevision counter so that
+        // ABA mutation sequences (A→B→A) yield three distinct ETags. The
+        // monotonic suffix is the structural guarantee — the content hash
+        // alone cannot achieve this property by construction.
+        $this->seedState();
+        $reader = new LayoutReader();
+        $etag = $reader->etag();
+        self::assertMatchesRegularExpression('/-r\d+$/', $etag);
     }
 
     public function test_read_by_pointer_walks_into_template_tree(): void

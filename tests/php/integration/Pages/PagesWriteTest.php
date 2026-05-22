@@ -62,11 +62,13 @@ final class PagesWriteTest extends TestCase
         $data = $resp->get_data();
         self::assertTrue($data['saved']);
         self::assertArrayHasKey('etag', $data);
-        // ETag is deterministic on identical content; what matters is that
-        // the response carries the *current* ETag.
+        // The response carries the *current* (post-mutation) ETag.
         self::assertSame((new LayoutReader())->etag(), $data['etag']);
-        // Without YT loaded, save-transforms are identity → etag unchanged.
-        self::assertSame($before, $data['etag']);
+        // F-07 fix (Maria-Audit 2026-05-22): every save bumps the
+        // monotonic revision counter inside LayoutWriter::persist(), so
+        // the ETag MUST differ from `before` even though the underlying
+        // state happens to byte-equal (identity save-transforms without YT).
+        self::assertNotSame($before, $data['etag']);
     }
 
     public function test_save_page_404_for_unknown_template(): void

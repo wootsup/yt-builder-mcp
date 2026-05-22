@@ -228,5 +228,15 @@ final class LayoutWriter
                 'LayoutWriter::persist failed — option value did not reflect write.',
             );
         }
+
+        // F-07 fix (Maria-Audit 2026-05-22): bump the monotonic revision
+        // AFTER the state-write has been verified. The ETag computed by
+        // LayoutReader::etag() is `sha256(state) + '-r' + revision`, so
+        // every committed mutation surfaces as a strictly new ETag — even
+        // when the post-mutation state happens to byte-equal an earlier
+        // state (ABA scenarios like `add then delete`). The bump only
+        // happens on successful persistence; if persist() throws above,
+        // the revision stays put.
+        $this->reader->getRevision()->bump();
     }
 }

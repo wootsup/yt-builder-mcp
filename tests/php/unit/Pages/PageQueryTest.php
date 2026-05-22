@@ -79,6 +79,95 @@ final class PageQueryTest extends TestCase
         self::assertSame('About', $byId['Fp2ntvJd']['name']);
     }
 
+    // -------------------------------------------------------------
+    // F-02 / F-08 — pages_list metadata enrichment.
+    // -------------------------------------------------------------
+
+    public function test_list_attaches_elements_count_recursively(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'name' => 'Big',
+                    'layout' => [
+                        'type' => 'layout',
+                        'children' => [
+                            ['type' => 'section', 'children' => [
+                                ['type' => 'row', 'children' => [
+                                    ['type' => 'column', 'children' => [
+                                        ['type' => 'headline'],
+                                        ['type' => 'image'],
+                                    ]],
+                                ]],
+                            ]],
+                            ['type' => 'image'],
+                        ],
+                    ],
+                ],
+                'empty' => [
+                    'name' => 'Empty',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        // tpl: section + row + column + headline + image + image = 6
+        self::assertSame(6, $byId['tpl']['elements_count']);
+        self::assertSame(0, $byId['empty']['elements_count']);
+    }
+
+    public function test_list_emits_default_type_when_template_blob_has_none(): void
+    {
+        $this->seedTwoTemplates();
+        $query = new PageQuery(new LayoutReader());
+        foreach ($query->list() as $entry) {
+            self::assertArrayHasKey('type', $entry);
+            self::assertSame('template', $entry['type']);
+        }
+    }
+
+    public function test_list_surfaces_label_alias_of_name(): void
+    {
+        $this->seedTwoTemplates();
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        self::assertSame('Home', $byId['bFIb-syj']['label']);
+        self::assertSame('About', $byId['Fp2ntvJd']['label']);
+    }
+
+    public function test_list_surfaces_modified_at_from_iso_string(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'name' => 'Home',
+                    'modified' => '2026-05-22T10:00:00Z',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        self::assertSame('2026-05-22T10:00:00Z', $byId['tpl']['modified_at']);
+    }
+
+    public function test_list_surfaces_modified_at_from_unix_timestamp(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'name' => 'Home',
+                    'modified' => 1700000000, // 2023-11-14T22:13:20+00:00
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        self::assertSame('2023-11-14T22:13:20+00:00', $byId['tpl']['modified_at']);
+    }
+
     public function test_list_attaches_etag_to_each_entry(): void
     {
         $this->seedTwoTemplates();
@@ -87,7 +176,8 @@ final class PageQueryTest extends TestCase
 
         foreach ($list as $entry) {
             self::assertArrayHasKey('etag', $entry);
-            self::assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $entry['etag']);
+            // F-07 (Maria-Audit 2026-05-22): ETag is `<sha256>-r<revision>`.
+            self::assertMatchesRegularExpression('/^[a-f0-9]{64}-r\d+$/', $entry['etag']);
         }
     }
 
