@@ -84,7 +84,11 @@ final class ElementsController extends RestController
         // the action-suffixes (`/move`, `/clone`, `/settings`, `/binding`).
         // This removes the suffix-stripping fragility in pointerFromRequest
         // and lets multiple routes share the same path-shape.
-        $pathPattern = '(?P<element_path>(?:(?!/(?:move|clone|settings|binding)$).)+)';
+        // Negative-lookahead exclusions ensure action-routes win over the
+        // generic element-get catch-all. Without `multi-items/...`, the
+        // generic element-route swallows `/multi-items/inspect` requests
+        // from MultiItemsController (live-bug 2026-05-22 Maria-Story E2E).
+        $pathPattern = '(?P<element_path>(?:(?!/(?:move|clone|settings|binding|multi-items/inspect|multi-items/clean-implode)$).)+)';
 
         \register_rest_route(self::NAMESPACE, '/pages/(?P<template_id>[A-Za-z0-9_-]+)/elements/' . $pathPattern, [
             'methods' => 'GET',

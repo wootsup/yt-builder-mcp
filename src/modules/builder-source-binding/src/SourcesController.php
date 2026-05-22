@@ -58,7 +58,9 @@ final class SourcesController extends RestController
             'permission_callback' => $read,
         ]);
 
-        $pathPattern = '(?P<element_path>(?:(?!/binding$).)+)';
+        // A4-fix: exclude multi-items suffixes so MultiItemsController routes
+        // win (live-bug 2026-05-22 Maria-Story E2E).
+        $pathPattern = '(?P<element_path>(?:(?!/(?:binding|multi-items/inspect|multi-items/clean-implode)$).)+)';
 
         \register_rest_route(self::NAMESPACE, '/pages/(?P<template_id>[A-Za-z0-9_-]+)/elements/' . $pathPattern . '/binding', [
             'methods' => 'GET',
