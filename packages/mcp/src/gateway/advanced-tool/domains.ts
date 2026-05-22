@@ -22,18 +22,24 @@ import type { AdvancedToolEntry } from '../capturing-server.js';
  * from 8→4 (singular forms now route via DOMAIN_PREFIX_MAP, not
  * duplicate entries). Pinned by `tests/gateway/domain-order.test.ts`.
  */
-export const DOMAIN_ORDER = ['pages', 'elements', 'sources', 'inspection'] as const;
+export const DOMAIN_ORDER = ['pages', 'elements', 'sources', 'multi-items', 'inspection'] as const;
 
 /**
  * Prefix→domain routing table. Each domain accepts plural
  * (`pages_list`) + singular (`page_save`, `element_add`, `source_…`)
  * stems via `stem.startsWith(prefix + '_')` or full-equality. Anything
  * outside the taxonomy falls through to 'misc'.
+ *
+ * The `multi-items` domain captures the YT-Pro Multi-Items binding
+ * pattern tools (inspect / clean-implode). Stems used:
+ *  - `inspect_multi_items_binding` → starts with `inspect_multi_items`
+ *  - `clean_implode_directives`    → starts with `clean_implode`
  */
 export const DOMAIN_PREFIX_MAP: Record<(typeof DOMAIN_ORDER)[number], readonly string[]> = {
     pages: ['pages', 'page'],
     elements: ['elements', 'element'],
     sources: ['sources', 'source'],
+    'multi-items': ['inspect_multi_items', 'clean_implode'],
     inspection: ['inspection'],
 };
 

@@ -24,27 +24,45 @@ final class ItemContainerMapTest extends TestCase
 {
     public function test_map_pairs_every_canonical_yt_pro_container_with_its_item(): void
     {
+        // Live-verified against YT-Pro 4.5.33 `themes/yootheme/packages/
+        // builder/elements/*_item/` (16 pairs).
         $expected = [
+            'accordion' => 'accordion_item',
+            'button' => 'button_item',
+            'description_list' => 'description_list_item',
+            'gallery' => 'gallery_item',
             'grid' => 'grid_item',
             'list' => 'list_item',
-            'slider' => 'slider_item',
-            'slideshow' => 'slideshow_item',
-            'switcher' => 'switcher_item',
-            'gallery' => 'gallery_item',
-            'accordion' => 'accordion_item',
             'map' => 'map_item',
+            'nav' => 'nav_item',
             'overlay-slider' => 'overlay-slider_item',
             'panel-slider' => 'panel-slider_item',
+            'popover' => 'popover_item',
+            'slideshow' => 'slideshow_item',
+            'social' => 'social_item',
+            'subnav' => 'subnav_item',
+            'switcher' => 'switcher_item',
+            'table' => 'table_item',
         ];
         $this->assertSame($expected, ItemContainerMap::MAP);
+        $this->assertCount(16, ItemContainerMap::MAP);
+    }
+
+    public function test_map_does_not_contain_the_non_existent_slider_pair(): void
+    {
+        // YT-Pro 4.5.33 ships no `slider`/`slider_item`. Carousel-style
+        // rendering uses slideshow / overlay-slider / panel-slider.
+        $this->assertArrayNotHasKey('slider', ItemContainerMap::MAP);
+        $this->assertNull(ItemContainerMap::itemOf('slider'));
     }
 
     public function test_item_of_resolves_container_type_to_its_item_type(): void
     {
         $this->assertSame('grid_item', ItemContainerMap::itemOf('grid'));
         $this->assertSame('list_item', ItemContainerMap::itemOf('list'));
-        $this->assertSame('slider_item', ItemContainerMap::itemOf('slider'));
+        $this->assertSame('description_list_item', ItemContainerMap::itemOf('description_list'));
         $this->assertSame('overlay-slider_item', ItemContainerMap::itemOf('overlay-slider'));
+        $this->assertSame('table_item', ItemContainerMap::itemOf('table'));
     }
 
     public function test_item_of_returns_null_for_unknown_container(): void
@@ -59,6 +77,8 @@ final class ItemContainerMapTest extends TestCase
         $this->assertSame('list', ItemContainerMap::containerOf('list_item'));
         $this->assertSame('switcher', ItemContainerMap::containerOf('switcher_item'));
         $this->assertSame('overlay-slider', ItemContainerMap::containerOf('overlay-slider_item'));
+        $this->assertSame('description_list', ItemContainerMap::containerOf('description_list_item'));
+        $this->assertSame('popover', ItemContainerMap::containerOf('popover_item'));
     }
 
     public function test_container_of_returns_null_for_unknown_item(): void

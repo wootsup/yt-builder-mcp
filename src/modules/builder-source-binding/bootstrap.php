@@ -21,6 +21,8 @@ use WootsUp\BuilderMcp\Auth\KeyStore;
 use WootsUp\BuilderMcp\Auth\SigningSecret;
 use WootsUp\BuilderMcp\Cache\CacheFlusher;
 use WootsUp\BuilderMcp\Elements\ElementOps;
+use WootsUp\BuilderMcp\SourceBinding\MultiItemsController;
+use WootsUp\BuilderMcp\SourceBinding\MultiItemsInspector;
 use WootsUp\BuilderMcp\SourceBinding\SourceRegistry;
 use WootsUp\BuilderMcp\SourceBinding\SourcesController;
 use WootsUp\BuilderMcp\State\LayoutReader;
@@ -102,6 +104,27 @@ use WootsUp\BuilderMcp\Yootheme\YoothemeAdapter;
     );
 
     $controller->register_routes();
+
+    // Multi-Items pattern (inspect + clean-implode) — companion of
+    // SourcesController, shares the same dependency chain.
+    $multiInspector = Container::get(
+        MultiItemsInspector::class,
+        static fn (): MultiItemsInspector => new MultiItemsInspector($ops),
+    );
+
+    $multiController = Container::get(
+        MultiItemsController::class,
+        static fn (): MultiItemsController => new MultiItemsController(
+            $multiInspector,
+            $ops,
+            $reader,
+            $writer,
+            $cacheFlusher,
+            $verifier,
+        ),
+    );
+
+    $multiController->register_routes();
 });
 
 return [];

@@ -2,9 +2,9 @@
  * Pin-tests for the Cursor-cap-safe `tools/list` surface.
  *
  * After Wave G.1, an LLM-host enumerating `tools/list` MUST see exactly
- * 10 entries (7 L1 essentials + 2 L3 direct + 1 gateway). Every other
+ * 11 entries (8 L1 essentials + 2 L3 direct + 1 gateway). Every other
  * tool reachable through `yootheme_builder_advanced`. The total tool
- * count across BOTH surfaces is exactly 22.
+ * count across BOTH surfaces is exactly 24.
  *
  * These counts are PINNED. A failing pin = a wave-spec drift; either
  * (a) the spec genuinely needs to change and the pin updates, or
@@ -36,13 +36,13 @@ function realToolNames(server: ReturnType<typeof createServer>['mcp']): string[]
 }
 
 describe('tools/list surface (Cursor-cap-safe)', () => {
-    it('the real server exposes exactly 10 tools: 7 L1 + 2 L3 + 1 gateway', () => {
+    it('the real server exposes exactly 11 tools: 8 L1 + 2 L3 + 1 gateway', () => {
         const { mcp } = createServer({ client: makeClient() });
         const names = realToolNames(mcp).sort();
-        expect(names.length).toBe(10);
+        expect(names.length).toBe(11);
     });
 
-    it('the 7 L1 essentials are all on the real server', () => {
+    it('the 8 L1 essentials are all on the real server', () => {
         const { mcp } = createServer({ client: makeClient() });
         const names = realToolNames(mcp);
         for (const name of ESSENTIAL_TOOLS) {
@@ -63,15 +63,16 @@ describe('tools/list surface (Cursor-cap-safe)', () => {
         expect(realToolNames(mcp)).toContain('yootheme_builder_advanced');
     });
 
-    it('collectAllRegisteredTools returns exactly 22 tools (full surface)', () => {
+    it('collectAllRegisteredTools returns exactly 24 tools (full surface)', () => {
         const { mcp, capturing } = createServer({ client: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
-        expect(Object.keys(all).length).toBe(22);
+        expect(Object.keys(all).length).toBe(24);
     });
 
-    it('the L2 advanced surface holds exactly 12 captured tools', () => {
+    it('the L2 advanced surface holds exactly 13 captured tools', () => {
+        // L2 = all tools - L1 (8 essentials) - L3 (2 direct) - gateway (1) = 13
         const { capturing } = createServer({ client: makeClient() });
-        expect(capturing.getAdvancedRegistry().size).toBe(12);
+        expect(capturing.getAdvancedRegistry().size).toBe(13);
     });
 
     it('no L1 essential leaks into the advanced registry (lane disjoint)', () => {

@@ -18,23 +18,39 @@ import {
 
 describe('ITEM_CHILDREN_OF_CONTAINER', () => {
     it('pairs every canonical YT-Pro container with its item type', () => {
+        // Live-verified against YT-Pro 4.5.33 (16 pairs).
         expect(ITEM_CHILDREN_OF_CONTAINER).toEqual({
+            accordion: 'accordion_item',
+            button: 'button_item',
+            description_list: 'description_list_item',
+            gallery: 'gallery_item',
             grid: 'grid_item',
             list: 'list_item',
-            slider: 'slider_item',
-            slideshow: 'slideshow_item',
-            switcher: 'switcher_item',
-            gallery: 'gallery_item',
-            accordion: 'accordion_item',
             map: 'map_item',
+            nav: 'nav_item',
             'overlay-slider': 'overlay-slider_item',
             'panel-slider': 'panel-slider_item',
+            popover: 'popover_item',
+            slideshow: 'slideshow_item',
+            social: 'social_item',
+            subnav: 'subnav_item',
+            switcher: 'switcher_item',
+            table: 'table_item',
         });
+        expect(Object.keys(ITEM_CHILDREN_OF_CONTAINER)).toHaveLength(16);
+    });
+
+    it('does not contain the non-existent slider pair', () => {
+        // YT-Pro 4.5.33 ships no `slider`/`slider_item`.
+        expect(ITEM_CHILDREN_OF_CONTAINER).not.toHaveProperty('slider');
+        expect(itemOf('slider')).toBeNull();
     });
 
     it('itemOf() returns the child item type for a known container', () => {
         expect(itemOf('grid')).toBe('grid_item');
         expect(itemOf('overlay-slider')).toBe('overlay-slider_item');
+        expect(itemOf('description_list')).toBe('description_list_item');
+        expect(itemOf('popover')).toBe('popover_item');
     });
 
     it('itemOf() returns null for non-containers', () => {

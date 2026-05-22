@@ -58,39 +58,40 @@ The wizard auto-detects and configures the following clients:
 
 ## Tool surface — gateway model
 
-The server registers **22 tools total**, but only **10 entries appear
+The server registers **24 tools total**, but only **11 entries appear
 in `tools/list`** (well under Cursor's ~40-tool cap):
 
 - **2 direct top-level tools** (always in `tools/list`):
   `yootheme_builder_health`, `yootheme_builder_diagnose` — the
   "the gateway itself might be broken" escape hatch.
-- **7 essential forwarded tools** (always in `tools/list`): the most-
+- **8 essential forwarded tools** (always in `tools/list`): the most-
   used reads and writes — `pages_list`, `get_etag`, `element_list`,
   `element_add`, `element_update_settings`, `sources_list`,
-  `element_types_list`.
+  `element_types_list`, `inspect_multi_items_binding`.
 - **1 gateway tool** (`yootheme_builder_advanced`): exposes the
-  remaining **12 advanced tools** behind a single entry. Call
+  remaining **13 advanced tools** behind a single entry. Call
   `yootheme_builder_advanced({ tool: "<name>" })` for discovery
   (returns the schema) or `({ tool, arguments })` to execute.
-- **12 advanced tools** dispatched via the gateway (page_get_layout,
+- **13 advanced tools** dispatched via the gateway (page_get_layout,
   page_get_schema, page_save, page_publish, element_get,
   element_move, element_clone, element_delete,
   element_get_binding, element_bind_source, element_unbind_source,
-  element_type_get_schema).
+  clean_implode_directives, element_type_get_schema).
 
-Total: **21 domain tools + 1 gateway = 22**. Surface: **10 entries
+Total: **23 domain tools + 1 gateway = 24**. Surface: **11 entries
 in tools/list**. See `skills/yootheme-builder/SKILL.md` for the
 full catalog and the 5 canonical workflows.
 
-## Tool catalogue — 21 domain tools
+## Tool catalogue — 23 domain tools
 
-| Domain     | Count | Tools                                                                                                                                                                |
-|------------|------:|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Health     |     2 | `health`, `diagnose`                                                                                                                                                |
-| Pages      |     6 | `pages_list`, `page_get_layout`, `page_get_schema`, `get_etag`, `page_save`, `page_publish`                                                                          |
-| Elements   |     7 | `element_list`, `element_get`, `element_add`, `element_update_settings`, `element_move`, `element_clone`, `element_delete`                                          |
-| Sources    |     4 | `sources_list`, `element_get_binding`, `element_bind_source`, `element_unbind_source`                                                                                |
-| Inspection |     2 | `element_types_list`, `element_type_get_schema`                                                                                                                      |
+| Domain      | Count | Tools                                                                                                                                                                |
+|-------------|------:|---------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Health      |     2 | `health`, `diagnose`                                                                                                                                                |
+| Pages       |     6 | `pages_list`, `page_get_layout`, `page_get_schema`, `get_etag`, `page_save`, `page_publish`                                                                          |
+| Elements    |     7 | `element_list`, `element_get`, `element_add`, `element_update_settings`, `element_move`, `element_clone`, `element_delete`                                          |
+| Sources     |     4 | `sources_list`, `element_get_binding`, `element_bind_source`, `element_unbind_source`                                                                                |
+| Multi-Items |     2 | `inspect_multi_items_binding`, `clean_implode_directives`                                                                                                            |
+| Inspection  |     2 | `element_types_list`, `element_type_get_schema`                                                                                                                      |
 
 All tool names are prefixed with `yootheme_builder_` at the MCP
 server boundary.
@@ -118,7 +119,7 @@ client without per-client write logic.
 
 The skill ships with the 5 canonical workflows (build hero, bind
 source, clone section, diagnose 401, add custom element) plus a
-21-tool auto-generated catalog appendix.
+23-tool auto-generated catalog appendix.
 
 ## DXT bundle — Claude Desktop one-click install
 

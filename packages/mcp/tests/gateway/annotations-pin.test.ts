@@ -80,7 +80,7 @@ describe('annotation pin tests (all lanes)', () => {
         // Inline snapshot pins the structure — any unintentional change
         // shows up as a test diff. (Title strings excluded as they are
         // free-form labels.)
-        expect(Object.keys(snapshot).length).toBe(22);
+        expect(Object.keys(snapshot).length).toBe(24);
         // Every entry has at minimum a hint flag set.
         for (const [name, ann] of Object.entries(snapshot)) {
             const hasAnyHint =

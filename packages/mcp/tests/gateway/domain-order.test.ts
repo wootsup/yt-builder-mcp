@@ -27,12 +27,18 @@ import {
 // ─── 4-entry shape pin ───────────────────────────────────────────────
 
 describe('DOMAIN_ORDER pin (R2-A1-N1)', () => {
-    it('matches the strict 4-entry shape', () => {
-        expect(DOMAIN_ORDER).toEqual(['pages', 'elements', 'sources', 'inspection']);
+    it('matches the strict 5-entry shape', () => {
+        expect(DOMAIN_ORDER).toEqual([
+            'pages',
+            'elements',
+            'sources',
+            'multi-items',
+            'inspection',
+        ]);
     });
 
-    it('has exactly 4 entries (count pin)', () => {
-        expect(DOMAIN_ORDER.length).toBe(4);
+    it('has exactly 5 entries (count pin)', () => {
+        expect(DOMAIN_ORDER.length).toBe(5);
     });
 
     it('exposes a prefix map keyed by every domain entry', () => {
@@ -74,6 +80,11 @@ describe('domainOf() routing table (R2-A1-N1)', () => {
         ['yootheme_builder_element_bind_source', 'elements'],
         ['yootheme_builder_element_unbind_source', 'elements'],
         ['yootheme_builder_sources_list', 'sources'],
+
+        // ── multi-items domain (inspect/clean for the YT-Pro Multi-Items
+        //    binding pattern — container ↔ `*_item` pairings) ─────────
+        ['yootheme_builder_inspect_multi_items_binding', 'multi-items'],
+        ['yootheme_builder_clean_implode_directives', 'multi-items'],
 
         // ── inspection / element-types (stem `element_types_…` /
         //    `element_type_…` → elements domain by prefix rule) ───────

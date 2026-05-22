@@ -11,6 +11,7 @@ import { buildElementsTools } from './elements/index.js';
 import type { McpServerWithElicitation } from './elicitation.js';
 import { buildHealthTools } from './health.js';
 import { buildInspectionTools } from './inspection.js';
+import { buildMultiItemsTools } from './multi-items/index.js';
 import { buildPagesTools } from './pages.js';
 import { buildSourcesTools } from './sources/index.js';
 import type { AnyToolDefinition } from './tool-builder.js';
@@ -36,6 +37,7 @@ export function buildAllTools(
         ...buildPagesTools(client),
         ...buildElementsTools(client, deps),
         ...buildSourcesTools(client, deps),
+        ...buildMultiItemsTools(client),
         ...buildInspectionTools(client),
     ];
 }

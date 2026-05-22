@@ -127,22 +127,22 @@ function jsonBytes(value: unknown): number {
 }
 
 describe('token-baseline harness — tools/list payload reduction', () => {
-    it('post-gateway tools/list contains exactly 10 entries', () => {
+    it('post-gateway tools/list contains exactly 11 entries', () => {
         const post = postGatewayToolsList();
-        expect(post.length).toBe(10);
+        expect(post.length).toBe(11);
     });
 
-    it('post-gateway tools/list payload is bounded (<10000 bytes for 10 tools)', () => {
+    it('post-gateway tools/list payload is bounded (<10000 bytes for 11 tools)', () => {
         // Sanity ceiling — if a future wave bloats descriptions massively,
         // this trips. Today it sits around 4-6 KB.
         const post = postGatewayToolsList();
         const bytes = jsonBytes(post);
         // eslint-disable-next-line no-console -- benchmark surface
-        console.log(`[token-baseline] post-gateway tools/list = ${String(bytes)}B (10 tools)`);
+        console.log(`[token-baseline] post-gateway tools/list = ${String(bytes)}B (11 tools)`);
         expect(bytes).toBeLessThan(10_000);
     });
 
-    it('full pre-gateway surface (22 tools) is materially larger than post-gateway (10 tools)', () => {
+    it('full pre-gateway surface (24 tools) is materially larger than post-gateway (11 tools)', () => {
         // Synthetic pre-gateway: project every tool's full schema as if
         // it lived on tools/list. This is the WORST case (no gateway).
         const post = postGatewayToolsList();

@@ -2,7 +2,7 @@
  * Description-length pin — Wave G.6.6.
  *
  * Token-efficiency budget: every tool description must stay at or
- * under 250 chars so `tools/list` remains compact across all 21
+ * under 250 chars so `tools/list` remains compact across all 23
  * registered tools.
  *
  * @license MIT
@@ -48,7 +48,7 @@ describe('Tool description-length pin', () => {
     });
 
     test('tool count matches expected registered surface', () => {
-        // 2 health + 6 pages + 7 elements + 2 inspection + 4 sources = 21
-        expect(tools.length).toBe(21);
+        // 2 health + 6 pages + 7 elements + 4 sources + 2 multi-items + 2 inspection = 23
+        expect(tools.length).toBe(23);
     });
 });

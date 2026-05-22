@@ -39,7 +39,7 @@ The YOOtheme Builder skill is installed at \`~/.claude/skills/yootheme-builder/\
 — the universal-marker path recognised by Claude Desktop and other AI
 clients that follow the \`~/AGENTS.md\` discovery protocol.
 
-It documents the 22 MCP tools (21 domain + 1 gateway, 10 entries in
+It documents the 24 MCP tools (23 domain + 1 gateway, 11 entries in
 \`tools/list\`), the 5 canonical workflows (build hero, bind dynamic
 source, clone section, diagnose 401, add custom element), and the
 gateway routing model. Source: https://github.com/wootsup/yt-builder-mcp.

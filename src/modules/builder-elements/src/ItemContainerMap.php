@@ -42,23 +42,34 @@ namespace WootsUp\BuilderMcp\Elements;
 final class ItemContainerMap
 {
     /**
-     * Canonical YT-Pro container → item pairing. Sorted by group:
-     * UIkit grid/list/slider/slideshow → gallery/accordion → map →
-     * overlay/panel.
+     * Canonical YT-Pro container → item pairing.
+     *
+     * Live-verified against `themes/yootheme/packages/builder/elements/
+     * *_item/` on YT-Pro 4.5.33 (dev server, 2026-05-22). 16 pairs total.
+     *
+     * NB: There is NO `slider` / `slider_item` pair on YT-Pro 4.5.33 —
+     * the YT slider/carousel widgets render via `slideshow`,
+     * `overlay-slider`, and `panel-slider`.
      *
      * @var array<string, string>
      */
     public const MAP = [
+        'accordion' => 'accordion_item',
+        'button' => 'button_item',
+        'description_list' => 'description_list_item',
+        'gallery' => 'gallery_item',
         'grid' => 'grid_item',
         'list' => 'list_item',
-        'slider' => 'slider_item',
-        'slideshow' => 'slideshow_item',
-        'switcher' => 'switcher_item',
-        'gallery' => 'gallery_item',
-        'accordion' => 'accordion_item',
         'map' => 'map_item',
+        'nav' => 'nav_item',
         'overlay-slider' => 'overlay-slider_item',
         'panel-slider' => 'panel-slider_item',
+        'popover' => 'popover_item',
+        'slideshow' => 'slideshow_item',
+        'social' => 'social_item',
+        'subnav' => 'subnav_item',
+        'switcher' => 'switcher_item',
+        'table' => 'table_item',
     ];
 
     /**

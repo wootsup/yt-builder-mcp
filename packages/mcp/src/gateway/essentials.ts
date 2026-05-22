@@ -40,6 +40,11 @@ export const ESSENTIAL_TOOLS = [
     'yootheme_builder_element_update_settings',
     'yootheme_builder_sources_list',
     'yootheme_builder_element_types_list',
+    // Multi-Items inspector — L1 discovery tool. Surfaces when a
+    // binding lives on the wrong (container) level and which `*_item`
+    // child should carry it. Frequent first-call when diagnosing
+    // Grid/Slider/Switcher rendering issues.
+    'yootheme_builder_inspect_multi_items_binding',
 ] as const;
 
 /**
