@@ -31,10 +31,33 @@ function asString(v: unknown): string {
     return typeof v === 'string' ? v : '';
 }
 
+/**
+ * Defensive `has_binding` derivation used when the REST plugin does not
+ * surface an explicit boolean. Mirrors `PageQuery::hasBinding()` +
+ * `ElementOps::hasBinding()` on the PHP side so all three readers agree
+ * on the same node.
+ *
+ * Stream C1 (F-01-Rest, 2026-05-22): live YT4 templates store the binding
+ * as the F-13 structured shape `{query:{name:"posts.singlePost"}, props:{…}}`.
+ * The legacy plain-string `props.source = "name"` shape is still honoured
+ * (pre-F-13 user data).
+ */
 function hasSourceBinding(props: unknown): boolean {
     if (props === null || typeof props !== 'object') return false;
     const obj = props as Record<string, unknown>;
-    return typeof obj.source === 'string' && obj.source.length > 0;
+    if (!('source' in obj)) return false;
+    const src = obj.source;
+    // Legacy plain-string shape.
+    if (typeof src === 'string') return src.length > 0;
+    // F-13 structured shape: bound when `query.name` is a non-empty string.
+    if (src !== null && typeof src === 'object') {
+        const query = (src as Record<string, unknown>).query;
+        if (query !== null && typeof query === 'object') {
+            const name = (query as Record<string, unknown>).name;
+            return typeof name === 'string' && name.length > 0;
+        }
+    }
+    return false;
 }
 
 /**

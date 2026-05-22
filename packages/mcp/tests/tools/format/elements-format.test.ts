@@ -79,6 +79,81 @@ describe('elements-format sidecar', () => {
         ).toBe(true);
     });
 
+    // Stream C1 (F-01-Rest, 2026-05-22): live YT4 single-post templates
+    // store the binding as the F-13 structured shape `{query:{name},props:{…}}`.
+    // The defensive `hasSourceBinding` fallback must recognise it so the
+    // BIND column stays accurate even if the REST plugin omits the
+    // explicit `has_binding` field.
+    it('mapElementRow recognises F-13 structured source object (bare query)', () => {
+        expect(
+            mapElementRow({
+                path: '/0',
+                element_type: 'headline',
+                props: { source: { query: { name: 'posts.singlePost' } } },
+            }).has_binding,
+        ).toBe(true);
+    });
+
+    it('mapElementRow recognises F-13 structured source with field-mappings (live shape)', () => {
+        // Live reproduction shape from `page_get_layout` on
+        // `/templates/I99YS8Ii/layout/children/20/children/0/children/0/children/0`.
+        expect(
+            mapElementRow({
+                path: '/0',
+                element_type: 'headline',
+                props: {
+                    source: {
+                        query: { name: 'posts.singlePost' },
+                        props: {
+                            metaString: { name: 'metaString' },
+                            title: { name: 'title' },
+                            date: { name: 'date' },
+                            'featuredImage.url': { name: 'featuredImage.url' },
+                        },
+                    },
+                },
+            }).has_binding,
+        ).toBe(true);
+    });
+
+    it('mapElementRow recognises structured source with filters array (YT4 native shape)', () => {
+        expect(
+            mapElementRow({
+                path: '/0',
+                element_type: 'headline',
+                props: {
+                    source: {
+                        query: { name: 'posts.singlePost' },
+                        props: {
+                            title: { name: 'title', filters: [] },
+                        },
+                    },
+                },
+            }).has_binding,
+        ).toBe(true);
+    });
+
+    it('mapElementRow has_binding=false when structured source lacks query.name', () => {
+        // Degenerate write — surface as false rather than lying.
+        expect(
+            mapElementRow({
+                path: '/0',
+                element_type: 'headline',
+                props: { source: { query: {} } },
+            }).has_binding,
+        ).toBe(false);
+    });
+
+    it('mapElementRow has_binding=false when source prop is absent', () => {
+        expect(
+            mapElementRow({
+                path: '/0',
+                element_type: 'headline',
+                props: { content: 'Hi' },
+            }).has_binding,
+        ).toBe(false);
+    });
+
     it('buildElementDetail produces 4 groups (Identity / Props / Children / Next steps)', () => {
         const detail = buildElementDetail({
             path: '/0',

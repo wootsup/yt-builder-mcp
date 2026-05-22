@@ -333,4 +333,122 @@ final class BindingWriteTest extends TestCase
         self::assertSame([], $data['field_mappings']);
         self::assertFalse($data['has_binding']);
     }
+
+    // -------------------------------------------------------------
+    // Stream C1 (F-01-Rest) — extractBinding must handle the full
+    // YT4-native source shapes seen in live single-post templates.
+    // Reproduction: dev.wootsup.com headline at
+    //   /templates/I99YS8Ii/layout/children/20/children/0/children/0/children/0
+    // carries `source: {query.name: "posts.singlePost", props: {…}}`.
+    // -------------------------------------------------------------
+
+    public function test_get_binding_parses_live_yt4_single_post_shape(): void
+    {
+        // Live shape from page_get_layout on a single-post Post template.
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][0]['props']['source'] = [
+            'query' => ['name' => 'posts.singlePost'],
+            'props' => [
+                'metaString' => ['name' => 'metaString'],
+                'title' => ['name' => 'title'],
+                'date' => ['name' => 'date'],
+                'featuredImage.url' => ['name' => 'featuredImage.url'],
+            ],
+        ];
+
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0/binding';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_binding($req);
+        $data = $resp->get_data();
+        self::assertSame('posts.singlePost', $data['source_name']);
+        self::assertSame([
+            'metaString' => 'metaString',
+            'title' => 'title',
+            'date' => 'date',
+            'featuredImage.url' => 'featuredImage.url',
+        ], $data['field_mappings']);
+        self::assertTrue($data['has_binding']);
+    }
+
+    public function test_get_binding_parses_structured_props_with_filters_array(): void
+    {
+        // YT4-native shape sometimes carries `filters: []` (array) rather than
+        // the object-shape `filters: {}` — both must parse.
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][0]['props']['source'] = [
+            'query' => ['name' => 'posts.singlePost'],
+            'props' => [
+                'title' => ['name' => 'title', 'filters' => []],
+                'content' => ['name' => 'content', 'filters' => []],
+            ],
+        ];
+
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0/binding';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_binding($req);
+        $data = $resp->get_data();
+        self::assertSame('posts.singlePost', $data['source_name']);
+        self::assertSame(['title' => 'title', 'content' => 'content'], $data['field_mappings']);
+        self::assertTrue($data['has_binding']);
+    }
+
+    public function test_get_binding_parses_bare_query_object_no_field_mappings(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][0]['props']['source'] = [
+            'query' => ['name' => 'posts.posts'],
+        ];
+
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0/binding';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_binding($req);
+        $data = $resp->get_data();
+        self::assertSame('posts.posts', $data['source_name']);
+        self::assertSame([], $data['field_mappings']);
+        self::assertTrue($data['has_binding']);
+    }
+
+    public function test_get_binding_preserves_node_item_sentinel_in_field_mappings(): void
+    {
+        // D5 sentinel: YT-Pro INHERIT marker round-trips through extractBinding.
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][0]['props']['source'] = [
+            'query' => ['name' => 'posts.singlePost'],
+            'props' => [
+                'content' => [
+                    'name' => '${builder.source}',
+                    'filters' => new \stdClass(),
+                    'inherit' => true,
+                ],
+                'title' => [
+                    'name' => '${builder.source}',
+                    'field' => 'post_title',
+                    'filters' => new \stdClass(),
+                    'inherit' => true,
+                ],
+            ],
+        ];
+
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/0/binding';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_binding($req);
+        $data = $resp->get_data();
+        self::assertSame('posts.singlePost', $data['source_name']);
+        self::assertSame([
+            'content' => '__node_item__',
+            'title' => '__node_item__:post_title',
+        ], $data['field_mappings']);
+    }
 }

@@ -299,4 +299,109 @@ final class PageQueryTest extends TestCase
         $query = new PageQuery($reader);
         self::assertSame($reader->etag(), $query->etag());
     }
+
+    // -------------------------------------------------------------
+    // Stream C1 (F-01-Rest) — has_binding heuristic must recognise the
+    // F-13 structured `source` shape, not just legacy plain-strings.
+    // -------------------------------------------------------------
+
+    /**
+     * Return the schema-entry for the headline child, given a `props.source`
+     * payload to set on the headline node.
+     *
+     * @param mixed $sourceProp
+     * @return array<string, mixed>
+     */
+    private function schemaEntryWithSource(mixed $sourceProp): array
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'layout' => [
+                        'type' => 'layout',
+                        'children' => [
+                            [
+                                'type' => 'headline',
+                                'props' => ['source' => $sourceProp],
+                                'children' => [],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $query = new PageQuery(new LayoutReader());
+        $schema = $query->schema('tpl');
+        self::assertNotNull($schema);
+        // First entry is the headline.
+        return $schema[0];
+    }
+
+    public function test_schema_has_binding_recognises_legacy_string_source(): void
+    {
+        $entry = $this->schemaEntryWithSource('posts.singlePost');
+        self::assertTrue($entry['has_binding']);
+    }
+
+    public function test_schema_has_binding_recognises_bare_query_object(): void
+    {
+        $entry = $this->schemaEntryWithSource(['query' => ['name' => 'posts.singlePost']]);
+        self::assertTrue($entry['has_binding']);
+    }
+
+    public function test_schema_has_binding_recognises_full_structured_source(): void
+    {
+        // F-01-Rest reproduction: live YT4 page-layout shape on a single-post
+        // template under `I99YS8Ii/children/20/children/0/children/0/children/0`.
+        $entry = $this->schemaEntryWithSource([
+            'query' => ['name' => 'posts.singlePost'],
+            'props' => [
+                'metaString' => ['name' => 'metaString'],
+                'title' => ['name' => 'title'],
+                'date' => ['name' => 'date'],
+                'featuredImage.url' => ['name' => 'featuredImage.url'],
+            ],
+        ]);
+        self::assertTrue($entry['has_binding']);
+    }
+
+    public function test_schema_has_binding_recognises_structured_with_filters(): void
+    {
+        $entry = $this->schemaEntryWithSource([
+            'query' => ['name' => 'posts.singlePost'],
+            'props' => [
+                'title' => ['name' => 'title', 'filters' => []],
+            ],
+        ]);
+        self::assertTrue($entry['has_binding']);
+    }
+
+    public function test_schema_has_binding_false_when_query_name_missing(): void
+    {
+        // Defensive: structured object lacking `query.name` is not a real
+        // binding (degenerate write — surface as false to avoid lying).
+        $entry = $this->schemaEntryWithSource(['query' => []]);
+        self::assertFalse($entry['has_binding']);
+    }
+
+    public function test_schema_has_binding_false_when_source_prop_absent(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'tpl' => [
+                    'layout' => [
+                        'type' => 'layout',
+                        'children' => [
+                            ['type' => 'headline', 'props' => ['content' => 'Hi'], 'children' => []],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+        $query = new PageQuery(new LayoutReader());
+        $schema = $query->schema('tpl');
+        self::assertNotNull($schema);
+        self::assertFalse($schema[0]['has_binding']);
+    }
 }
