@@ -56,7 +56,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Run PHPStan
-        run: vendor/bin/phpstan analyse --memory-limit=512M --no-progress
+        # 1.0.1 — bumped from 512M to 1G. Wave-1.5..1.8 expanded the
+        # type-graph (added PageQuery + SourcesController filter logic,
+        # 4 new schema generic shapes); 512M now OOMs the parallel
+        # worker. 1G fits comfortably inside the 7G ubuntu-latest budget.
+        run: vendor/bin/phpstan analyse --memory-limit=1G --no-progress
 
   npm:
     name: Node ${{ matrix.node }} (NPM Package)
