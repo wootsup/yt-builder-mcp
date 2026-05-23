@@ -740,10 +740,15 @@ final class RelPathAcceptanceTest extends TestCase
         // Wave-1.8 audit-pass v2: on bindings-free elements the legacy
         // element.source / source_extended keys are absent too, so the
         // pointer-key would just be noise. Pin the slim response.
+        //
+        // The seed image at /children/1 has props.source='cat.jpg' which
+        // BindingSerializer reads as a legacy-string binding; we use the
+        // section's headline at /children/0/children/0 instead — its
+        // `props.content` is plain text, no source carrier present.
         $controller = $this->controller();
         $req = new \WP_REST_Request('GET', '/');
         $req['template_id'] = 'tpl';
-        $req['element_path'] = '/children/1'; // image, no binding
+        $req['element_path'] = '/children/0/children/0'; // headline, no binding
 
         $resp = $controller->get_element($req);
         self::assertInstanceOf(\WP_REST_Response::class, $resp);

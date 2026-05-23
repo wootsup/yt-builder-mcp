@@ -157,7 +157,10 @@ final class HealthControllerTest extends TestCase
 
         self::assertArrayHasKey('element_path_format', $payload);
         self::assertStringContainsString('templates/', $payload['element_path_format']);
-        self::assertStringContainsString('LITERAL', $payload['element_path_format']);
+        // The format hint warns against percent-encoding slashes — case-
+        // sensitive assertion against the actual wording.
+        self::assertStringContainsString('literal slashes', $payload['element_path_format']);
+        self::assertStringContainsString('NOT percent-encode', $payload['element_path_format']);
 
         self::assertArrayHasKey('element_path_example', $payload);
         self::assertStringStartsWith('/templates/', $payload['element_path_example']);
