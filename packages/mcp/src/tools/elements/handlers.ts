@@ -41,7 +41,55 @@ import {
 // ─── outputSchemas (Wave G.2 §4) ─────────────────────────────────────
 
 export const ELEMENT_LIST_OUTPUT_SCHEMA = z.object({
-    items: z.array(z.record(z.string(), z.unknown())),
+    // 1.0.1 Wave-1.5 — Cold agents need to see the row shape so they know
+    // they can copy `rel_path`/`path`/`element_type`/`parent_path` straight
+    // back into the next call. All fields are optional + the row is
+    // `passthrough()` so projected/narrow `fields[]` calls still validate.
+    items: z.array(
+        z
+            .object({
+                path: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Fully-qualified JSON-Pointer ' +
+                            '(`/templates/<id>/layout/children/...`).',
+                    ),
+                rel_path: z
+                    .string()
+                    .optional()
+                    .describe(
+                        'Path relative to layout root (`/children/0/...`). ' +
+                            'Pass either form back as `element_path`.',
+                    ),
+                element_type: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "Element type (e.g. `headline`, `section`, `grid`). " +
+                            "Feeds `element_add.element_type` directly.",
+                    ),
+                parent_path: z
+                    .string()
+                    .optional()
+                    .describe(
+                        "Path of this element's parent. Feeds `element_add.parent_path` / " +
+                            "`element_move.to_parent_path` directly (rel_path form preferred).",
+                    ),
+                label: z
+                    .string()
+                    .optional()
+                    .describe('Human-readable name of the element (alias of `name`).'),
+                has_binding: z
+                    .boolean()
+                    .optional()
+                    .describe(
+                        'True when this element is dynamically bound to a data ' +
+                            'source. Use `element_get_binding` for the full mapping.',
+                    ),
+            })
+            .passthrough(),
+    ),
     total: z.number(),
     template_id: z.string(),
     // N-01: present only when the call was paginated and more rows remain.

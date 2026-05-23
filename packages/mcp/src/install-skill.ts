@@ -1,7 +1,7 @@
 /**
  * `install-skill` subcommand for `@wootsup/yt-builder-mcp`.
  *
- * Copies the bundled `skills/yootheme-builder/` directory into the user's
+ * Copies the bundled `skills/yt-builder-mcp/` directory into the user's
  * agent-skill folder (typically `~/.claude/skills/`) and appends a marker
  * block to `~/AGENTS.md` so other AI clients pick it up automatically.
  *
@@ -21,6 +21,7 @@ import {
     mkdirSync,
     readdirSync,
     readFileSync,
+    rmSync,
     statSync,
     writeFileSync,
 } from 'node:fs';
@@ -35,7 +36,7 @@ const MARKER_BLOCK = `
 ## YT Builder MCP
 
 ${MARKER_LINE}
-The YOOtheme Builder skill is installed at \`~/.claude/skills/yootheme-builder/\`
+The YT Builder MCP skill is installed at \`~/.claude/skills/yt-builder-mcp/\`
 — the universal-marker path recognised by Claude Desktop and other AI
 clients that follow the \`~/AGENTS.md\` discovery protocol.
 
@@ -51,8 +52,16 @@ export interface InstallSkillOptions {
      * walking up from this file (works in both source and `dist/` layouts).
      */
     readonly pkgRoot?: string;
-    /** Target dir where the `yootheme-builder/` skill folder will land. */
+    /** Target dir where the `yt-builder-mcp/` skill folder will land. */
     readonly targetSkillsDir?: string;
+    /**
+     * 1.0.1 Wave-R: when `true` (default), the installer removes any
+     * legacy `yootheme-builder/` directory left behind by pre-1.0.1
+     * installs so the user doesn't end up with two side-by-side skill
+     * copies under the same `~/.claude/skills/` root. Set to `false` to
+     * keep the legacy dir.
+     */
+    readonly removeLegacyDir?: boolean;
     /** Target AGENTS.md file to append the marker to. */
     readonly targetAgentsFile?: string;
 }
@@ -87,10 +96,10 @@ function copyDirRecursive(src: string, dst: string): void {
 }
 
 /**
- * Locate the bundled `skills/yootheme-builder` directory.
+ * Locate the bundled `skills/yt-builder-mcp` directory.
  *
  * Production layout: the skill folder is bundled INSIDE the npm package
- * (`packages/mcp/skills/yootheme-builder/`), next to `dist/`. The same
+ * (`packages/mcp/skills/yt-builder-mcp/`), next to `dist/`. The same
  * layout exists in the source tree (per Design-Doc §13.1) so source-mode
  * smoke tests and the published tarball use the same single path.
  *
@@ -99,7 +108,7 @@ function copyDirRecursive(src: string, dst: string): void {
  * a tarball without `skills/` (skill-not-found at first run).
  */
 function findSkillSource(pkgRoot: string): string {
-    return join(pkgRoot, 'skills', 'yootheme-builder');
+    return join(pkgRoot, 'skills', 'yt-builder-mcp');
 }
 
 export async function installSkill(
@@ -121,8 +130,20 @@ export async function installSkill(
     if (!existsSync(targetSkillsDir)) {
         mkdirSync(targetSkillsDir, { recursive: true });
     }
-    const skillTargetDir = join(targetSkillsDir, 'yootheme-builder');
+    const skillTargetDir = join(targetSkillsDir, 'yt-builder-mcp');
     copyDirRecursive(srcSkillDir, skillTargetDir);
+
+    // 1.0.1 Wave-R: clean up the legacy directory created by pre-1.0.1
+    // installs so the user doesn't end up with two side-by-side skill
+    // copies (`yootheme-builder/` AND `yt-builder-mcp/`) under the same
+    // `~/.claude/skills/` root.
+    const removeLegacy = options.removeLegacyDir ?? true;
+    if (removeLegacy) {
+        const legacyDir = join(targetSkillsDir, 'yootheme-builder');
+        if (existsSync(legacyDir) && legacyDir !== skillTargetDir) {
+            rmSync(legacyDir, { recursive: true, force: true });
+        }
+    }
 
     let markerAlreadyPresent = false;
     if (existsSync(targetAgentsFile)) {

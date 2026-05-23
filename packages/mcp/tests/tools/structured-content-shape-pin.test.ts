@@ -62,6 +62,9 @@ const HEALTH_BODY = {
     storage_target: 'yootheme',
     yootheme_loaded: true,
     available_endpoints: ['/health', '/pages'],
+    // 1.0.1 — site_url / home_url added to authenticated health payload.
+    site_url: 'https://example.test/wordpress',
+    home_url: 'https://example.test',
 };
 
 const CASES: readonly ShapePinCase[] = [
@@ -150,7 +153,7 @@ const CASES: readonly ShapePinCase[] = [
     },
     {
         toolName: 'yootheme_builder_element_type_get_schema',
-        args: { type_name: 'headline' },
+        args: { element_type: 'headline' },
         // Real REST shape: the schema is nested under `schema`, and
         // `fields` is a LIST of {name,type,label?} descriptors (audit v4 F-05).
         responseBody: {

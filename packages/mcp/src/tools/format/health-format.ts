@@ -21,6 +21,10 @@ export interface HealthPayload {
     storage_target: string;
     yootheme_loaded: boolean;
     available_endpoints: string[];
+    // 1.0.1 — canonical WP URLs (optional in case an older PHP server
+    // doesn't emit them; the response shape stays back-compatible).
+    site_url?: string | null;
+    home_url?: string | null;
 }
 
 /**
@@ -173,6 +177,9 @@ export interface DiagnoseChecks {
     plugin_error?: string;
     bearer_valid?: boolean;
     bearer_error?: string;
+    // 1.0.1 — mirror health URLs so the diagnose card shows them too.
+    site_url?: string | null;
+    home_url?: string | null;
 }
 
 /**

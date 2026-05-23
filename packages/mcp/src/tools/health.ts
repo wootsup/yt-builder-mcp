@@ -47,6 +47,26 @@ const HEALTH_OUTPUT_SCHEMA = z.object({
     storage_target: z.string(),
     yootheme_loaded: z.boolean(),
     available_endpoints: z.array(z.string()),
+    // 1.0.1 — surface canonical WP URLs so an agent can deep-link the
+    // customer to the live site without a separate REST round-trip.
+    // Both fields are optional in the schema for back-compat with older
+    // 1.0.0 PHP servers that don't yet emit them.
+    site_url: z
+        .string()
+        .nullable()
+        .optional()
+        .describe(
+            'Canonical WordPress install URL including any subpath ' +
+                '(e.g. `https://example.com/wordpress`). Authenticated payload only.',
+        ),
+    home_url: z
+        .string()
+        .nullable()
+        .optional()
+        .describe(
+            'Front-end home URL — use this to deep-link the user to the live ' +
+                'site they edited.',
+        ),
 });
 
 const DIAGNOSE_OUTPUT_SCHEMA = z.object({
@@ -59,6 +79,26 @@ const DIAGNOSE_OUTPUT_SCHEMA = z.object({
     bearer_valid: z.boolean().optional(),
     bearer_error: z.string().optional(),
     summary: z.string().optional(),
+    // 1.0.1 — mirror the health fields for parity. Diagnose calls /health
+    // internally so it has the values; surfacing them avoids forcing the
+    // agent to call both tools to get URL info + bearer status.
+    site_url: z
+        .string()
+        .nullable()
+        .optional()
+        .describe(
+            'Canonical WordPress install URL including any subpath ' +
+                '(e.g. `https://example.com/wordpress`). Mirrored from /health so an ' +
+                'agent gets URL info + bearer status in one call.',
+        ),
+    home_url: z
+        .string()
+        .nullable()
+        .optional()
+        .describe(
+            'Front-end home URL — use this to deep-link the user to the live ' +
+                'site they edited.',
+        ),
 });
 
 export function buildHealthTools(client: RestClient): readonly AnyToolDefinition[] {
@@ -91,6 +131,8 @@ export function buildHealthTools(client: RestClient): readonly AnyToolDefinition
                         storage_target: data.storage_target,
                         yootheme_loaded: data.yootheme_loaded,
                         available_endpoints: data.available_endpoints,
+                        ...(data.site_url !== undefined ? { site_url: data.site_url } : {}),
+                        ...(data.home_url !== undefined ? { home_url: data.home_url } : {}),
                     });
                 } catch (e) {
                     return errorResult({
@@ -124,6 +166,14 @@ export function buildHealthTools(client: RestClient): readonly AnyToolDefinition
                     checks.yootheme_loaded = health.yootheme_loaded;
                     checks.yootheme_version = health.yootheme_version;
                     checks.endpoint_count = health.available_endpoints.length;
+                    // 1.0.1 — mirror health URLs into diagnose output so an
+                    // agent gets URL info AND bearer-status in one call.
+                    if (health.site_url !== undefined) {
+                        checks.site_url = health.site_url;
+                    }
+                    if (health.home_url !== undefined) {
+                        checks.home_url = health.home_url;
+                    }
                 } catch (e) {
                     checks.plugin_reachable = false;
                     checks.plugin_error = e instanceof Error ? e.message : String(e);

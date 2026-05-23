@@ -51,6 +51,13 @@ final class ElementsController extends RestController
 {
     use PointerControllerTrait;
 
+    /**
+     * 1.0.1 Wave-1.8 audit-pass v2: explicit allow-list for the
+     * `?include=` query param on element_list. Unknown tokens get
+     * 400 with a hint listing this set.
+     */
+    private const ELEMENT_LIST_INCLUDE_ALLOWED = ['props'];
+
     private ?Inspector $inspector;
 
     public function __construct(
@@ -185,6 +192,43 @@ final class ElementsController extends RestController
         if (is_string($cursor) && $cursor !== '') {
             $options['cursor'] = $cursor;
         }
+        // 1.0.1 Wave-1.8 F-COLD-12: cold-agent S6 (a11y audit) had to
+        // fall back to a full /layout dump because element_list only
+        // surfaces `props_summary` (key names). Accept `?include=props`
+        // to forward the full props map per row — caller-opt-in so the
+        // default response stays slim.
+        //
+        // Wave-1.8 audit-pass v2 (A5 follow-up): explicit allow-list +
+        // validation. Unknown include tokens get a structured 400 with
+        // a hint listing the accepted set, mirroring the F-COLD-9/18
+        // 404-hint pattern. Future include tokens (e.g. `etag`,
+        // `binding`) just add to ELEMENT_LIST_INCLUDE_ALLOWED below.
+        $include = $request->get_param('include');
+        if (is_string($include) && $include !== '') {
+            $tokens = array_values(array_filter(
+                array_map(
+                    static fn(string $s): string => trim($s),
+                    explode(',', $include),
+                ),
+                static fn(string $s): bool => $s !== '',
+            ));
+            $unknown = array_values(array_diff($tokens, self::ELEMENT_LIST_INCLUDE_ALLOWED));
+            if (count($unknown) > 0) {
+                return new \WP_Error(
+                    'yootheme_builder_mcp.elements.invalid_query',
+                    sprintf(
+                        '`include` tokens not recognized: %s. Accepted: %s.',
+                        implode(', ', $unknown),
+                        implode(', ', self::ELEMENT_LIST_INCLUDE_ALLOWED),
+                    ),
+                    [
+                        'status' => 400,
+                        'hint' => 'Pass a comma-separated list of allow-listed tokens, e.g. `include=props`.',
+                    ],
+                );
+            }
+            $options['include'] = $tokens;
+        }
 
         $list = $this->ops->listOnTemplate($id, $options);
         if ($list === null) {
@@ -225,7 +269,18 @@ final class ElementsController extends RestController
      */
     public function get_element(\WP_REST_Request $request)
     {
-        $pointer = self::pointerFromRequest($request);
+        $templateId = (string) $request['template_id'];
+        $pointer = self::pointerFromRequest($request, '', $templateId);
+
+        // Wave-1.5 (Audit B6a): surface double-prefix as a structured 400
+        // before the layout walker silently 404s. The same assertion runs
+        // on every write route; mirror it on read for consistent shape.
+        if ($pointer !== '') {
+            $assertErr = $this->assertPointerWithinTemplate($templateId, $pointer);
+            if ($assertErr !== null) {
+                return $assertErr;
+            }
+        }
 
         try {
             $node = $this->ops->get($pointer);
@@ -238,10 +293,20 @@ final class ElementsController extends RestController
         }
 
         if ($node === null) {
+            // 1.0.1 Wave-1.8 F-COLD-9 / F-COLD-18: cold agents that
+            // either (a) percent-encoded the path or (b) supplied the
+            // layout-relative form without the `templates/<id>/` prefix
+            // historically got a 404 echoing back the broken pointer
+            // with no actionable hint. Add a `hint` field that diagnoses
+            // the two most common shapes — mirrors the
+            // `expected_etag` hint pattern on 412.
             return new \WP_Error(
                 'yootheme_builder_mcp.elements.not_found',
                 sprintf('Element at "%s" not found.', $pointer),
-                ['status' => 404],
+                [
+                    'status' => 404,
+                    'hint' => self::pathHintFor($pointer, $templateId),
+                ],
             );
         }
         // F-01: surface the canonical normalized shape at the top level
@@ -250,8 +315,22 @@ final class ElementsController extends RestController
         // a legacy alias carrying the raw node for back-compat with older
         // MCP-clients that may still walk the nested object.
         $view = ElementOps::flattenNode($node, $pointer);
-        return new \WP_REST_Response([
-            'template_id' => (string) $request['template_id'],
+        // 1.0.1 Wave-1.8 F-COLD-19: cold-agent S3 saw two `source` keys
+        // with diverging values — `props.source` (the binding the
+        // controller writes / renderer reads, authoritative) vs a stale
+        // YT-storage-side `element.source`/`element.source_extended`
+        // denormalized snapshot left behind by an earlier binding write.
+        // Until we can safely strip the legacy keys (defer to 2.0.0 —
+        // breaking), surface an additive pointer so cold agents know
+        // which field carries truth and can ignore the legacy artifact.
+        //
+        // Wave-1.8 audit-pass v2 (A5 follow-up): only emit the pointer
+        // when there's actually a binding to disambiguate. On bindings-
+        // free elements the legacy `element.source` / `source_extended`
+        // keys are absent too, so there's nothing to clarify — keeping
+        // the pointer-key absent halves the noise for the common case.
+        $payload = [
+            'template_id' => $templateId,
             'path' => $pointer,
             'element_path' => $pointer,
             'element_type' => $view['element_type'],
@@ -263,7 +342,11 @@ final class ElementsController extends RestController
             'label' => $view['label'] ?? null,
             'element' => $node,
             'etag' => $this->reader->etag(),
-        ], 200);
+        ];
+        if ($view['has_binding']) {
+            $payload['_authoritative_source'] = 'props.source';
+        }
+        return new \WP_REST_Response($payload, 200);
     }
 
     // -----------------------------------------------------------------------
@@ -285,12 +368,11 @@ final class ElementsController extends RestController
 
         $params = $request->get_json_params();
         $parentPath = isset($params['parent_path']) && is_string($params['parent_path']) ? $params['parent_path'] : '';
-        // Normalize leading slash defensively (tool-sweep 2026-05-22):
-        // both `templates/<id>/layout/...` and `/templates/<id>/layout/...`
-        // are valid user input — JsonPointer downstream needs the slash.
-        if ($parentPath !== '' && $parentPath[0] !== '/') {
-            $parentPath = '/' . $parentPath;
-        }
+        // 1.0.1 — accept rel_path form (`children/...` / `/children/...`) in
+        // addition to fully-qualified `/templates/<id>/layout/...`. The
+        // normalizer also handles the missing-leading-slash case the
+        // tool-sweep 2026-05-22 fix introduced.
+        $parentPath = self::normalizeElementPath($parentPath, $templateId);
         $elementType = isset($params['element_type']) && is_string($params['element_type']) ? $params['element_type'] : '';
         if ($elementType === '') {
             return new \WP_Error(
@@ -343,7 +425,7 @@ final class ElementsController extends RestController
     public function update_settings(\WP_REST_Request $request)
     {
         $templateId = (string) $request['template_id'];
-        $pointer = self::pointerFromRequest($request, '/settings');
+        $pointer = self::pointerFromRequest($request, '/settings', $templateId);
 
         $current = $this->reader->etag();
         $lockError = EtagMiddleware::enforce($request, $current, requireIfMatch: true);
@@ -375,18 +457,45 @@ final class ElementsController extends RestController
         $merge = !empty($params['merge']);
 
         return $this->mutate($templateId, $request, function (array &$state) use ($templateId, $pointer, $props, $merge): array {
+            // 1.0.1 Wave-1.8 F-COLD-21: surface the merge semantics +
+            // (when full-replace) the list of top-level keys the caller
+            // DIDN'T supply that consequently got dropped. The
+            // Multi-Items workflow stumbles here repeatedly because
+            // `props.source` (the binding) is invisible to a caller who
+            // is iterating on `props.item_element` and supplies only
+            // that one key — full-replace silently wipes the source.
+            // Surfacing the dropped keys gives the caller a chance to
+            // notice + recover (or switch to `merge:true`).
+            $currentNode = JsonPointer::get($state, $pointer);
+            $currentProps = (is_array($currentNode) && isset($currentNode['props']) && is_array($currentNode['props']))
+                ? $currentNode['props']
+                : [];
+            /** @var array<string, mixed> $currentProps */
+
             if ($merge) {
-                $currentNode = JsonPointer::get($state, $pointer);
-                $currentProps = (is_array($currentNode) && isset($currentNode['props']) && is_array($currentNode['props']))
-                    ? $currentNode['props']
-                    : [];
-                /** @var array<string, mixed> $currentProps */
                 $merged = ElementOps::mergeProps($currentProps, $props);
                 $this->ops->updateSettings($state, $templateId, $pointer, $merged);
-            } else {
-                $this->ops->updateSettings($state, $templateId, $pointer, $props);
+                return [
+                    'element_path' => $pointer,
+                    'merge_mode' => 'merge',
+                ];
             }
-            return ['element_path' => $pointer];
+
+            $dropped = [];
+            foreach (array_keys($currentProps) as $key) {
+                if (!array_key_exists($key, $props)) {
+                    $dropped[] = (string) $key;
+                }
+            }
+            $this->ops->updateSettings($state, $templateId, $pointer, $props);
+            $extra = [
+                'element_path' => $pointer,
+                'merge_mode' => 'replace',
+            ];
+            if (count($dropped) > 0) {
+                $extra['replaced_top_level_props'] = $dropped;
+            }
+            return $extra;
         });
     }
 
@@ -396,7 +505,7 @@ final class ElementsController extends RestController
     public function delete_element(\WP_REST_Request $request)
     {
         $templateId = (string) $request['template_id'];
-        $pointer = self::pointerFromRequest($request);
+        $pointer = self::pointerFromRequest($request, '', $templateId);
 
         $current = $this->reader->etag();
         $lockError = EtagMiddleware::enforce($request, $current, requireIfMatch: true);
@@ -421,7 +530,7 @@ final class ElementsController extends RestController
     public function move_element(\WP_REST_Request $request)
     {
         $templateId = (string) $request['template_id'];
-        $pointer = self::pointerFromRequest($request, '/move');
+        $pointer = self::pointerFromRequest($request, '/move', $templateId);
 
         $current = $this->reader->etag();
         $lockError = EtagMiddleware::enforce($request, $current);
@@ -431,10 +540,8 @@ final class ElementsController extends RestController
 
         $params = $request->get_json_params();
         $toParentPath = isset($params['to_parent_path']) && is_string($params['to_parent_path']) ? $params['to_parent_path'] : '';
-        // Same defensive normalisation as element_add parent_path.
-        if ($toParentPath !== '' && $toParentPath[0] !== '/') {
-            $toParentPath = '/' . $toParentPath;
-        }
+        // 1.0.1 — accept rel_path form in addition to fully-qualified pointers.
+        $toParentPath = self::normalizeElementPath($toParentPath, $templateId);
         $toIndex = isset($params['to_index']) && is_int($params['to_index']) ? $params['to_index'] : null;
         if ($toIndex === null) {
             return new \WP_Error(
@@ -467,7 +574,7 @@ final class ElementsController extends RestController
     public function clone_element(\WP_REST_Request $request)
     {
         $templateId = (string) $request['template_id'];
-        $pointer = self::pointerFromRequest($request, '/clone');
+        $pointer = self::pointerFromRequest($request, '/clone', $templateId);
 
         $current = $this->reader->etag();
         $lockError = EtagMiddleware::enforce($request, $current);
@@ -578,5 +685,34 @@ final class ElementsController extends RestController
     private function inspector(): Inspector
     {
         return $this->inspector ??= new Inspector();
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-9 / F-COLD-18: produce an actionable hint
+     * for 404 not-found responses on the element-tools. Cold-agent S2
+     * stumbled because it percent-encoded slashes (`%2F` literals
+     * leak into the pointer); S3 stumbled because it sent the
+     * layout-relative form without the `templates/<id>/` prefix.
+     * Detect both shapes and emit a targeted one-line hint —
+     * everything else gets the generic "verify path" hint.
+     */
+    private static function pathHintFor(string $pointer, string $templateId): string
+    {
+        // Percent-encoded slash leaked into the pointer.
+        if (str_contains($pointer, '%2F') || str_contains($pointer, '%2f')) {
+            return 'element_path uses LITERAL slashes — do NOT percent-encode `/` as `%2F`.';
+        }
+        // Layout-relative pointer (`/layout/...` or `/children/...`)
+        // was passed but the controller couldn't normalize it (e.g.
+        // pre-1.0.1 client form): nudge toward the canonical prefix.
+        $expectedPrefix = '/templates/' . $templateId . '/';
+        if ($pointer !== '' && !str_starts_with($pointer, $expectedPrefix)) {
+            return sprintf(
+                'element_path must start with `%s` (or use the rel_path form like `/children/0`). ' .
+                'Discover paths via yootheme_builder_element_list or `layout_root_pointer` from page_get_layout.',
+                $expectedPrefix,
+            );
+        }
+        return 'Verify the path via yootheme_builder_element_list — paths are case-sensitive.';
     }
 }

@@ -102,9 +102,19 @@ export async function handlePageGetLayout(
             [],
         );
         const echo = projectedFieldsEcho(fields, undefined);
+        // 1.0.1 Wave-1.7 F-COLD-3: forward the canonical pointer base
+        // through the flat-projection path too so cold agents iterating
+        // with `flat: true` see the same hint they get on the nested
+        // default payload.
         return jsonResult({
             elements: projected,
             ...(typeof data.etag === 'string' ? { etag: data.etag } : {}),
+            ...(typeof data.layout_root_pointer === 'string'
+                ? { layout_root_pointer: data.layout_root_pointer }
+                : {}),
+            ...(typeof data.pointer_hint === 'string'
+                ? { pointer_hint: data.pointer_hint }
+                : {}),
             ...(echo !== undefined ? { projected_fields: [...echo] } : {}),
         });
     } catch (e) {

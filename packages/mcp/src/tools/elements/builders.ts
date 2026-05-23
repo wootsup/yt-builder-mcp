@@ -121,8 +121,13 @@ export function buildElementsTools(
                     .string()
                     .default('')
                     .describe(
-                        'JSON-Pointer of the parent node ("" for template root, ' +
-                            '"/0/children/2" for nested). Use yootheme_builder_element_list to find.',
+                        'JSON-Pointer of the parent node. Accepts EITHER "" for ' +
+                            'template root, a `rel_path` from `element_list` ' +
+                            '(`/children/0`, `/children/0/children/2`) — the server ' +
+                            'resolves it within this template — OR a fully-qualified ' +
+                            'pointer (`/templates/<id>/layout/children/0/...`). The ' +
+                            'rel_path form is preferred (copy-paste straight from ' +
+                            '`element_list`).',
                     ),
                 element_type: z
                     .string()

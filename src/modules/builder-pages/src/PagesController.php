@@ -124,10 +124,25 @@ final class PagesController extends RestController
                 ['status' => 404],
             );
         }
+        // 1.0.1 Wave-1.7 F-COLD-3: cold-agent live-feedback (S2 probe
+        // 2026-05-23) showed agents constructing `/templates/<id>/layout/
+        // layout/children/...` from this payload — the response `layout`
+        // field carries the WHOLE template object (`{name, layout:
+        // {children:...}, ...}`), so naive walkers double the `/layout`
+        // segment. Surface the canonical pointer base + a short hint so
+        // the agent can copy it straight into `element_path` without
+        // having to reverse-engineer the storage shape.
+        $pointerBase = \WootsUp\BuilderMcp\State\JsonPointer::compile(['templates', $id, 'layout']);
         return new \WP_REST_Response([
             'template_id' => $id,
             'layout' => $tpl,
             'etag' => $this->query->etag(),
+            'layout_root_pointer' => $pointerBase,
+            'pointer_hint' =>
+                'Element paths in this template share the prefix "' .
+                $pointerBase . '" (e.g. "' . $pointerBase . '/children/0"). ' .
+                'You can also pass the rel_path form ("/children/0") to ' .
+                'element-tools — both are accepted since 1.0.1.',
         ], 200);
     }
 

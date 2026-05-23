@@ -1,5 +1,5 @@
 ---
-name: yootheme-builder
+name: yt-builder-mcp
 description: Drive the YOOtheme Pro page builder programmatically — discover pages, inspect layouts, add/move/clone/delete elements, bind dynamic sources, diagnose 401/403 auth failures. Use when the user wants to build, modify, audit, or troubleshoot a YOOtheme-powered WordPress site through the YT Builder MCP server.
 ---
 

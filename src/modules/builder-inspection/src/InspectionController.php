@@ -69,7 +69,7 @@ final class InspectionController extends RestController
         $items = [];
         $names = [];
         foreach ($catalog as $entry) {
-            $items[] = [
+            $row = [
                 'name' => $entry['name'],
                 'label' => $entry['label'],
                 'origin' => $entry['origin'],
@@ -77,6 +77,17 @@ final class InspectionController extends RestController
                 // MCP-TS alias (read by inspection-format.mapTypeRow).
                 'has_children_support' => $entry['has_children'],
             ];
+            // 1.0.1 Wave-1.8 P1 F-COLD-13: surface the semantic role
+            // (heading / link / img / region / list / listitem / ...)
+            // for known core types so cold a11y-audit agents (S6) can
+            // tell at a glance which elements need alt/label/etc.
+            // Unknown types omit the field rather than emit a wrong
+            // guess.
+            $role = Inspector::semanticRoleOf($entry['name']);
+            if ($role !== null) {
+                $row['semantic_role'] = $role;
+            }
+            $items[] = $row;
             $names[] = $entry['name'];
         }
         return new \WP_REST_Response([

@@ -407,4 +407,148 @@ final class InspectorTest extends TestCase
         self::assertTrue($byName['grid']['has_children']);
         self::assertTrue($byName['grid_item']['has_children']);
     }
+
+    /**
+     * 1.0.1 Wave-1.8 P1 F-COLD-13: well-known core element-types map to
+     * canonical semantic roles for the a11y-audit cold-agent workflow.
+     */
+    public function test_semantic_role_of_known_types(): void
+    {
+        // Heading
+        self::assertSame('heading', Inspector::semanticRoleOf('headline'));
+        // Media
+        self::assertSame('img', Inspector::semanticRoleOf('image'));
+        self::assertSame('video', Inspector::semanticRoleOf('video'));
+        // Links / navigation
+        self::assertSame('link', Inspector::semanticRoleOf('subnav_item'));
+        self::assertSame('list', Inspector::semanticRoleOf('subnav'));
+        // Multi-Items containers
+        self::assertSame('list', Inspector::semanticRoleOf('grid'));
+        self::assertSame('listitem', Inspector::semanticRoleOf('grid_item'));
+        // Structural
+        self::assertSame('region', Inspector::semanticRoleOf('section'));
+        self::assertSame('separator', Inspector::semanticRoleOf('divider'));
+    }
+
+    public function test_semantic_role_of_unknown_type_returns_null(): void
+    {
+        // Unknown / custom types: prefer null over a wrong guess. Cold
+        // agents see absence of the flag and fall back on their own
+        // heuristics rather than locking onto an incorrect ARIA role.
+        self::assertNull(Inspector::semanticRoleOf('custom_unknown_widget'));
+        self::assertNull(Inspector::semanticRoleOf(''));
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 P1 F-COLD-14: schema endpoint surfaces the field
+     * `enum` (normalised list) so cold agents don't have to guess valid
+     * select / radio values. Both YT shapes (flat list + label-keyed
+     * map) are accepted; the projection always emits list-of-strings.
+     */
+    public function test_schema_field_surfaces_enum_for_select_options_flat_list(): void
+    {
+        $adapter = new class extends \WootsUp\BuilderMcp\Yootheme\YoothemeAdapter {
+            public function getBuilderTypeConfig(string $name): ?array
+            {
+                return [
+                    'fields' => [
+                        'size' => [
+                            'type' => 'select',
+                            'label' => 'Size',
+                            'options' => ['small', 'medium', 'large'],
+                            'default' => 'medium',
+                        ],
+                    ],
+                ];
+            }
+            public function getBuilderTypesDetailed(): ?array
+            {
+                return [
+                    ['name' => 'mything', 'label' => 'My Thing', 'origin' => 'builtin', 'has_children' => false],
+                ];
+            }
+        };
+        $inspector = new Inspector($adapter);
+        $schema = $inspector->schema('mything');
+        self::assertNotNull($schema);
+        $size = $schema['fields'][0];
+        self::assertSame('size', $size['name']);
+        self::assertSame(['small', 'medium', 'large'], $size['enum']);
+        self::assertSame('medium', $size['default']);
+    }
+
+    public function test_schema_field_surfaces_enum_for_label_keyed_options_map(): void
+    {
+        $adapter = new class extends \WootsUp\BuilderMcp\Yootheme\YoothemeAdapter {
+            public function getBuilderTypeConfig(string $name): ?array
+            {
+                return [
+                    'fields' => [
+                        'align' => [
+                            'type' => 'select',
+                            'options' => ['Left' => 'left', 'Right' => 'right'],
+                        ],
+                    ],
+                ];
+            }
+            public function getBuilderTypesDetailed(): ?array
+            {
+                return [
+                    ['name' => 'mything', 'label' => 'My Thing', 'origin' => 'builtin', 'has_children' => false],
+                ];
+            }
+        };
+        $inspector = new Inspector($adapter);
+        $schema = $inspector->schema('mything');
+        self::assertNotNull($schema);
+        self::assertSame(['left', 'right'], $schema['fields'][0]['enum']);
+    }
+
+    public function test_schema_omits_enum_for_non_select_fields(): void
+    {
+        $adapter = new class extends \WootsUp\BuilderMcp\Yootheme\YoothemeAdapter {
+            public function getBuilderTypeConfig(string $name): ?array
+            {
+                return [
+                    'fields' => [
+                        'content' => ['type' => 'editor', 'label' => 'Content'],
+                    ],
+                ];
+            }
+            public function getBuilderTypesDetailed(): ?array
+            {
+                return [
+                    ['name' => 'mything', 'label' => 'My Thing', 'origin' => 'builtin', 'has_children' => false],
+                ];
+            }
+        };
+        $inspector = new Inspector($adapter);
+        $schema = $inspector->schema('mything');
+        self::assertNotNull($schema);
+        self::assertArrayNotHasKey('enum', $schema['fields'][0]);
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 P1 F-COLD-13: schema() response surfaces the
+     * semantic_role for known types directly in the schema envelope.
+     */
+    public function test_schema_surfaces_semantic_role_for_known_types(): void
+    {
+        $adapter = new class extends \WootsUp\BuilderMcp\Yootheme\YoothemeAdapter {
+            public function getBuilderTypeConfig(string $name): ?array
+            {
+                return ['fields' => []];
+            }
+            public function getBuilderTypesDetailed(): ?array
+            {
+                return [
+                    ['name' => 'headline', 'label' => 'Headline', 'origin' => 'builtin', 'has_children' => false],
+                ];
+            }
+        };
+        $inspector = new Inspector($adapter);
+        $schema = $inspector->schema('headline');
+        self::assertNotNull($schema);
+        self::assertSame('heading', $schema['semantic_role']);
+    }
 }

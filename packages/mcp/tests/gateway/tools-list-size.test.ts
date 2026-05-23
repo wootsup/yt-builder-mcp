@@ -1,10 +1,11 @@
 /**
  * Pin-tests for the Cursor-cap-safe `tools/list` surface.
  *
- * After Wave G.1, an LLM-host enumerating `tools/list` MUST see exactly
- * 17 entries (14 L1 essentials + 2 L3 direct + 1 gateway). Every other
- * tool reachable through `yootheme_builder_advanced`. The total tool
- * count across BOTH surfaces is exactly 25.
+ * After Wave G.1 (with the 1.0.1 element_type_get_schema promotion), an
+ * LLM-host enumerating `tools/list` MUST see exactly 18 entries
+ * (15 L1 essentials + 2 L3 direct + 1 gateway). Every other tool
+ * reachable through `yootheme_builder_advanced`. The total tool count
+ * across BOTH surfaces is exactly 25.
  *
  * These counts are PINNED. A failing pin = a wave-spec drift; either
  * (a) the spec genuinely needs to change and the pin updates, or
@@ -36,13 +37,13 @@ function realToolNames(server: ReturnType<typeof createServer>['mcp']): string[]
 }
 
 describe('tools/list surface (Cursor-cap-safe)', () => {
-    it('the real server exposes exactly 17 tools: 14 L1 + 2 L3 + 1 gateway', () => {
+    it('the real server exposes exactly 18 tools: 15 L1 + 2 L3 + 1 gateway', () => {
         const { mcp } = createServer({ client: makeClient() });
         const names = realToolNames(mcp).sort();
-        expect(names.length).toBe(17);
+        expect(names.length).toBe(18);
     });
 
-    it('the 14 L1 essentials are all on the real server', () => {
+    it('the 15 L1 essentials are all on the real server', () => {
         const { mcp } = createServer({ client: makeClient() });
         const names = realToolNames(mcp);
         for (const name of ESSENTIAL_TOOLS) {
@@ -69,11 +70,12 @@ describe('tools/list surface (Cursor-cap-safe)', () => {
         expect(Object.keys(all).length).toBe(25);
     });
 
-    it('the L2 advanced surface holds exactly 8 captured tools', () => {
-        // L2 = all tools - L1 (13 essentials) - L3 (2 direct) - gateway (1) = 8
-        // F-16 (Audit v2): 5 hot-path tools promoted L2 → L1, shrinking L2.
+    it('the L2 advanced surface holds exactly 7 captured tools', () => {
+        // L2 = all tools - L1 (15 essentials) - L3 (2 direct) - gateway (1) = 7
+        // F-16 (Audit v2): 5 hot-path tools promoted L2 → L1.
+        // 1.0.1: element_type_get_schema promoted L2 → L1, shrinking L2 further.
         const { capturing } = createServer({ client: makeClient() });
-        expect(capturing.getAdvancedRegistry().size).toBe(8);
+        expect(capturing.getAdvancedRegistry().size).toBe(7);
     });
 
     it('no L1 essential leaks into the advanced registry (lane disjoint)', () => {

@@ -85,7 +85,17 @@ final class MultiItemsController extends RestController
     public function inspect(\WP_REST_Request $request)
     {
         $templateId = (string) $request['template_id'];
-        $pointer = self::pointerFromRequest($request, '/multi-items/inspect');
+        $pointer = self::pointerFromRequest($request, '/multi-items/inspect', $templateId);
+
+        // 1.0.1 Wave-1.6 Audit-D-Gap: read endpoint still must reject
+        // crafted cross-template / double-prefix pointers — they would
+        // otherwise either silently 404 at the layout walker (confusing
+        // for the agent) or leak a foreign-template node's container/item
+        // shape via the report.
+        $assertErr = $this->assertPointerWithinTemplate($templateId, $pointer, 'multi_items');
+        if ($assertErr !== null) {
+            return $assertErr;
+        }
 
         $report = $this->inspector->inspect($templateId, $pointer);
         if ($report === null) {
@@ -109,7 +119,7 @@ final class MultiItemsController extends RestController
     public function clean_implode(\WP_REST_Request $request)
     {
         $templateId = (string) $request['template_id'];
-        $pointer = self::pointerFromRequest($request, '/multi-items/clean-implode');
+        $pointer = self::pointerFromRequest($request, '/multi-items/clean-implode', $templateId);
 
         $current = $this->reader->etag();
         $lockError = EtagMiddleware::enforce($request, $current, requireIfMatch: true);
@@ -118,14 +128,20 @@ final class MultiItemsController extends RestController
         }
 
         // Cross-template guard (mirrors the SourcesController defense).
-        $allowedPrefix = JsonPointer::compile(['templates', $templateId]);
-        if (!JsonPointer::isWithinPrefix($pointer, $allowedPrefix)) {
-            return new \WP_Error(
-                'yootheme_builder_mcp.multi_items.cross_template_write_denied',
-                sprintf('Pointer "%s" is not within template "%s".', $pointer, $templateId),
-                ['status' => 400],
-            );
+        // Wave-1.6 Audit-D-Gap: switched to the shared trait method so the
+        // double-prefix detection added in Wave 1.5 also covers this
+        // endpoint (was elements-only before).
+        $assertErr = $this->assertPointerWithinTemplate($templateId, $pointer, 'multi_items');
+        if ($assertErr !== null) {
+            return $assertErr;
         }
+
+        // 1.0.1 Wave-1.7 audit-F F-SEC-1: capture the baseline etag BEFORE
+        // any state read so the compare-and-swap below is anchored at the
+        // pre-read snapshot, not a snapshot taken after `$node` had
+        // already been loaded. ElementsController::mutate uses the same
+        // ordering — mirroring it here keeps the TOCTOU window narrow.
+        $etagAtStart = $this->reader->etag();
 
         $state = $this->reader->read();
         if (!isset($state['templates'][$templateId]) || !is_array($state['templates'][$templateId])) {
@@ -144,9 +160,6 @@ final class MultiItemsController extends RestController
                 ['status' => 404],
             );
         }
-
-        // TOCTOU guard.
-        $etagAtStart = $this->reader->etag();
 
         $result = ImplodeDirectiveCleaner::clean($node);
         if ($result['cleaned_count'] === 0) {

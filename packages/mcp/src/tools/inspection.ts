@@ -97,21 +97,58 @@ export function buildInspectionTools(client: RestClient): readonly AnyToolDefini
         defineTool({
             name: 'yootheme_builder_element_type_get_schema',
             description:
-                'Get the prop/field schema for a single element type. Use the result to discover ' +
-                'valid keys for `props` when calling yootheme_builder_element_add or ' +
-                '_update_settings.',
+                '**Call before every `element_add` / `_update_settings`** — unknown ' +
+                'prop keys are silently dropped server-side, so guessing fails ' +
+                'quietly. Returns `{name,type,label?}` field descriptors. Use ' +
+                '`element_type`; `type_name` is DEPRECATED.',
             inputSchema: {
-                type_name: z
+                // 1.0.1 cross-tool parameter naming alignment: every other
+                // tool in this domain uses `element_type` (element_add,
+                // element_update_settings, element_list rows). This tool
+                // originally shipped with `type_name`; we accept BOTH for
+                // backward-compatibility but the canonical key going
+                // forward is `element_type`.
+                element_type: z
                     .string()
                     .min(1)
+                    .optional()
                     .describe(
                         'Element type name (e.g. "headline", "text", "grid"). Use ' +
                             'yootheme_builder_element_types_list to discover.',
                     ),
+                type_name: z
+                    .string()
+                    .min(1)
+                    .optional()
+                    .describe(
+                        'DEPRECATED alias of `element_type` — use `element_type` ' +
+                            'instead. Kept for 1.0.x backward-compatibility; will be ' +
+                            'removed in a future major.',
+                    ),
             },
             outputSchema: TYPE_SCHEMA_OUTPUT_SCHEMA,
             annotations: readOnly('Get Element Type Schema'),
-            handler: async ({ type_name }) => {
+            handler: async (args) => {
+                // Accept either `element_type` (canonical) or `type_name`
+                // (deprecated alias). Empty/missing → 400-shaped error below.
+                const typeNameInput =
+                    typeof args.element_type === 'string' && args.element_type !== ''
+                        ? args.element_type
+                        : typeof args.type_name === 'string'
+                          ? args.type_name
+                          : '';
+                if (typeNameInput === '') {
+                    return errorResult({
+                        error: new Error(
+                            '`element_type` is required (alias `type_name` also accepted).',
+                        ),
+                        context: {},
+                        hint:
+                            'Pass `element_type` (e.g. "headline"). Use ' +
+                            'yootheme_builder_element_types_list to discover valid values.',
+                    });
+                }
+                const type_name = typeNameInput;
                 try {
                     const data = await client.get<Record<string, unknown>>(
                         `/element-types/${encodeURIComponent(type_name)}/schema`,
@@ -145,9 +182,9 @@ export function buildInspectionTools(client: RestClient): readonly AnyToolDefini
                 } catch (e) {
                     return errorResult({
                         error: e,
-                        context: { type_name },
+                        context: { element_type: type_name },
                         hint:
-                            'Verify type_name via yootheme_builder_element_types_list — names ' +
+                            'Verify element_type via yootheme_builder_element_types_list — names ' +
                             'are case-sensitive.',
                     });
                 }

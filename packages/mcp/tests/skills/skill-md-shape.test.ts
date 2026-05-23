@@ -15,15 +15,15 @@ import { buildAllTools } from '../../src/tools/index.js';
 import { RestClient } from '../../src/client.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-// SKILL.md lives INSIDE the npm package at packages/mcp/skills/yootheme-builder/SKILL.md
+// SKILL.md lives INSIDE the npm package at packages/mcp/skills/yt-builder-mcp/SKILL.md
 // (so it gets bundled into the tarball — Round-1 audit C1 fix). From here:
-// packages/mcp/tests/skills → up 2 → packages/mcp/ → skills/yootheme-builder/SKILL.md.
+// packages/mcp/tests/skills → up 2 → packages/mcp/ → skills/yt-builder-mcp/SKILL.md.
 const SKILL_PATH = resolve(
     __dirname,
     '..',
     '..',
     'skills',
-    'yootheme-builder',
+    'yt-builder-mcp',
     'SKILL.md',
 );
 
@@ -44,7 +44,7 @@ describe('SKILL.md — frontmatter', () => {
         const text = readFileSync(SKILL_PATH, 'utf-8');
         expect(text.startsWith('---')).toBe(true);
         const frontmatter = text.split('---')[1] ?? '';
-        expect(frontmatter).toMatch(/name:\s*yootheme-builder/);
+        expect(frontmatter).toMatch(/name:\s*yt-builder-mcp/);
         expect(frontmatter).toMatch(/description:/);
     });
 });

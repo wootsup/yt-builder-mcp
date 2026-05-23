@@ -47,8 +47,8 @@ export const ESSENTIAL_TOOLS = [
     'yootheme_builder_inspect_multi_items_binding',
     // F-16 hot-path promotions (Maria-Audit v2 re-confirmed) — the 5
     // most-used read/mutate operations skip the advanced-router
-    // discovery roundtrip. Cursor cap is ~40; we sit at 13 L1 + 2 L3 +
-    // 1 gateway = 16, comfortable below the limit.
+    // discovery roundtrip. Cursor cap is ~40; we sit at 15 L1 + 2 L3 +
+    // 1 gateway = 18, comfortable below the limit.
     'yootheme_builder_element_get',
     'yootheme_builder_element_delete',
     'yootheme_builder_element_clone',
@@ -57,6 +57,12 @@ export const ESSENTIAL_TOOLS = [
     // T9 (Audit-v3 B.5) — token-efficient template overview. L1 because
     // it's the recommended first call when orienting in a large template.
     'yootheme_builder_template_summary',
+    // 1.0.1 — element_type_get_schema promoted L2 → L1. Live-testing
+    // 1.0.0 in Claude Desktop showed tool_search couldn't surface it
+    // through the advanced gateway, yet it is the canonical prop-key
+    // discovery tool an agent needs BEFORE every element_add or
+    // element_update_settings. Hot-path for any write workflow.
+    'yootheme_builder_element_type_get_schema',
 ] as const;
 
 /**

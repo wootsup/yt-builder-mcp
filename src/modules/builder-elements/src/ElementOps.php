@@ -62,7 +62,7 @@ final class ElementOps
      *                     pagination; `next_cursor` is null on the last page.
      *
      * @param array{root_path?: string, depth?: int, limit?: int, cursor?: string} $options
-     * @return list<array{path: string, element_type: string, type: string, label?: string, props_summary: list<string>, has_binding: bool, child_count: int}>|array{items: list<array<string, mixed>>, next_cursor: ?string, total: int}|null
+     * @return list<array{path: string, element_type: string, type: string, label?: string, props_summary: list<string>, has_binding: bool, child_count: int, props?: array<string, mixed>, content_preview?: string}>|array{items: list<array<string, mixed>>, next_cursor: ?string, total: int}|null
      */
     public function listOnTemplate(string $templateId, array $options = []): ?array
     {
@@ -107,6 +107,29 @@ final class ElementOps
                 ];
                 if (isset($node['name']) && is_string($node['name'])) {
                     $entry['label'] = $node['name'];
+                }
+                // 1.0.1 Wave-1.8 F-COLD-12: opt-in `include=props` forwards
+                // the full props map per row (default stays `props_summary`-
+                // only, slim). Used by a11y/audit workflows that need
+                // values, not just keys.
+                if (
+                    isset($options['include'])
+                    && is_array($options['include'])
+                    && in_array('props', $options['include'], true)
+                    && isset($node['props'])
+                    && is_array($node['props'])
+                ) {
+                    $entry['props'] = $node['props'];
+                }
+                // 1.0.1 Wave-1.8 F-COLD-10: cold-agent S2/S4 burned a
+                // second element_get just to disambiguate two headlines
+                // with the same name+type but different `content` strings.
+                // Surface the first 60 chars of the most-likely text
+                // field (`content` / `title` / `value`) so the caller can
+                // pick the right node directly from element_list output.
+                $preview = self::contentPreview($node);
+                if ($preview !== null) {
+                    $entry['content_preview'] = $preview;
                 }
                 $out[] = $entry;
             }
@@ -211,6 +234,57 @@ final class ElementOps
             $keys[] = (string) $key;
         }
         return $keys;
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-10 / audit-pass v2: max length for the
+     * `content_preview` text projection in element_list rows. Tuned to
+     * give cold agents enough to disambiguate two same-type elements
+     * without bloating the response — most h1 headlines / call-to-
+     * action labels fit; longer body text is cleanly elided.
+     */
+    private const CONTENT_PREVIEW_MAX_LEN = 60;
+
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-10: derive a short text preview from the
+     * node's most-likely text-bearing prop. Returns null when nothing
+     * useful is present (decorative/structural elements like section /
+     * row / column / grid). Strips HTML tags and trims to
+     * CONTENT_PREVIEW_MAX_LEN chars so the element_list row stays slim.
+     *
+     * Priority: props.content > props.title > props.value > props.text
+     * (mirrors YT-Pro's text-element conventions).
+     *
+     * @param array<string, mixed> $node
+     */
+    private static function contentPreview(array $node): ?string
+    {
+        if (!isset($node['props']) || !is_array($node['props'])) {
+            return null;
+        }
+        /** @var array<string, mixed> $props */
+        $props = $node['props'];
+        foreach (['content', 'title', 'value', 'text'] as $key) {
+            if (!isset($props[$key]) || !is_string($props[$key]) || $props[$key] === '') {
+                continue;
+            }
+            $stripped = trim(strip_tags($props[$key]));
+            if ($stripped === '') {
+                continue;
+            }
+            // Use mb_substr so multibyte text doesn't get clipped mid-char.
+            if (\function_exists('mb_substr') && \function_exists('mb_strlen')) {
+                if (mb_strlen($stripped) <= self::CONTENT_PREVIEW_MAX_LEN) {
+                    return $stripped;
+                }
+                return mb_substr($stripped, 0, self::CONTENT_PREVIEW_MAX_LEN) . '…';
+            }
+            if (strlen($stripped) <= self::CONTENT_PREVIEW_MAX_LEN) {
+                return $stripped;
+            }
+            return substr($stripped, 0, self::CONTENT_PREVIEW_MAX_LEN) . '…';
+        }
+        return null;
     }
 
     // ---------------------------------------------------------------------

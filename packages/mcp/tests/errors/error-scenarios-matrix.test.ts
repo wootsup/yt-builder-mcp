@@ -82,7 +82,7 @@ const READ_MATRIX: readonly MatrixCase[] = [
     },
     {
         toolName: 'yootheme_builder_element_type_get_schema',
-        args: { type_name: 'headline' },
+        args: { element_type: 'headline' },
         group: 'inspection',
     },
 ];

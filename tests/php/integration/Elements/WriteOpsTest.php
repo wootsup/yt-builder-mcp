@@ -221,6 +221,80 @@ final class WriteOpsTest extends TestCase
         self::assertSame(['source' => 'dog.jpg'], $stored['layout']['children'][1]['props']);
     }
 
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-21: cold-agent S3 (multi-items binding) PUT
+     * a `props:{item_element:"article"}` against a grid_item that
+     * carried `props.source` (the multi-items binding). Full-replace
+     * silently wiped the binding — that's the foot-gun. The fix surfaces
+     * `merge_mode:"replace"` plus a `replaced_top_level_props` echo so
+     * the caller learns which keys their request dropped.
+     */
+    public function test_update_settings_full_replace_echoes_dropped_top_level_props(): void
+    {
+        $controller = $this->controller();
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][1]['props']
+            = ['source' => 'cat.jpg', 'alt' => 'Cat', 'class' => 'uk-border-rounded'];
+
+        $req = $this->writeRequest('PUT');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/settings';
+        // Caller supplies ONLY `class` — `source` + `alt` get dropped.
+        $req->set_param('props', ['class' => 'uk-shadow']);
+
+        $resp = $controller->update_settings($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        /** @var \WP_REST_Response $resp */
+        $data = $resp->get_data();
+        self::assertSame('replace', $data['merge_mode']);
+        self::assertArrayHasKey('replaced_top_level_props', $data);
+        $dropped = $data['replaced_top_level_props'];
+        sort($dropped);
+        self::assertSame(['alt', 'source'], $dropped);
+    }
+
+    public function test_update_settings_full_replace_no_dropped_key_omits_echo(): void
+    {
+        // When the caller's full-replace payload covers every existing
+        // top-level key, `replaced_top_level_props` is omitted (response
+        // stays slim). `merge_mode` is always present.
+        $controller = $this->controller();
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][1]['props']
+            = ['source' => 'cat.jpg'];
+
+        $req = $this->writeRequest('PUT');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/settings';
+        $req->set_param('props', ['source' => 'dog.jpg', 'alt' => 'Dog']);
+
+        $resp = $controller->update_settings($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        /** @var \WP_REST_Response $resp */
+        $data = $resp->get_data();
+        self::assertSame('replace', $data['merge_mode']);
+        self::assertArrayNotHasKey('replaced_top_level_props', $data);
+    }
+
+    public function test_update_settings_merge_mode_response_field(): void
+    {
+        // `merge:true` flows through with `merge_mode:"merge"` echo.
+        $controller = $this->controller();
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][1]['props']
+            = ['source' => 'cat.jpg', 'alt' => 'Cat'];
+
+        $req = $this->writeRequest('PUT');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/settings';
+        $req->set_param('props', ['alt' => 'Updated']);
+        $req->set_param('merge', true);
+
+        $resp = $controller->update_settings($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        $data = $resp->get_data();
+        self::assertSame('merge', $data['merge_mode']);
+        // No `replaced_top_level_props` on the merge path.
+        self::assertArrayNotHasKey('replaced_top_level_props', $data);
+    }
+
     public function test_update_settings_merge_deep_merges_nested_objects(): void
     {
         // F-12: structured F-13-shape sources must be merge-able by sub-key.
@@ -424,6 +498,152 @@ final class WriteOpsTest extends TestCase
         self::assertSame(count($data['elements']), $data['total']);
         // tpl seeded with section + headline + image = 3.
         self::assertSame(3, $data['total']);
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-10: cold-agents S2/S4 burned an extra GET
+     * just to disambiguate two same-type elements with different text
+     * content. Pin the additive `content_preview` field on text-bearing
+     * elements so a cold caller can pick the right node from the list
+     * shape directly.
+     */
+    public function test_list_elements_surfaces_content_preview_for_text_nodes(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->list_elements($req);
+        $elements = $resp->get_data()['elements'];
+
+        // Headline has `props.content = "Hello"` → preview surfaces.
+        $headline = array_values(array_filter(
+            $elements,
+            static fn(array $e): bool => $e['element_type'] === 'headline',
+        ))[0];
+        self::assertArrayHasKey('content_preview', $headline);
+        self::assertSame('Hello', $headline['content_preview']);
+
+        // Image has no text-bearing prop → preview is absent (kept slim).
+        $image = array_values(array_filter(
+            $elements,
+            static fn(array $e): bool => $e['element_type'] === 'image',
+        ))[0];
+        self::assertArrayNotHasKey('content_preview', $image);
+
+        // Section is structural → preview is absent.
+        $section = array_values(array_filter(
+            $elements,
+            static fn(array $e): bool => $e['element_type'] === 'section',
+        ))[0];
+        self::assertArrayNotHasKey('content_preview', $section);
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-12: opt-in `?include=props` forwards full
+     * props maps for audit workflows (a11y, content scanning) without
+     * forcing them to drop down to /layout. Default response stays
+     * slim — only callers that explicitly opt in see `props`.
+     */
+    public function test_list_elements_include_props_forwards_full_props_map(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req->set_param('include', 'props');
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->list_elements($req);
+        $elements = $resp->get_data()['elements'];
+        $image = array_values(array_filter(
+            $elements,
+            static fn(array $e): bool => $e['element_type'] === 'image',
+        ))[0];
+        self::assertArrayHasKey('props', $image);
+        self::assertSame('cat.jpg', $image['props']['source']);
+    }
+
+    public function test_list_elements_default_omits_props(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        // No `include` param → slim default.
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->list_elements($req);
+        $elements = $resp->get_data()['elements'];
+        $image = array_values(array_filter(
+            $elements,
+            static fn(array $e): bool => $e['element_type'] === 'image',
+        ))[0];
+        self::assertArrayNotHasKey('props', $image);
+        // props_summary is still there (back-compat).
+        self::assertArrayHasKey('props_summary', $image);
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 audit-pass v2 (A5 follow-up): explicit allow-list
+     * on the `?include=` query param. Unknown tokens get 400 + hint
+     * listing the accepted set — mirrors the F-COLD-9/18 404-hint
+     * pattern for actionable error responses.
+     */
+    public function test_list_elements_rejects_unknown_include_token(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req->set_param('include', 'props,unknown_token,bogus');
+
+        $resp = $controller->list_elements($req);
+        self::assertInstanceOf(\WP_Error::class, $resp);
+        self::assertSame('yootheme_builder_mcp.elements.invalid_query', $resp->get_error_code());
+        $data = $resp->get_error_data();
+        self::assertSame(400, $data['status']);
+        self::assertArrayHasKey('hint', $data);
+        // Error message lists which tokens were rejected.
+        self::assertStringContainsString('unknown_token', $resp->get_error_message());
+        self::assertStringContainsString('bogus', $resp->get_error_message());
+        // And which are accepted.
+        self::assertStringContainsString('props', $resp->get_error_message());
+    }
+
+    public function test_list_elements_accepts_known_include_tokens(): void
+    {
+        // Smoke pin: the allow-list still lets through the canonical
+        // `props` token (no false rejection).
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        $req->set_param('include', 'props');
+
+        $resp = $controller->list_elements($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+    }
+
+    public function test_list_elements_content_preview_strips_html_and_trims(): void
+    {
+        // Seed a long HTML content string — preview must strip tags and
+        // cap to 60 chars + ellipsis.
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][0]['children'][0]['props']['content']
+            = '<p><strong>Welcome to</strong> the new shop — '
+            . 'browse our entire 2026 spring lineup right here today!</p>';
+
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->list_elements($req);
+        $elements = $resp->get_data()['elements'];
+        $headline = array_values(array_filter(
+            $elements,
+            static fn(array $e): bool => $e['element_type'] === 'headline',
+        ))[0];
+        // HTML stripped, length capped, ellipsis appended.
+        self::assertStringStartsWith('Welcome to the new shop', $headline['content_preview']);
+        self::assertStringEndsWith('…', $headline['content_preview']);
+        self::assertStringNotContainsString('<strong>', $headline['content_preview']);
     }
 
     // ------------------------------------------------------------------

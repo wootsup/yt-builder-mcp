@@ -113,6 +113,42 @@ final class SourcesController extends RestController
                 }
             }
         }
+
+        // 1.0.1 Wave-1.8 P1 F-COLD-23: cold-agent S3 had to scan 210
+        // sources to find the 1 native `posts` entry. Accept `?group=`
+        // (origin filter — e.g. `wordpress`) and `?kind=` (graphql
+        // type filter — e.g. `PostsQuery`) so callers can scope the
+        // listing. Filters are additive — without them, the full
+        // grouped listing is returned unchanged.
+        $groupFilter = $request->get_param('group');
+        if (is_string($groupFilter) && $groupFilter !== '') {
+            $grouped = array_intersect_key($grouped, [$groupFilter => true]);
+        }
+        $kindFilter = $request->get_param('kind');
+        if (is_string($kindFilter) && $kindFilter !== '') {
+            $filteredKind = [];
+            foreach ($grouped as $origin => $rows) {
+                if (!is_array($rows)) {
+                    continue;
+                }
+                $kept = [];
+                foreach ($rows as $row) {
+                    if (
+                        is_array($row)
+                        && isset($row['kind'])
+                        && is_string($row['kind'])
+                        && $row['kind'] === $kindFilter
+                    ) {
+                        $kept[] = $row;
+                    }
+                }
+                if (count($kept) > 0) {
+                    $filteredKind[$origin] = $kept;
+                }
+            }
+            $grouped = $filteredKind;
+        }
+
         return new \WP_REST_Response([
             'sources' => $grouped,
         ], 200);
@@ -123,14 +159,19 @@ final class SourcesController extends RestController
      */
     public function get_binding(\WP_REST_Request $request)
     {
-        $rawPath = (string) $request['element_path'];
-        // Strip trailing `/binding` if the regex captured it (route regex
-        // is greedy but the named segment already excludes the suffix —
-        // defensive nonetheless).
-        if (str_ends_with($rawPath, '/binding')) {
-            $rawPath = substr($rawPath, 0, -strlen('/binding'));
+        $templateId = (string) $request['template_id'];
+        // 1.0.1 — Use the shared trait so rel_path (`/children/...`) and
+        // fully-qualified pointers both work, matching the other element
+        // endpoints.
+        $pointer = self::pointerFromRequest($request, '/binding', $templateId);
+
+        // 1.0.1 Wave-1.6 Audit-D-Gap: read endpoint still must reject
+        // crafted cross-template / double-prefix pointers so an attacker
+        // can't enumerate foreign-template bindings via this read path.
+        $assertErr = $this->assertPointerWithinTemplate($templateId, $pointer, 'source_binding');
+        if ($assertErr !== null) {
+            return $assertErr;
         }
-        $pointer = $rawPath === '' ? '' : ($rawPath[0] === '/' ? $rawPath : '/' . $rawPath);
 
         try {
             $node = $this->elements->get($pointer);
@@ -163,7 +204,7 @@ final class SourcesController extends RestController
         $serialized = BindingSerializer::serialize($node);
         $hasBinding = $serialized !== null;
         $response = [
-            'template_id' => (string) $request['template_id'],
+            'template_id' => $templateId,
             'path' => $pointer,
             'element_path' => $pointer,
             'source_name' => $binding['source_name'],
@@ -197,7 +238,7 @@ final class SourcesController extends RestController
     public function put_binding(\WP_REST_Request $request)
     {
         $templateId = (string) $request['template_id'];
-        $pointer = self::pointerFromRequest($request, '/binding');
+        $pointer = self::pointerFromRequest($request, '/binding', $templateId);
 
         $current = $this->reader->etag();
         $lockError = EtagMiddleware::enforce($request, $current, requireIfMatch: true);
@@ -270,7 +311,14 @@ final class SourcesController extends RestController
             $bindingLevel = $rawLevel;
         }
 
-        return $this->mutateBinding($templateId, $pointer, $sourceName, $fieldMappings, $bindingLevel);
+        // 1.0.1 Wave-1.8 F-COLD-20: cold-agent S3 sent
+        // `raw_source.query.arguments:{limit:5}` and got 200 OK back
+        // even though the field was silently dropped. Detect unknown
+        // top-level keys here + flag any `raw_source` content the
+        // controller can't honour, so callers see what was ignored.
+        $ignored = self::detectIgnoredBindingFields($params);
+
+        return $this->mutateBinding($templateId, $pointer, $sourceName, $fieldMappings, $bindingLevel, $ignored);
     }
 
     /**
@@ -279,7 +327,7 @@ final class SourcesController extends RestController
     public function delete_binding(\WP_REST_Request $request)
     {
         $templateId = (string) $request['template_id'];
-        $pointer = self::pointerFromRequest($request, '/binding');
+        $pointer = self::pointerFromRequest($request, '/binding', $templateId);
 
         $current = $this->reader->etag();
         $lockError = EtagMiddleware::enforce($request, $current, requireIfMatch: true);
@@ -306,6 +354,7 @@ final class SourcesController extends RestController
      * layout (see YOOtheme native bindings + spike-source-bridge).
      *
      * @param array<string, string>|null $fieldMappings prop_name → source_field_name
+     * @param list<string>                $ignoredFields field-keys the controller could not honour (surfaced in response)
      * @return \WP_REST_Response|\WP_Error
      */
     private function mutateBinding(
@@ -314,19 +363,15 @@ final class SourcesController extends RestController
         ?string $sourceName,
         ?array $fieldMappings = null,
         string $bindingLevel = 'auto',
+        array $ignoredFields = [],
     ) {
         // Wave-6 Fix 6: assert the pointer lives within the addressed template.
-        $allowedPrefix = JsonPointer::compile(['templates', $templateId]);
-        if (!JsonPointer::isWithinPrefix($pointer, $allowedPrefix)) {
-            return new \WP_Error(
-                'yootheme_builder_mcp.source_binding.cross_template_write_denied',
-                sprintf(
-                    'Pointer "%s" is not within template "%s".',
-                    $pointer,
-                    $templateId,
-                ),
-                ['status' => 400],
-            );
+        // Wave-1.6 Audit-D-Gap: switched to the shared trait method so the
+        // double-prefix detection added in Wave 1.5 also covers source
+        // bindings (was elements-only before).
+        $assertErr = $this->assertPointerWithinTemplate($templateId, $pointer, 'source_binding');
+        if ($assertErr !== null) {
+            return $assertErr;
         }
 
         $state = $this->reader->read();
@@ -434,7 +479,64 @@ final class SourcesController extends RestController
         if ($resolvedWarning !== null) {
             $response['warning'] = $resolvedWarning;
         }
+        // 1.0.1 Wave-1.8 F-COLD-20: surface dropped/unsupported fields
+        // so the caller can see at the wire level what was silently
+        // ignored. Only emitted when non-empty, keeping the slim
+        // common-case response unchanged.
+        if (count($ignoredFields) > 0) {
+            $response['dropped_fields'] = $ignoredFields;
+            $response['dropped_fields_hint'] = 'These body fields were ignored because the controller currently only honours `source_name`, `field_mappings`, and `bindingLevel`. Persist `query.arguments` etc. via element_update_settings on `props.source`.';
+        }
         return new \WP_REST_Response($response, 200);
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-20: walk the inbound body and collect the
+     * field-paths the binding endpoint currently ignores. Cold agent
+     * S3 sent `raw_source.query.arguments:{limit:5}` and got 200 back —
+     * the field was silently dropped. Detect it explicitly so the
+     * caller learns it must persist limits via `element_update_settings`
+     * on `props.source`, not via the binding endpoint.
+     *
+     * @param array<mixed> $params raw request body
+     * @return list<string> dotted field-paths the controller ignores
+     */
+    private static function detectIgnoredBindingFields(array $params): array
+    {
+        // Route-bound segments are URL captures, not body fields — WP
+        // REST routes split them out before the controller sees the
+        // body, but the test harness funnels everything through one
+        // params array. Always silently accept them.
+        $recognized = [
+            'source_name', 'field_mappings', 'bindingLevel',
+            'template_id', 'element_path',
+        ];
+        $ignored = [];
+        // Top-level unknown keys → ignored verbatim.
+        foreach (array_keys($params) as $key) {
+            if (!is_string($key)) {
+                continue;
+            }
+            if (in_array($key, $recognized, true)) {
+                continue;
+            }
+            if ($key === 'raw_source') {
+                // Inspect raw_source sub-paths the controller can't honour.
+                $raw = $params[$key];
+                if (!is_array($raw)) {
+                    $ignored[] = 'raw_source';
+                    continue;
+                }
+                if (isset($raw['query']) && is_array($raw['query'])) {
+                    if (isset($raw['query']['arguments'])) {
+                        $ignored[] = 'raw_source.query.arguments';
+                    }
+                }
+                continue;
+            }
+            $ignored[] = $key;
+        }
+        return $ignored;
     }
 
     /**

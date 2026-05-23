@@ -25,7 +25,7 @@ let srcSkillDir: string;
 beforeEach(() => {
     tmpHome = mkdtempSync(join(tmpdir(), 'ytbmcp-installskill-'));
     pkgRoot = mkdtempSync(join(tmpdir(), 'ytbmcp-pkgroot-'));
-    srcSkillDir = join(pkgRoot, 'skills', 'yootheme-builder');
+    srcSkillDir = join(pkgRoot, 'skills', 'yt-builder-mcp');
     mkdirSync(srcSkillDir, { recursive: true });
     writeFileSync(
         join(srcSkillDir, 'SKILL.md'),
@@ -55,11 +55,11 @@ describe('installSkill', () => {
         });
         expect(result.copied).toBe(true);
         expect(result.skillTargetDir).toBe(
-            join(targetSkillsDir, 'yootheme-builder'),
+            join(targetSkillsDir, 'yt-builder-mcp'),
         );
-        expect(existsSync(join(targetSkillsDir, 'yootheme-builder', 'SKILL.md'))).toBe(true);
+        expect(existsSync(join(targetSkillsDir, 'yt-builder-mcp', 'SKILL.md'))).toBe(true);
         expect(
-            existsSync(join(targetSkillsDir, 'yootheme-builder', 'helpers', 'note.md')),
+            existsSync(join(targetSkillsDir, 'yt-builder-mcp', 'helpers', 'note.md')),
         ).toBe(true);
     });
 
@@ -118,12 +118,12 @@ describe('installSkill', () => {
 
     it('finds the skill at the production-tarball layout (skills/ next to dist/)', async () => {
         // Production-tarball layout: pkgRoot contains `dist/`, `bin/`,
-        // `manifest.json`, AND `skills/yootheme-builder/` — NOT a monorepo
+        // `manifest.json`, AND `skills/yt-builder-mcp/` — NOT a monorepo
         // `../../skills/...` walk-up. Without `skills/` in `package.json:files[]`
         // the published tarball has no skill folder; this test guards
         // both the path resolution AND the bundling contract.
         const tarballRoot = mkdtempSync(join(tmpdir(), 'ytbmcp-tarball-'));
-        const skillDir = join(tarballRoot, 'skills', 'yootheme-builder');
+        const skillDir = join(tarballRoot, 'skills', 'yt-builder-mcp');
         mkdirSync(skillDir, { recursive: true });
         writeFileSync(
             join(skillDir, 'SKILL.md'),
@@ -142,11 +142,11 @@ describe('installSkill', () => {
         });
         expect(result.copied).toBe(true);
         expect(
-            existsSync(join(tmpHome, '.claude', 'skills', 'yootheme-builder', 'SKILL.md')),
+            existsSync(join(tmpHome, '.claude', 'skills', 'yt-builder-mcp', 'SKILL.md')),
         ).toBe(true);
     });
 
-    it('packages/mcp/skills/yootheme-builder/SKILL.md exists in the real source tree (bundling contract)', () => {
+    it('packages/mcp/skills/yt-builder-mcp/SKILL.md exists in the real source tree (bundling contract)', () => {
         // Regression guard: the skill MUST live INSIDE packages/mcp/ so it
         // gets bundled into the npm tarball. If somebody moves it back to
         // the monorepo root, the tarball ships without it and `install-skill`
@@ -156,9 +156,49 @@ describe('installSkill', () => {
             '..',      // tests/
             '..',      // packages/mcp/
             'skills',
-            'yootheme-builder',
+            'yt-builder-mcp',
             'SKILL.md',
         );
         expect(existsSync(repoSkillPath)).toBe(true);
+    });
+
+    // 1.0.1 Wave-R: pre-1.0.1 installs placed the skill at
+    // `~/.claude/skills/yootheme-builder/`. The new install path is
+    // `~/.claude/skills/yt-builder-mcp/`. Without migration logic the
+    // user would end up with two side-by-side skill copies. The
+    // installer detects + removes the legacy dir by default.
+    it('removes the legacy `yootheme-builder/` directory by default on install', async () => {
+        const targetSkillsDir = join(tmpHome, '.claude', 'skills');
+        const legacyDir = join(targetSkillsDir, 'yootheme-builder');
+        mkdirSync(legacyDir, { recursive: true });
+        writeFileSync(join(legacyDir, 'SKILL.md'), '# stale\n', 'utf-8');
+
+        await installSkill({
+            pkgRoot,
+            targetSkillsDir,
+            targetAgentsFile: join(tmpHome, 'AGENTS.md'),
+        });
+
+        // New install lives at the new path …
+        expect(existsSync(join(targetSkillsDir, 'yt-builder-mcp', 'SKILL.md'))).toBe(true);
+        // … and the legacy dir is gone.
+        expect(existsSync(legacyDir)).toBe(false);
+    });
+
+    it('preserves the legacy directory when `removeLegacyDir: false` is set', async () => {
+        const targetSkillsDir = join(tmpHome, '.claude', 'skills');
+        const legacyDir = join(targetSkillsDir, 'yootheme-builder');
+        mkdirSync(legacyDir, { recursive: true });
+        writeFileSync(join(legacyDir, 'SKILL.md'), '# stale\n', 'utf-8');
+
+        await installSkill({
+            pkgRoot,
+            targetSkillsDir,
+            targetAgentsFile: join(tmpHome, 'AGENTS.md'),
+            removeLegacyDir: false,
+        });
+
+        expect(existsSync(join(targetSkillsDir, 'yt-builder-mcp', 'SKILL.md'))).toBe(true);
+        expect(existsSync(join(legacyDir, 'SKILL.md'))).toBe(true);
     });
 });

@@ -16,10 +16,10 @@
  *
  * Resolution layout (matches `install-skill.ts` + `build-dxt.js`):
  *
- *   packages/mcp/skills/yootheme-builder/SKILL.md
+ *   packages/mcp/skills/yt-builder-mcp/SKILL.md
  *
  * When the file is compiled to `dist/skill-loader.js`, the same
- * relative `../skills/yootheme-builder/SKILL.md` resolves correctly
+ * relative `../skills/yt-builder-mcp/SKILL.md` resolves correctly
  * because the published npm tarball (and the DXT stage) preserves the
  * `skills/` folder next to `dist/`.
  *
@@ -52,14 +52,14 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 /**
  * Resolve the on-disk path to the bundled SKILL.md.
  *
- * Source-tree:   packages/mcp/src/skill-loader.ts → ../skills/yootheme-builder/SKILL.md
- * Built tarball: packages/mcp/dist/skill-loader.js → ../skills/yootheme-builder/SKILL.md
+ * Source-tree:   packages/mcp/src/skill-loader.ts → ../skills/yt-builder-mcp/SKILL.md
+ * Built tarball: packages/mcp/dist/skill-loader.js → ../skills/yt-builder-mcp/SKILL.md
  *
  * Both layouts work because `dist/` and `src/` are siblings of
  * `skills/` under the package root.
  */
 function resolveSkillPath(): string {
-    return resolve(__dirname, '..', 'skills', 'yootheme-builder', 'SKILL.md');
+    return resolve(__dirname, '..', 'skills', 'yt-builder-mcp', 'SKILL.md');
 }
 
 let cached: string | undefined;

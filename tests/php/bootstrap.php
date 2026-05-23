@@ -181,6 +181,13 @@ if (!function_exists('get_site_url')) {
     }
 }
 
+if (!function_exists('get_home_url')) {
+    function get_home_url(): string
+    {
+        return $GLOBALS['ytb_test_home_url'] ?? 'https://example.test';
+    }
+}
+
 if (!function_exists('random_bytes')) {
     // PHP 7.0+ ships random_bytes — defensive stub for partial-mock scenarios.
     function random_bytes(int $n): string

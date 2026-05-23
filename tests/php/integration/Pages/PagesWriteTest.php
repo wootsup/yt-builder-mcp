@@ -159,4 +159,54 @@ final class PagesWriteTest extends TestCase
         $persisted = $GLOBALS['ytb_test_options']['ytb_mcp_published_state_etag'] ?? null;
         self::assertSame($data['etag'], $persisted);
     }
+
+    /**
+     * 1.0.1 Wave-1.7 F-COLD-3: cold-agent S2 probe (2026-05-23) showed
+     * agents building `/templates/<id>/layout/layout/children/...` from
+     * the get_layout payload because the response `layout` field carries
+     * the WHOLE template object (which itself has a `layout` child). Pin
+     * the additive `layout_root_pointer` + `pointer_hint` fields so that
+     * agents have a copy-pasteable canonical pointer base directly in
+     * the response, no archaeology required.
+     */
+    public function test_get_layout_surfaces_canonical_pointer_base(): void
+    {
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'tpl';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_layout($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        $data = $resp->get_data();
+
+        self::assertArrayHasKey('layout_root_pointer', $data);
+        self::assertSame('/templates/tpl/layout', $data['layout_root_pointer']);
+        self::assertArrayHasKey('pointer_hint', $data);
+        self::assertStringContainsString('/templates/tpl/layout', $data['pointer_hint']);
+        self::assertStringContainsString('rel_path', $data['pointer_hint']);
+    }
+
+    /**
+     * 1.0.1 Wave-1.7 F-COLD-3 — same canonical base with RFC-6901-encoded
+     * template-ids. Defends against a future template-id containing `/`
+     * or `~` (route regex currently rejects, but `JsonPointer::compile`
+     * gives correct encoding for free if the regex is ever relaxed).
+     */
+    public function test_get_layout_pointer_base_handles_rfc6901_template_id(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['has~tilde'] = [
+            'name' => 'Tilde',
+            'layout' => ['type' => 'layout', 'children' => []],
+        ];
+
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('GET', '/');
+        $req['template_id'] = 'has~tilde';
+
+        /** @var \WP_REST_Response $resp */
+        $resp = $controller->get_layout($req);
+        // RFC-6901 §3: `~` encodes as `~0`.
+        self::assertSame('/templates/has~0tilde/layout', $resp->get_data()['layout_root_pointer']);
+    }
 }

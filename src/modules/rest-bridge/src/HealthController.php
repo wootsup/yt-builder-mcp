@@ -124,6 +124,13 @@ final class HealthController extends PublicRestController
             // companion-plugin version.
             'yooessentials_version' => $this->yootheme->getEssentialsVersion(),
             'wp_version' => $this->detect_wp_version(),
+            // 1.0.1 — site_url (canonical wp install URL including any
+            // /wordpress subpath) and home_url (public-facing front-end URL)
+            // so an MCP agent can link the customer to the live site without
+            // a separate WP-REST round-trip. Surfaced for authenticated
+            // callers only (host-fingerprint stays tiered).
+            'site_url' => $this->detect_site_url(),
+            'home_url' => $this->detect_home_url(),
             // Spike-Outcomes (2026-05-21): real storage is wp_option('yootheme'),
             // not wp_posts.post_content. Surfaced here so the MCP-Setup-Wizard
             // can sanity-check that the plugin matches the layout it expects.
@@ -134,7 +141,37 @@ final class HealthController extends PublicRestController
             'available_endpoints' => $endpoints,
             'php_version' => PHP_VERSION,
             'schema_version' => SchemaVersion::get(),
+            // 1.0.1 Wave-1.8 P1 F-COLD-6 / F-COLD-8: surface enough
+            // discovery hints that a cold agent on first /health call
+            // already knows (a) the canonical element_path format, with
+            // an example, and (b) where the REST route map lives. Both
+            // are bearer-tiered (no host-fingerprint leak).
+            'element_path_format' => '/templates/<template_id>/layout/children/<index>[/children/<index>...] — literal slashes, do NOT percent-encode. Rel_path form `/children/<index>...` also accepted since 1.0.1.',
+            'element_path_example' => '/templates/home/layout/children/0/children/2',
+            'docs' => '/wp-json/yt-builder-mcp/v1/?context=help',
         ];
+    }
+
+    private function detect_site_url(): ?string
+    {
+        if (function_exists('get_site_url')) {
+            $val = \get_site_url();
+            if (is_string($val) && $val !== '') {
+                return \rtrim($val, '/');
+            }
+        }
+        return null;
+    }
+
+    private function detect_home_url(): ?string
+    {
+        if (function_exists('get_home_url')) {
+            $val = \get_home_url();
+            if (is_string($val) && $val !== '') {
+                return \rtrim($val, '/');
+            }
+        }
+        return null;
     }
 
     /**

@@ -30,7 +30,7 @@ const SKILL_PATH = resolve(
     '..',
     '..',
     'skills',
-    'yootheme-builder',
+    'yt-builder-mcp',
     'SKILL.md',
 );
 
@@ -66,7 +66,7 @@ describe('skill-loader', () => {
     it('returns non-empty markdown that starts with the skill frontmatter', () => {
         const content = loadSkillContent();
         expect(content.length).toBeGreaterThan(1000);
-        expect(content.startsWith('---\nname: yootheme-builder')).toBe(true);
+        expect(content.startsWith('---\nname: yt-builder-mcp')).toBe(true);
     });
 });
 
@@ -87,7 +87,7 @@ describe('initialize — instructions field', () => {
         try {
             const instructions = client.getInstructions() ?? '';
             expect(instructions.length).toBeGreaterThan(1000);
-            expect(instructions).toContain('yootheme-builder');
+            expect(instructions).toContain('yt-builder-mcp');
         } finally {
             await client.close();
         }

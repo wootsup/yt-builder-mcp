@@ -66,6 +66,13 @@ final class PageQuery
             return [];
         }
         $etag = $this->reader->etag();
+        // 1.0.1 Wave-1.8 F-COLD-2 / F-COLD-16: every cold-agent run had
+        // to heuristically pick the public front-page template from the
+        // list — 4/4 picked the archive-post template by guessing. Look
+        // up WP's show_on_front setting once and flag the canonical
+        // public-root template (archive-post when `posts`, otherwise
+        // unknown until we wire up the page-front lookup).
+        $publicRootHint = self::computePublicRootHint();
         $out = [];
         foreach ($ids as $id) {
             $tpl = $this->reader->readTemplate($id);
@@ -122,9 +129,41 @@ final class PageQuery
             }
             $entry['elements_count'] = $elementsCount;
             $entry['etag'] = $etag;
+            // 1.0.1 Wave-1.8 F-COLD-2 / F-COLD-16: surface public-root
+            // hint additively. Cold agents asked "homepage" / "front
+            // page" now see the canonical flag instead of guessing.
+            if ($publicRootHint !== null && $publicRootHint === $entry['type']) {
+                $entry['is_public_homepage'] = true;
+                $entry['template_purpose'] = 'public_homepage';
+            }
             $out[] = $entry;
         }
         return $out;
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-2 / F-COLD-16: which YT template renders the
+     * public `/` URL? Default WP install has `show_on_front=posts` → the
+     * archive-post YT template is rendered. When `show_on_front=page`,
+     * the YT template assigned to the page_on_front WP page is used —
+     * but the assignment lookup lives YT-side and we don't have it
+     * cleanly accessible from PageQuery yet; return null in that case
+     * (caller falls back to old guess-by-name heuristic, no regression).
+     *
+     * Returns the YT `type` string the public-root template carries
+     * (e.g. `archive-post`), or null when unknown.
+     */
+    private static function computePublicRootHint(): ?string
+    {
+        if (!\function_exists('get_option')) {
+            return null;
+        }
+        $showOnFront = \get_option('show_on_front', 'posts');
+        if ($showOnFront === 'posts') {
+            return 'archive-post';
+        }
+        // `show_on_front === 'page'` path — defer to a follow-up wave.
+        return null;
     }
 
     /**

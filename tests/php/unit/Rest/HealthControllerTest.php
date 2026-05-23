@@ -101,4 +101,80 @@ final class HealthControllerTest extends TestCase
         self::assertArrayHasKey('yooessentials_version', $payload);
         self::assertArrayHasKey('yootheme_version', $payload);
     }
+
+    /**
+     * 1.0.1 — site_url + home_url surfaced on the authenticated payload
+     * so an MCP agent can link the customer to the live site without a
+     * separate WP-REST round-trip. Trailing slash is normalized away.
+     */
+    public function test_authenticated_payload_exposes_site_url_and_home_url(): void
+    {
+        $GLOBALS['ytb_test_site_url'] = 'https://example.test/wordpress/';
+        $GLOBALS['ytb_test_home_url'] = 'https://example.test/';
+
+        $bundle = \WootsUp\BuilderMcp\Tests\TestVerifierFactory::verifierWithKey('read');
+        $controller = new HealthController($bundle['verifier']);
+        $req = new \WP_REST_Request('GET', '/');
+        $req->set_header('Authorization', 'Bearer ' . $bundle['token']);
+        $payload = $controller->payload($req);
+
+        self::assertArrayHasKey('site_url', $payload);
+        self::assertArrayHasKey('home_url', $payload);
+        self::assertSame('https://example.test/wordpress', $payload['site_url']);
+        self::assertSame('https://example.test', $payload['home_url']);
+    }
+
+    /**
+     * 1.0.1 — the URL fields stay tiered with the rest of the
+     * authenticated payload. The anonymous probe must NOT leak them.
+     */
+    public function test_anonymous_payload_does_not_leak_site_or_home_url(): void
+    {
+        $GLOBALS['ytb_test_site_url'] = 'https://example.test/wordpress';
+        $GLOBALS['ytb_test_home_url'] = 'https://example.test';
+
+        $controller = new HealthController();
+        $payload = $controller->payload();
+
+        self::assertArrayNotHasKey('site_url', $payload);
+        self::assertArrayNotHasKey('home_url', $payload);
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 P1 F-COLD-6 / F-COLD-8: authenticated /health
+     * payload includes an `element_path_format` example string + a
+     * `docs` pointer to the help-context route. Cold agents see both
+     * on their FIRST call — eliminates the discovery dance Wave-2
+     * agents repeated.
+     */
+    public function test_authenticated_payload_exposes_element_path_format_and_docs_pointer(): void
+    {
+        $bundle = \WootsUp\BuilderMcp\Tests\TestVerifierFactory::verifierWithKey('read');
+        $controller = new HealthController($bundle['verifier']);
+        $req = new \WP_REST_Request('GET', '/');
+        $req->set_header('Authorization', 'Bearer ' . $bundle['token']);
+        $payload = $controller->payload($req);
+
+        self::assertArrayHasKey('element_path_format', $payload);
+        self::assertStringContainsString('templates/', $payload['element_path_format']);
+        self::assertStringContainsString('LITERAL', $payload['element_path_format']);
+
+        self::assertArrayHasKey('element_path_example', $payload);
+        self::assertStringStartsWith('/templates/', $payload['element_path_example']);
+
+        self::assertArrayHasKey('docs', $payload);
+        self::assertStringContainsString('?context=help', $payload['docs']);
+    }
+
+    public function test_anonymous_payload_does_not_leak_element_path_format_or_docs(): void
+    {
+        // Tiered: anonymous payload stays minimal (no host-fingerprint
+        // beyond plugin_version + status).
+        $controller = new HealthController();
+        $payload = $controller->payload();
+
+        self::assertArrayNotHasKey('element_path_format', $payload);
+        self::assertArrayNotHasKey('element_path_example', $payload);
+        self::assertArrayNotHasKey('docs', $payload);
+    }
 }

@@ -127,18 +127,18 @@ function jsonBytes(value: unknown): number {
 }
 
 describe('token-baseline harness — tools/list payload reduction', () => {
-    it('post-gateway tools/list contains exactly 17 entries', () => {
+    it('post-gateway tools/list contains exactly 18 entries', () => {
         const post = postGatewayToolsList();
-        expect(post.length).toBe(17);
+        expect(post.length).toBe(18);
     });
 
-    it('post-gateway tools/list payload is bounded (<15000 bytes for 17 tools)', () => {
+    it('post-gateway tools/list payload is bounded (<15000 bytes for 18 tools)', () => {
         // Sanity ceiling — if a future wave bloats descriptions massively,
         // this trips. Today it sits around 4-6 KB.
         const post = postGatewayToolsList();
         const bytes = jsonBytes(post);
         // eslint-disable-next-line no-console -- benchmark surface
-        console.log(`[token-baseline] post-gateway tools/list = ${String(bytes)}B (17 tools)`);
+        console.log(`[token-baseline] post-gateway tools/list = ${String(bytes)}B (18 tools)`);
         expect(bytes).toBeLessThan(10_000);
     });
 

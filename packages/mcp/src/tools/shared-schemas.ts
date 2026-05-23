@@ -21,8 +21,11 @@ export const ELEMENT_PATH = z
     .string()
     .min(1)
     .describe(
-        'JSON-Pointer path to the element (e.g. "/0/children/2"). Use ' +
-            'yootheme_builder_element_list to discover available paths.',
+        'JSON-Pointer to an element. **`rel_path` from `element_list` is the ' +
+            'preferred form** — copy it straight back here (e.g. `/children/0` or ' +
+            '`/children/0/children/1`); the server resolves it within this template. ' +
+            'Fully-qualified pointers (`/templates/<id>/layout/children/0/...`) are ' +
+            'also accepted. Both forms work everywhere `element_path` appears.',
     );
 
 export const ETAG = z

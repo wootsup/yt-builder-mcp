@@ -570,4 +570,61 @@ final class PageQueryTest extends TestCase
         self::assertSame(1, $summary['bound_count']);
         self::assertSame(2, $summary['total']);
     }
+
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-2 / F-COLD-16: when WP `show_on_front` is
+     * the default `'posts'`, the archive-post YT template renders public
+     * `/`. Surface that as `is_public_homepage:true` + `template_purpose`
+     * so cold agents asked about the "homepage" / "front page" don't
+     * have to guess.
+     */
+    public function test_list_flags_archive_post_as_public_homepage_when_show_on_front_is_posts(): void
+    {
+        $GLOBALS['ytb_test_options']['show_on_front'] = 'posts';
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'archiveId' => [
+                    'name' => 'Post Index',
+                    'type' => 'archive-post',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+                'aboutId' => [
+                    'name' => 'About',
+                    'type' => 'template',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+
+        self::assertTrue($byId['archiveId']['is_public_homepage']);
+        self::assertSame('public_homepage', $byId['archiveId']['template_purpose']);
+        // Non-front templates DO NOT get the flag (kept slim).
+        self::assertArrayNotHasKey('is_public_homepage', $byId['aboutId']);
+        self::assertArrayNotHasKey('template_purpose', $byId['aboutId']);
+    }
+
+    public function test_list_omits_homepage_flag_when_show_on_front_is_page(): void
+    {
+        // WP `show_on_front=page` flow — we don't yet wire up the YT-side
+        // page assignment lookup, so we return null hint and the flag is
+        // absent (no false positive on the archive template).
+        $GLOBALS['ytb_test_options']['show_on_front'] = 'page';
+        $GLOBALS['ytb_test_options']['page_on_front'] = '42';
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'archiveId' => [
+                    'name' => 'Post Index',
+                    'type' => 'archive-post',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        self::assertArrayNotHasKey('is_public_homepage', $byId['archiveId']);
+    }
 }

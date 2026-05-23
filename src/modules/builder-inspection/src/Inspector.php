@@ -196,8 +196,91 @@ final class Inspector
             'label' => $entry['label'],
             'origin' => $entry['origin'],
             'has_children' => $entry['has_children'],
+            // 1.0.1 Wave-1.8 P1 F-COLD-13: surface the WAI-ARIA-flavoured
+            // semantic role for this element-type so cold a11y-audit
+            // agents (S6 scenario) don't have to fall back on folklore
+            // mapping ("is headline a heading? subnav_item a link?").
+            // Known types only — unknown types omit the field rather
+            // than emit a wrong guess.
+            ...(($role = self::semanticRoleOf($typeName)) !== null
+                ? ['semantic_role' => $role]
+                : []),
             'fields' => self::extractFields($config),
         ];
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 P1 F-COLD-13: small static map from YT element-type
+     * name → WAI-ARIA-flavoured semantic role. Only the well-known core
+     * types are mapped; everything else returns null (silent) so a
+     * cold-agent doesn't lock onto a wrong assumption.
+     *
+     * Values are deliberately a small enum: `heading`, `link`, `img`,
+     * `region`, `list`, `listitem`, `separator`, `button`, `video`,
+     * `text`, `none`. These mirror ARIA roles modulo the element-types
+     * YT exposes — full ARIA taxonomy would over-specify for the cold-
+     * agent use-case.
+     */
+    public static function semanticRoleOf(string $typeName): ?string
+    {
+        static $map = null;
+        if ($map === null) {
+            $map = [
+                // Headings + text
+                'headline' => 'heading',
+                'text' => 'text',
+                // Media
+                'image' => 'img',
+                'video' => 'video',
+                'icon' => 'img',
+                // Links / navigation
+                'button' => 'link',
+                'button_item' => 'link',
+                'nav' => 'list',
+                'nav_item' => 'link',
+                'subnav' => 'list',
+                'subnav_item' => 'link',
+                // Container regions
+                'section' => 'region',
+                'row' => 'region',
+                'column' => 'region',
+                // Multi-Items containers + items (item is the row)
+                'accordion' => 'list',
+                'accordion_item' => 'listitem',
+                'gallery' => 'list',
+                'gallery_item' => 'listitem',
+                'grid' => 'list',
+                'grid_item' => 'listitem',
+                'list' => 'list',
+                'list_item' => 'listitem',
+                'slideshow' => 'list',
+                'slideshow_item' => 'listitem',
+                'slider' => 'list',
+                'overlay-slider' => 'list',
+                'overlay-slider_item' => 'listitem',
+                'panel-slider' => 'list',
+                'panel-slider_item' => 'listitem',
+                'switcher' => 'list',
+                'switcher_item' => 'listitem',
+                'social' => 'list',
+                'social_item' => 'link',
+                'popover' => 'list',
+                'popover_item' => 'listitem',
+                'description_list' => 'list',
+                'description_list_item' => 'listitem',
+                'table' => 'list',
+                'table_item' => 'listitem',
+                'map' => 'region',
+                'map_item' => 'listitem',
+                'pagination' => 'list',
+                // Structural / decorative
+                'divider' => 'separator',
+                'spacer' => 'none',
+                'code' => 'none',
+                'html' => 'none',
+            ];
+        }
+        return $map[$typeName] ?? null;
     }
 
     /**
@@ -258,7 +341,7 @@ final class Inspector
 
     /**
      * @param array<string, mixed> $def
-     * @return array{name: string, type: string, label?: string, default?: mixed, group?: string}
+     * @return array{name: string, type: string, label?: string, default?: mixed, enum?: list<string>, group?: string}
      */
     private static function projectField(string $name, array $def, ?string $group): array
     {
@@ -270,9 +353,49 @@ final class Inspector
         if (array_key_exists('default', $def)) {
             $entry['default'] = $def['default'];
         }
+        // 1.0.1 Wave-1.8 P1 F-COLD-14: surface the enum (select / radio
+        // options) so cold agents don't have to guess valid values for
+        // a `type:"select"` field. YT-side `options` may be a flat list
+        // or a label-keyed map — normalise to a list-of-strings here.
+        $enum = self::extractEnum($def);
+        if ($enum !== null) {
+            $entry['enum'] = $enum;
+        }
         if ($group !== null) {
             $entry['group'] = $group;
         }
         return $entry;
+    }
+
+    /**
+     * 1.0.1 Wave-1.8 P1 F-COLD-14: normalize YT field `options` to a
+     * `list<string>` enum projection. YT supports two shapes:
+     *
+     *  - flat list:  options: ["small", "medium", "large"]
+     *  - label-map:  options: { "Small": "small", "Medium": "medium" }
+     *
+     * Returns null when the field has no options (not a select/radio).
+     *
+     * @param array<string, mixed> $def
+     * @return list<string>|null
+     */
+    private static function extractEnum(array $def): ?array
+    {
+        if (!isset($def['options']) || !is_array($def['options'])) {
+            return null;
+        }
+        // In both YT shapes the VALUE is the slug:
+        //   flat list:  ["small", "medium", "large"]        → value = slug
+        //   label map:  {"Small": "small", "Medium": "..."} → value = slug, key = label
+        // So `$value` is always what we want to enumerate.
+        // Audit-A5 fold-in (Wave-1.8 audit-pass): collapsed an earlier
+        // dead `$isList ? $value : $value` ternary into the single path.
+        $values = [];
+        foreach ($def['options'] as $value) {
+            if (is_string($value) || is_int($value) || is_bool($value)) {
+                $values[] = (string) $value;
+            }
+        }
+        return $values === [] ? null : $values;
     }
 }

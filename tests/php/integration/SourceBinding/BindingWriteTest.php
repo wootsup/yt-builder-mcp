@@ -516,4 +516,53 @@ final class BindingWriteTest extends TestCase
         self::assertCount(1, $data['directives']);
         self::assertSame('include', $data['directives'][0]['name']);
     }
+
+    /**
+     * 1.0.1 Wave-1.8 F-COLD-20: cold-agent S3 sent
+     * `raw_source.query.arguments:{limit:5}` and got 200 OK back even
+     * though that field was silently dropped (the binding endpoint
+     * only honours source_name/field_mappings/bindingLevel). Pin the
+     * additive `dropped_fields` + `dropped_fields_hint` echo so the
+     * caller learns what was ignored — 200 status preserved for
+     * backward-compat with 1.0.0 callers.
+     */
+    public function test_put_binding_surfaces_dropped_raw_source_arguments(): void
+    {
+        $controller = $this->controller();
+        $req = $this->writeRequest('PUT', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/binding';
+        $req->set_param('source_name', 'posts.posts');
+        $req->set_param('raw_source', [
+            'query' => ['arguments' => ['limit' => 5]],
+        ]);
+
+        $resp = $controller->put_binding($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        self::assertSame(200, $resp->get_status());
+        $data = $resp->get_data();
+        self::assertArrayHasKey('dropped_fields', $data);
+        self::assertContains('raw_source.query.arguments', $data['dropped_fields']);
+        self::assertArrayHasKey('dropped_fields_hint', $data);
+        self::assertStringContainsString('element_update_settings', $data['dropped_fields_hint']);
+    }
+
+    public function test_put_binding_omits_dropped_fields_on_clean_request(): void
+    {
+        // Clean request with only recognized fields → no dropped_fields
+        // key (response stays slim).
+        $controller = $this->controller();
+        $req = $this->writeRequest('PUT', '/');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/binding';
+        $req->set_param('source_name', 'posts.posts');
+        $req->set_param('field_mappings', ['title' => 'name']);
+        $req->set_param('bindingLevel', 'auto');
+
+        $resp = $controller->put_binding($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+        $data = $resp->get_data();
+        self::assertArrayNotHasKey('dropped_fields', $data);
+        self::assertArrayNotHasKey('dropped_fields_hint', $data);
+    }
 }
