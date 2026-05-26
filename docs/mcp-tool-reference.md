@@ -2,10 +2,10 @@
 
 All 21 tools exposed by `@wootsup/yt-builder-mcp`. Each tool documents:
 
-- **Name** — the MCP tool name (use this in your AI prompt)
-- **Description** — what it does
-- **Input schema** — Zod schema (TypeScript)
-- **Output** — JSON shape on success
+- **Name**: the MCP tool name (use this in your AI prompt)
+- **Description**: what it does
+- **Input schema**: Zod schema (TypeScript)
+- **Output**: JSON shape on success
 
 All tools return errors as `{ "error": "...", "context": {...}, "hint": "..." }`.
 
@@ -20,7 +20,7 @@ The tools are organised into five domains: **Health**, **Pages**, **Elements**, 
 Returns plugin version, YOOtheme version, CMS version, storage backend, and the list
 of available REST endpoints. The MCP server always sends its Bearer token, so this
 tool receives the **augmented** `/health` payload (the anonymous probe returns only
-`{plugin_version, status}` — see the [REST reference](./rest-api-reference.md#get-health)
+`{plugin_version, status}`, see the [REST reference](./rest-api-reference.md#get-health)
 for the field-split). Identical contract on WordPress and Joomla; the CMS-specific
 fields differ (`wp_version` vs Joomla version, storage target).
 
@@ -82,7 +82,7 @@ List all YOOtheme templates ("pages") on the site. Returns id, label and usage m
 
 ### `yootheme_builder_page_get_layout`
 
-Get the full layout tree for one template. Heavy — prefer `yootheme_builder_page_get_schema` for navigation.
+Get the full layout tree for one template. Heavy. Prefer `yootheme_builder_page_get_schema` for navigation.
 
 - **Annotation:** read-only
 - **Input schema:**
@@ -390,7 +390,7 @@ Every tool returns errors in a consistent shape:
 {
   "error": "HTTP 412",
   "context": { "template_id": "default", "etag_sent": "abc123" },
-  "hint": "ETag mismatch — re-read yootheme_builder_get_etag and retry."
+  "hint": "ETag mismatch. Re-read yootheme_builder_get_etag and retry."
 }
 ```
 
@@ -403,10 +403,10 @@ When you see this in your AI chat, the assistant should call
 
 Each tool carries an MCP annotation describing its side-effects:
 
-- **`readOnly`** — safe to call without confirmation
-- **`creating`** — adds something new
-- **`mutating`** — changes existing data
-- **`destructive`** — irreversible
+- **`readOnly`**: safe to call without confirmation
+- **`creating`**: adds something new
+- **`mutating`**: changes existing data
+- **`destructive`**: irreversible
 
 Some AI clients (notably Claude Desktop) surface these annotations in
 their permission prompts. Destructive tools always ask before running.

@@ -20,7 +20,7 @@
 `yt-builder-mcp` exposes your page builder as a [Model Context Protocol](https://modelcontextprotocol.io/) (MCP) server. Once installed, your AI assistant can:
 
 - **List pages**, walk element trees, inspect layouts.
-- **Add, update, move, clone, delete** any element — grids, headlines, images, lists, gallery — anything the builder supports.
+- **Add, update, move, clone, delete** any element (grids, headlines, images, lists, gallery). Anything the builder supports.
 - **Bind Dynamic Sources** to elements (e.g. an [API Mapper](https://wootsup.com/products/api-mapper) source).
 - **Save & publish** pages, with proper cache invalidation.
 - **Discover element types** and their JSON schemas at runtime.
@@ -40,14 +40,14 @@ The plugin speaks a REST dialect (Bearer-authenticated, ETag-guarded). The NPM p
 
 YT Builder MCP is the middle ground between clicking in the visual builder and writing themes by hand. The use case it was built for:
 
-- **AI-assisted page construction** — describe a page in natural language, your AI assistant builds it. End customers get the power-user experience without learning the builder.
-- **Headless / automation workflows** — drive your page builder from any tool that speaks MCP (Claude Desktop, Cursor, a CI worker, your own AI agent) over a stable Bearer-authenticated REST surface.
+- **AI-assisted page construction.** Describe a page in natural language, your AI assistant builds it. End customers get the power-user experience without learning the builder.
+- **Headless / automation workflows.** Drive your page builder from any tool that speaks MCP (Claude Desktop, Cursor, a CI worker, your own AI agent) over a stable Bearer-authenticated REST surface.
 
 ---
 
 ## Use-case examples
 
-### Example 1 — "Add a Pexels image grid to the homepage"
+### Example 1. "Add a Pexels image grid to the homepage"
 
 ```
 You:   Add a 3-column image grid to the homepage and bind it to my "Pexels Search" source.
@@ -64,7 +64,7 @@ Claude:  → yootheme_builder_pages_list
 
 > Screenshots coming in v0.2.
 
-### Example 2 — "What elements are on this page?"
+### Example 2. "What elements are on this page?"
 
 ```
 You:   Walk me through the layout of /landing-page.
@@ -73,11 +73,11 @@ Claude:  → yootheme_builder_pages_list
          → yootheme_builder_page_get_schema (landing-page)
 
          The page has 5 sections:
-         1. Hero (section/0)  — headline + 2 buttons
-         2. Features (section/1) — 4-column grid
-         3. Pricing (section/2) — 3 cards
-         4. FAQ (section/3) — accordion, 6 items
-         5. CTA (section/4) — headline + form
+         1. Hero (section/0): headline + 2 buttons
+         2. Features (section/1): 4-column grid
+         3. Pricing (section/2): 3 cards
+         4. FAQ (section/3): accordion, 6 items
+         5. CTA (section/4): headline + form
 ```
 
 > Screenshots coming in v0.2.
@@ -86,7 +86,7 @@ Claude:  → yootheme_builder_pages_list
 
 ## Quickstart
 
-### 1 — Install the WordPress plugin
+### 1. Install the WordPress plugin
 
 Download the latest plugin ZIP from
 [GitHub Releases](https://github.com/wootsup/yt-builder-mcp/releases),
@@ -100,7 +100,7 @@ You need:
 - PHP 8.2+
 - YOOtheme Pro 4.0+ (active theme; v4 + v5 both supported)
 
-### 2 — Generate a Bearer Key
+### 2. Generate a Bearer Key
 
 In WP-Admin, go to **Tools → YT Builder MCP**.
 
@@ -108,7 +108,7 @@ Click **Generate New Key**. Copy it. You will paste it into the wizard in the ne
 
 > Screenshots coming in v0.2.
 
-### 3 — Run the wizard
+### 3. Run the wizard
 
 ```bash
 npx -y @wootsup/yt-builder-mcp setup
@@ -117,7 +117,7 @@ npx -y @wootsup/yt-builder-mcp setup
 The wizard asks you for:
 
 1. The Bearer Key you just generated
-2. Your WordPress site URL — **pre-filled from the key**, just press Enter
+2. Your WordPress site URL (**pre-filled from the key**, just press Enter)
 3. A profile name (use `default` if you only have one site)
 4. Which AI clients to configure (multi-select: Claude Desktop, Claude Code, Cursor, Zed, Continue, Cline, Roo Code, Codex CLI, Gemini CLI)
 
@@ -125,7 +125,7 @@ It probes `/wp-json/yt-builder-mcp/v1/health` to confirm the plugin is reachable
 
 Restart your AI client. You should see new tools prefixed with `yootheme_builder_*` (20 advertised in `tools/list`, plus 7 advanced reachable through the `yootheme_builder_advanced` gateway).
 
-### 4 — Try it
+### 4. Try it
 
 Open Claude (or any configured client) and try:
 
@@ -139,9 +139,9 @@ You should see all your templates.
 
 The Joomla package ships the same MCP surface; only the install + key-generation
 steps differ. After step 3 below, the wizard (step "Run the wizard" above) works
-identically — it auto-detects Joomla from your site URL.
+identically. It auto-detects Joomla from your site URL.
 
-### 1 — Install the Joomla package
+### 1. Install the Joomla package
 
 Download the latest Joomla package ZIP (`pkg_ytbmcp-*.zip`) from
 [GitHub Releases](https://github.com/wootsup/yt-builder-mcp/releases),
@@ -153,35 +153,35 @@ You need:
 - PHP 8.2+
 - YOOtheme Pro 4.0+ (active template; v4 + v5 both supported)
 
-### 2 — Enable the plugins
+### 2. Enable the plugins
 
 The post-install script auto-enables them, but verify under
 **System → Manage → Plugins**:
 
-- **System – YT Builder MCP** (`plg_system_ytbmcp`) — bootstraps the extension
-- **Web Services – YT Builder MCP** (`plg_webservices_ytbmcp`) — registers the REST routes
+- **System: YT Builder MCP** (`plg_system_ytbmcp`) bootstraps the extension.
+- **Web Services: YT Builder MCP** (`plg_webservices_ytbmcp`) registers the REST routes.
 
 Also confirm the Joomla **Web Services** API is on under
 **System → Global Configuration → Server → Web Services → Enable**.
 
-### 3 — Generate a Bearer Key
+### 3. Generate a Bearer Key
 
 Go to **Components → YT Builder MCP**, open the **Bearer Keys** tab, and click
-**Generate Key**. Copy the token — it is shown once. (Same key flow as WordPress;
-the **Diagnostics** tab shows the live YOOtheme Pro / Joomla / PHP versions and the
-REST endpoint inventory.)
+**Generate Key**. Copy the token (it is shown once). Same key flow as WordPress.
+The **Diagnostics** tab shows the live YOOtheme Pro / Joomla / PHP versions and the
+REST endpoint inventory.
 
-### 4 — Probe the REST surface
+### 4. Probe the REST surface
 
-Confirm the plugin is reachable (anonymous health probe — no token needed):
+Confirm the plugin is reachable (anonymous health probe, no token needed):
 
 ```bash
 curl https://example.com/api/index.php/v1/yt-builder-mcp/health
 # → {"plugin_version":"…","status":"ok"}
 ```
 
-Then run the wizard exactly as in the WordPress flow above (`npx -y @wootsup/yt-builder-mcp setup`)
-— paste the Bearer key and your Joomla site URL; the wrapper detects the
+Then run the wizard exactly as in the WordPress flow above (`npx -y @wootsup/yt-builder-mcp setup`).
+Paste the Bearer key and your Joomla site URL. The wrapper detects the
 `/api/index.php/` shape automatically (or set `YTB_MCP_PLATFORM=joomla` for an
 origin-only URL).
 
@@ -245,7 +245,7 @@ under Cursor's tool cap while every tool stays callable.
 
 | Tool | Description |
 |------|-------------|
-| `yootheme_builder_element_types_list` | List all element types the builder exposes (grid, headline, image, …). |
+| `yootheme_builder_element_types_list` | List all element types the builder exposes (grid, headline, image, etc.). |
 | `yootheme_builder_element_type_get_schema` | Get the JSON schema for one element type. Call before every add/update. |
 | `yootheme_builder_clean_implode_directives` | Strip stale `props.source.props.*.implode` directives from a binding. |
 
@@ -304,7 +304,7 @@ and [`docs/TOOL-CATALOG.md`](./docs/TOOL-CATALOG.md) for an auto-generated, spar
 **Design principles**
 
 - **State-only.** The plugin reads and writes the existing layout JSON. It does not register new element types or define new schemas.
-- **Optimistic locking.** Every write requires an `If-Match: <etag>` header — concurrent edits return `412 Precondition Failed`.
+- **Optimistic locking.** Every write requires an `If-Match: <etag>` header. Concurrent edits return `412 Precondition Failed`.
 - **Bearer + HMAC.** Keys are generated server-side, hashed at rest, and verified with constant-time `hash_equals()`.
 - **Bring-your-own-AI.** No SaaS lock-in. The MCP server runs locally next to your AI client.
 
@@ -318,7 +318,7 @@ and [`docs/TOOL-CATALOG.md`](./docs/TOOL-CATALOG.md) for an auto-generated, spar
 | [`docs/rest-api-reference.md`](./docs/rest-api-reference.md) | All REST endpoints with request/response schemas |
 | [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) | All MCP tools with Zod schemas |
 | [`docs/TOOL-CATALOG.md`](./docs/TOOL-CATALOG.md) | Quick-scan catalog of all MCP tools with sparse-fields hints |
-| [`docs/cross-platform-parity.md`](./docs/cross-platform-parity.md) | WordPress ↔ Joomla intentional divergences + parity decisions |
+| [`docs/cross-platform-parity.md`](./docs/cross-platform-parity.md) | WordPress vs. Joomla intentional divergences + parity decisions |
 | [`CHANGELOG.md`](./CHANGELOG.md) | Version history |
 | [`SECURITY.md`](./SECURITY.md) | How to report security issues |
 
@@ -326,8 +326,8 @@ and [`docs/TOOL-CATALOG.md`](./docs/TOOL-CATALOG.md) for an auto-generated, spar
 
 ## License
 
-- **WordPress Plugin (`src/`)** — GPLv2 or later. Compatible with WordPress + YOOtheme Pro.
-- **NPM Package (`packages/mcp/`)** — MIT. Use it however you want.
+- **WordPress Plugin (`src/`)**: GPLv2 or later. Compatible with WordPress + YOOtheme Pro.
+- **NPM Package (`packages/mcp/`)**: MIT. Use it however you want.
 
 The dual-license is intentional. The plugin must be GPL to live in the WordPress ecosystem; the MCP server is yours to embed, fork, or republish.
 
@@ -342,14 +342,14 @@ The dual-license is intentional. The plugin must be GPL to live in the WordPress
 ## Acknowledgments
 
 - **YOOtheme** for building one of the most flexible Page Builders for WordPress + Joomla.
-- **Anthropic** for the Model Context Protocol — the missing wire format for AI tools.
+- **Anthropic** for the Model Context Protocol, the missing wire format for AI tools.
 - **WootsUp customers** who funded the time to build this.
 
 ---
 
 ## Want to know more?
 
-- [github.com/wootsup/yt-builder-mcp](https://github.com/wootsup/yt-builder-mcp) — source, releases, issue tracker
-- [wootsup.com/api-mapper](https://wootsup.com/api-mapper) — companion product: bring any REST API into your page builder as a Dynamic Source
+- [github.com/wootsup/yt-builder-mcp](https://github.com/wootsup/yt-builder-mcp): source, releases, issue tracker
+- [wootsup.com/api-mapper](https://wootsup.com/api-mapper): companion product, bring any REST API into your page builder as a Dynamic Source
 
-Built with care by [WootsUp](https://wootsup.com) — getimo productions.
+Built with care by [WootsUp](https://wootsup.com), getimo productions.

@@ -40,7 +40,7 @@ If-Match: "abc123"
 PUT/DELETE/save/publish writes **require** `If-Match` and return
 `428 Precondition Required` if the header is missing. POST create-element
 (`POST /pages/{template_id}/elements`) treats missing `If-Match` as
-opt-out (proceeds without concurrency guard) — this is intentional so that
+opt-out (proceeds without concurrency guard). This is intentional so that
 new-element drafts can be appended without a prior read round-trip.
 
 The current ETag is returned in:
@@ -73,11 +73,11 @@ envelope, but the error contract is identical.)
 | 200 | Success (read) |
 | 201 | Created (write) |
 | 204 | No content (delete) |
-| 400 | Validation error — check the message |
-| 401 | Auth failed — Bearer key wrong or missing |
+| 400 | Validation error. Check the message |
+| 401 | Auth failed. Bearer key wrong or missing |
 | 404 | Resource (template / element / source) not found |
-| 412 | If-Match ETag mismatch — re-read and retry |
-| 500 | Internal error — check server logs |
+| 412 | If-Match ETag mismatch. Re-read and retry |
+| 500 | Internal error. Check server logs |
 
 ---
 
@@ -187,14 +187,14 @@ List all YOOtheme templates.
 
 ### `GET /pages/{template_id}/layout`
 
-Get the full nested layout tree for one template. Heavy — prefer
+Get the full nested layout tree for one template. Heavy. Prefer
 `/schema` for navigation.
 
 **Auth required:** Yes.
 
 **Path params:**
 
-- `template_id` — template ID (e.g. `default`).
+- `template_id`: template ID (e.g. `default`).
 
 **Response 200:**
 
@@ -212,7 +212,7 @@ Get the full nested layout tree for one template. Heavy — prefer
 
 ### `GET /pages/{template_id}/schema`
 
-Flat schema view — every node + its JSON-Pointer path. Preferred for
+Flat schema view: every node plus its JSON-Pointer path. Preferred for
 navigation; use `/layout` only when you need the raw tree.
 
 **Auth required:** Yes.
@@ -289,7 +289,7 @@ Get one element by its JSON-Pointer path.
 
 **Path params:**
 
-- `element_path` — e.g. `section/0/row/0/column/0/grid`.
+- `element_path`: e.g. `section/0/row/0/column/0/grid`.
 
 **Response 200:**
 
@@ -508,7 +508,7 @@ List all element types YOOtheme exposes.
 
 ### `GET /element-types/{type_name}/schema`
 
-Get the JSON schema for one element type — what settings exist, types, defaults.
+Get the JSON schema for one element type (what settings exist, types, defaults).
 
 **Auth required:** Yes.
 

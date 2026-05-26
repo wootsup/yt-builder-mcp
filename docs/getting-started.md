@@ -1,4 +1,4 @@
-# Getting Started — YT Builder MCP for YOOtheme Pro (unofficial)
+# Getting Started. YT Builder MCP for YOOtheme Pro (unofficial)
 
 > Independent third-party project. YOOtheme® is a registered trademark of YOOtheme GmbH
 > ([yootheme.com](https://yootheme.com)). YT Builder MCP is built by WootsUp (getimo

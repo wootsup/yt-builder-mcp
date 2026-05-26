@@ -1,4 +1,4 @@
-# @wootsup/yt-builder-mcp — YT Builder MCP for YOOtheme Pro (unofficial)
+# @wootsup/yt-builder-mcp. YT Builder MCP for YOOtheme Pro (unofficial)
 
 > Drive your page builder via MCP. Built for YOOtheme Pro 4.0+ on **WordPress** and **Joomla 5/6**. Connect **Claude Desktop**, **Claude Code**, **Cursor**, **Zed**, **Continue**, **Cline**, **Roo Code**, **Codex CLI**, or **Gemini CLI** in one command.
 
@@ -61,7 +61,7 @@ The wizard auto-detects and configures the following clients:
 | Codex CLI | `~/.codex/config.toml` | |
 | Gemini CLI | `~/.gemini/settings.json` | |
 
-## Tool surface — gateway model
+## Tool surface (gateway model)
 
 The server registers **26 domain tools + 1 gateway = 27 reachable** tools,
 of which **20 are advertised in `tools/list`** (well under Cursor's ~40-tool
@@ -106,7 +106,7 @@ yt-builder-mcp --version, -v    Print package version.
 yt-builder-mcp --help, -h       Show usage.
 ```
 
-### `install-skill` — bundled agent skill
+### `install-skill` (bundled agent skill)
 
 Copies the bundled `skills/yootheme-builder/` folder into
 `~/.claude/skills/` and appends a marker block to `~/AGENTS.md` so
@@ -122,10 +122,10 @@ The skill ships with the 5 canonical workflows (build hero, bind
 source, clone section, diagnose 401, add custom element) plus a
 23-tool auto-generated catalog appendix.
 
-## DXT bundle — Claude Desktop one-click install
+## DXT bundle (Claude Desktop one-click install)
 
 The repo includes a `manifest.json` and `scripts/build-dxt.js` that
-produces a `yt-builder-mcp.dxt` archive — the
+produces a `yt-builder-mcp.dxt` archive, the
 [Desktop Extension](https://github.com/anthropics/dxt) format used
 by Claude Desktop for one-click MCP installs. Build it from a
 source checkout:
@@ -147,7 +147,7 @@ When launched by an AI client (or directly):
 |----------|-----------|---------|
 | `YTB_MCP_SITE_URL` | Yes | Host CMS base URL (e.g. `https://example.com`). Works for BOTH WordPress and Joomla. Trailing slash is stripped. |
 | `YTB_MCP_WP_URL` | No (deprecated) | Legacy alias for `YTB_MCP_SITE_URL`. Still honoured for older WordPress-only configurations. A non-fatal deprecation notice is written to stderr when this is used without `YTB_MCP_SITE_URL`. |
-| `YTB_MCP_BEARER_TOKEN` | Yes | Bearer key from wp-admin (WordPress: Tools → "YT Builder MCP") or Administrator → Components → "YT Builder MCP" (Joomla). Format-checked client-side: must match `ytb_(live\|test)_<payload>.<sig>`. Do **not** prepend `Bearer ` — the MCP server adds it. |
+| `YTB_MCP_BEARER_TOKEN` | Yes | Bearer key from wp-admin (WordPress: Tools → "YT Builder MCP") or Administrator → Components → "YT Builder MCP" (Joomla). Format-checked client-side: must match `ytb_(live\|test)_<payload>.<sig>`. Do **not** prepend `Bearer `. The MCP server adds it. |
 | `YTB_MCP_PLATFORM` | No | Explicit platform hint: `wordpress` or `joomla`. Set to `joomla` when `YTB_MCP_SITE_URL` is an origin-only Joomla URL (no `/api/index.php/` in the path). Defaults to URL-shape auto-detection. |
 | `YTB_MCP_TIMEOUT_MS` | No | REST timeout (default 15000). |
 | `YTB_MCP_TEST_MODE` | No | `1` skips the stdio loop (smoke tests). |
@@ -206,7 +206,7 @@ Supported flags:
 | `--client <id>` | Yes (≥1) | Client id; repeatable. Valid ids: `claude-desktop`, `claude-code`, `cursor`, `zed`, `continue`, `cline`, `roo-code`, `codex-cli`, `gemini-cli`. |
 
 The wizard still runs its plugin-health + auth probes and uses the
-exit codes documented in the table below — so CI can branch on the
+exit codes documented in the table below, so CI can branch on the
 exit code to detect whether the install actually succeeded.
 
 ## Exit codes (CLI)
@@ -226,7 +226,7 @@ The CLI returns POSIX-style exit codes for scripting / CI:
 
 ## Documentation
 
-- [SKILL.md (bundled agent skill)](./skills/yt-builder-mcp/SKILL.md) — 5 canonical workflows, gateway model, tool catalog
+- [SKILL.md (bundled agent skill)](./skills/yt-builder-mcp/SKILL.md): 5 canonical workflows, gateway model, tool catalog
 - [REST API Reference](https://github.com/wootsup/yt-builder-mcp/blob/main/docs/rest-api-reference.md)
 - [MCP Tool Reference](https://github.com/wootsup/yt-builder-mcp/blob/main/docs/mcp-tool-reference.md)
 
