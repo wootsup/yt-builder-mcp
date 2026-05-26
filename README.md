@@ -1,17 +1,12 @@
 # YT Builder MCP for YOOtheme Pro (unofficial)
 
-> **Drive your page builder via MCP.** Built for YOOtheme Pro 4.0+ — connect Claude Desktop, Claude Code, Cursor, Zed, Continue, Cline, Roo Code, Codex CLI or Gemini CLI in one command.
-> Free WordPress plugin + NPM package. GPLv2 + MIT.
+> **Drive your page builder via MCP.** Built for YOOtheme Pro 4.0+. Connect Claude Desktop, Claude Code, Cursor, Zed, Continue, Cline, Roo Code, Codex CLI or Gemini CLI in one command.
+> Free WordPress plugin + Joomla 5/6 package + NPM package. GPLv2 + MIT.
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue)]() [![Status](https://img.shields.io/badge/Wave%20A%2FB%2FC%2FD-shipped-brightgreen)]() [![License: GPLv2 / MIT](https://img.shields.io/badge/license-GPLv2%20%2B%20MIT-blue)]()
+[![Version](https://img.shields.io/badge/version-1.1.5-blue)]() [![License: GPLv2 / MIT](https://img.shields.io/badge/license-GPLv2%20%2B%20MIT-blue)]()
 
-> **🟢 Joomla 5/6 port — functional on dev** (branch `feat/yt-builder-mcp-joomla`).
-> The full REST surface (read + write + L2 article extensions) is live-verified on
-> `dev.wootsup.com/joomla`, the 3-tab admin component (Keys / Diagnostics / About) is
-> at WordPress parity, and the npm wrapper auto-detects Joomla from the URL shape.
-> See the **Joomla install** section below and the
-> [Joomla foundation ADRs](docs/adr/2026-05-24-joomla-port-foundation-adrs.md) for
-> architectural decisions. WordPress remains primary; no breaking changes planned for v1.0.x.
+> Works on **WordPress** and **Joomla 5/6**. The same MCP server speaks to either
+> host plugin. See the **Quickstart** sections below for each platform.
 
 > Independent third-party project. YOOtheme® is a registered trademark of YOOtheme GmbH
 > ([yootheme.com](https://yootheme.com)). YT Builder MCP is built by WootsUp (getimo
@@ -128,7 +123,7 @@ The wizard asks you for:
 
 It probes `/wp-json/yt-builder-mcp/v1/health` to confirm the plugin is reachable, then writes the MCP server entry into each selected client's config file.
 
-Restart your AI client. You should see ~21 new tools prefixed with `yootheme_builder_*`.
+Restart your AI client. You should see new tools prefixed with `yootheme_builder_*` (20 advertised in `tools/list`, plus 7 advanced reachable through the `yootheme_builder_advanced` gateway).
 
 ### 4 — Try it
 
@@ -192,41 +187,51 @@ origin-only URL).
 
 ---
 
-## Tool catalogue (21 tools)
+## Tool catalogue
 
-The MCP server exposes 21 tools, grouped by domain:
+The MCP server exposes 26 typed tools plus a single `yootheme_builder_advanced`
+gateway. 20 of them are advertised first-class in `tools/list` (the essentials);
+the remaining 7 are reachable through the gateway, keeping the surface well
+under Cursor's tool cap while every tool stays callable.
 
 ### Health (2)
 
 | Tool | Description |
 |------|-------------|
-| `yootheme_builder_health` | Plugin version, theme version, WP version, storage backend, list of available REST endpoints. |
-| `yootheme_builder_diagnose` | Connectivity + auth check. Returns hints when things are misconfigured. |
+| `yootheme_builder_health` | Plugin version, YT Pro version, CMS version, storage backend, list of available REST endpoints. |
+| `yootheme_builder_diagnose` | Connectivity + auth check in one call. Returns hints when things are misconfigured. |
+
+### Sites (2, multi-site)
+
+| Tool | Description |
+|------|-------------|
+| `yootheme_builder_sites_list` | List all sites configured in the MCP installation. |
+| `yootheme_builder_sites_test` | Verify connectivity to one site (health + auth probes in parallel). |
 
 ### Pages (6)
 
 | Tool | Description |
 |------|-------------|
-| `yootheme_builder_pages_list` | List all templates. |
+| `yootheme_builder_pages_list` | List all pages, templates, layouts. Returns `template_id`, label, type, frontend_url. |
 | `yootheme_builder_page_get_layout` | Get the full nested layout tree (heavy). |
-| `yootheme_builder_page_get_schema` | Get the flat schema (nodes + paths) for a template — preferred for navigation. |
+| `yootheme_builder_page_get_schema` | Get the flat schema (nodes + paths) for a template. Preferred for navigation. |
+| `yootheme_builder_template_summary` | Token-efficient template overview: element counts, binding count, nesting depth. |
 | `yootheme_builder_get_etag` | Get the current ETag for optimistic-lock writes. |
-| `yootheme_builder_page_save` | Re-run save-transforms + persist (draft). |
-| `yootheme_builder_page_publish` | Publish a template. |
+| `yootheme_builder_page_save` / `_publish` | Re-run save-transforms / publish a template. |
 
 ### Elements (7)
 
 | Tool | Description |
 |------|-------------|
-| `yootheme_builder_element_list` | List elements within a template. |
-| `yootheme_builder_element_get` | Get one element by path (e.g. `section/0/row/0/column/0/grid`). |
+| `yootheme_builder_element_list` | List elements within a template (paginated, sparse-fields). |
+| `yootheme_builder_element_get` | Get one element by JSON-Pointer path. |
 | `yootheme_builder_element_add` | Add a new element under a parent path. |
-| `yootheme_builder_element_update_settings` | Update settings for an existing element. |
-| `yootheme_builder_element_move` | Move an element to a new path. |
-| `yootheme_builder_element_clone` | Clone an element. |
-| `yootheme_builder_element_delete` | Delete an element. |
+| `yootheme_builder_element_update_settings` | Update settings for an existing element (replace or deep-merge). |
+| `yootheme_builder_element_move` | Move an element to a new parent + index. |
+| `yootheme_builder_element_clone` | Clone an element as a sibling. |
+| `yootheme_builder_element_delete` | Delete an element (requires `confirm: true`). |
 
-### Sources (4)
+### Sources & bindings (5)
 
 | Tool | Description |
 |------|-------------|
@@ -234,15 +239,24 @@ The MCP server exposes 21 tools, grouped by domain:
 | `yootheme_builder_element_get_binding` | Get the current Dynamic Source binding for an element. |
 | `yootheme_builder_element_bind_source` | Bind a Dynamic Source to an element. |
 | `yootheme_builder_element_unbind_source` | Remove the binding. |
+| `yootheme_builder_inspect_multi_items_binding` | Inspect Multi-Items container/item state; flags container-level mis-bindings. |
 
-### Inspection (2)
+### Inspection & maintenance (3)
 
 | Tool | Description |
 |------|-------------|
 | `yootheme_builder_element_types_list` | List all element types the builder exposes (grid, headline, image, …). |
-| `yootheme_builder_element_type_get_schema` | Get the JSON schema for one element type — what settings exist, what types, what defaults. |
+| `yootheme_builder_element_type_get_schema` | Get the JSON schema for one element type. Call before every add/update. |
+| `yootheme_builder_clean_implode_directives` | Strip stale `props.source.props.*.implode` directives from a binding. |
 
-See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/output schemas.
+### Gateway (1)
+
+| Tool | Description |
+|------|-------------|
+| `yootheme_builder_advanced` | Single entry that routes to 7 advanced tools by name. Call `({ tool, arguments })`. |
+
+See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/output schemas
+and [`docs/TOOL-CATALOG.md`](./docs/TOOL-CATALOG.md) for an auto-generated, sparse-fields catalog.
 
 ---
 
@@ -258,17 +272,17 @@ See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/
                ▼
 ┌─────────────────────────────────────────┐
 │  @wootsup/yt-builder-mcp  (NPM)         │
-│  — TypeScript                           │
-│  — @modelcontextprotocol/sdk            │
-│  — 21 tools (Zod schemas)               │
+│  TypeScript                             │
+│  @modelcontextprotocol/sdk              │
+│  26 tools + 1 gateway (Zod schemas)     │
 └──────────────┬──────────────────────────┘
                │ HTTPS + Bearer-token
                ▼
 ┌─────────────────────────────────────────┐
-│  yt-builder-mcp.php  (WP Plugin)        │
-│  — PHP 8.2+, GPLv2                      │
-│  — REST namespace: yt-builder-mcp       │
-│  — Modules:                             │
+│  Host plugin (WordPress OR Joomla)      │
+│  PHP 8.2+, GPLv2                        │
+│  REST namespace: yt-builder-mcp/v1      │
+│  Modules:                               │
 │      core-auth   (Bearer + HMAC)        │
 │      builder-state                      │
 │      builder-pages                      │
@@ -281,7 +295,9 @@ See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/
                ▼
 ┌─────────────────────────────────────────┐
 │  YOOtheme Pro Theme                     │
-│  Storage: wp_option('yootheme') JSON    │
+│  Storage:                               │
+│    WP: wp_option('yootheme') JSON       │
+│    Joomla: #__extensions.custom_data    │
 └─────────────────────────────────────────┘
 ```
 
@@ -300,7 +316,7 @@ See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/
 |----------|----------------|
 | [`docs/getting-started.md`](./docs/getting-started.md) | Step-by-step install + first prompt |
 | [`docs/rest-api-reference.md`](./docs/rest-api-reference.md) | All REST endpoints with request/response schemas |
-| [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) | All 21 MCP tools with Zod schemas |
+| [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) | All MCP tools with Zod schemas |
 | [`docs/TOOL-CATALOG.md`](./docs/TOOL-CATALOG.md) | Quick-scan catalog of all MCP tools with sparse-fields hints |
 | [`docs/cross-platform-parity.md`](./docs/cross-platform-parity.md) | WordPress ↔ Joomla intentional divergences + parity decisions |
 | [`CHANGELOG.md`](./CHANGELOG.md) | Version history |
@@ -317,22 +333,9 @@ The dual-license is intentional. The plugin must be GPL to live in the WordPress
 
 ---
 
-## Status & roadmap
+## Current release
 
-This is the official **WootsUp yt-builder-mcp** repository. Stable releases are tagged here for public consumption (GitHub Releases + NPM `@wootsup/yt-builder-mcp`).
-
-| Wave | Status |
-|------|--------|
-| Wave 0 — Repo Setup | done |
-| Wave 1 — Plugin Skeleton + core-auth | done |
-| Wave 2 — Read Operations (5 modules) | done |
-| Wave 3 — Write Operations (LayoutWriter, ETag, cache) | done |
-| Wave 4 — NPM Package + MCP Server + Setup-Wizard | done |
-| Wave 5 — Docs + E2E Skeleton + WP.org readme | done |
-| Wave 6 — 6-Axis Audit | round-2 complete |
-| Wave 7 — Joomla Port (WP-parity) | in progress — see branch `feat/yt-builder-mcp-joomla`; foundation waves 1-4 + npm-wrapper `JoomlaPlatform` + `live-verify.mjs` Joomla-adapter shipped; per-tool 1:1 parity verification (Wave 8.5) pending deployed Joomla site |
-
-Test coverage: **240 PHPUnit tests / 519 assertions** (plugin) + **62 vitest tests** (NPM package). PHPStan level 8 clean. TypeScript 5 strict clean.
+**v1.1.5** (2026-05-26). WordPress + Joomla 5/6. 20 advertised MCP tools plus 7 advanced behind the gateway. See [CHANGELOG.md](./CHANGELOG.md) for release history.
 
 ---
 

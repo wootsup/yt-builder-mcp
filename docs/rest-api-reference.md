@@ -86,11 +86,11 @@ envelope, but the error contract is identical.)
 ### `GET /health`
 
 Tiered. Used by the setup wizard to sanity-check connectivity before the user even
-pastes their key. The payload is **field-split by authentication** (Wave-6 L4 tier
-reduction): an anonymous caller gets only the minimum needed to confirm "the plugin is
-installed at this URL", while every host-fingerprinting field (YOOtheme/CMS/PHP
-versions, `yootheme_loaded`, storage backend, endpoint inventory) is reserved for
-Bearer-holders. This is identical on WordPress and Joomla (Joomla #19 parity, W9-T4).
+pastes their key. The payload is **field-split by authentication**: an anonymous
+caller gets only the minimum needed to confirm "the plugin is installed at this URL",
+while every host-fingerprinting field (YOOtheme/CMS/PHP versions, `yootheme_loaded`,
+storage backend, endpoint inventory) is reserved for Bearer-holders. This is
+identical on WordPress and Joomla.
 
 **Auth required:** No (anonymous payload) / optional (Bearer augments the payload).
 
@@ -98,7 +98,7 @@ Bearer-holders. This is identical on WordPress and Joomla (Joomla #19 parity, W9
 
 ```json
 {
-  "plugin_version": "1.1.0",
+  "plugin_version": "1.1.5",
   "status": "ok"
 }
 ```
@@ -107,25 +107,22 @@ Bearer-holders. This is identical on WordPress and Joomla (Joomla #19 parity, W9
 
 ```json
 {
-  "plugin_version": "1.1.0",
+  "plugin_version": "1.1.5",
   "status": "ok",
   "yootheme_version": "4.5.33",
-  "php_version": "8.3.6",
   "yootheme_loaded": true,
+  "site_url": "https://example.com",
+  "home_url": "https://example.com",
+  "storage_type": "wp_option",
+  "storage_target": "yootheme",
   "schema_version": 1,
-  "available_endpoints_count": 25,
-  "available_endpoints": [
-    "/v1/yt-builder-mcp/health",
-    "/v1/yt-builder-mcp/pages",
-    "..."
-  ]
+  "available_endpoints": ["/yt-builder-mcp/v1/health", "/yt-builder-mcp/v1/pages", "..."]
 }
 ```
 
-> WordPress additionally surfaces `wp_version`, `site_url`, `home_url`,
-> `storage_type` / `storage_target` (`wp_option` / `yootheme`) and
-> `yooessentials_version` in the authenticated branch. Joomla surfaces the
-> equivalent CMS/version fields; the shared `{plugin_version, status}` anonymous
+> WordPress additionally surfaces `wp_version` and `yooessentials_version`
+> (when installed). Joomla returns `cms: "joomla"` + `cms_version` + `php_version`
+> with the same Bearer-gated semantics. The anonymous `{plugin_version, status}`
 > contract is byte-identical on both platforms.
 
 **Example (anonymous probe):**
@@ -470,14 +467,18 @@ List Dynamic Sources available on the site (e.g. registered by API Mapper).
 
 **Auth required:** Yes.
 
-**Response 200:**
+**Response 200:** Sources are grouped by origin (e.g. `apimapper`, `wordpress`, `joomla`, `essentials`):
 
 ```json
 {
-  "sources": [
-    { "name": "pexels-search", "label": "Pexels Search", "fields": ["src.large", "alt", "photographer"] },
-    { "name": "wp-posts", "label": "Posts", "fields": ["title", "excerpt", "featured_image"] }
-  ]
+  "sources": {
+    "apimapper": [
+      { "name": "apiMapperFlow…", "label": "Pexels Search", "group": "WootsUp - API Mapper", "type": "…Query", "kind": "…Query" }
+    ],
+    "wordpress": [
+      { "name": "posts", "label": "Posts", "group": "WordPress", "type": "[Post]", "kind": "[Post]" }
+    ]
+  }
 }
 ```
 

@@ -76,12 +76,12 @@ differently:
 
 - **Bearer is the sole authority on the API surface.** The REST routes run in
   Joomla's `com_api` application, where `Factory::getUser()->authorise('core.edit', …)`
-  is always false (no logged-in identity) — so the L2 article-write `core.edit` gate
-  was **removed** in Round-6 (ADR `l2-bearer-as-authority`). All API access — L1 type
-  templates and L2 per-article layouts alike — is governed entirely by the Bearer
-  token's scope hierarchy (`read` < `write` < `admin`), ETag optimistic-locking, and
-  rate-limiting. Joomla ACL governs only the **admin component** (`com_ytbmcp` is gated
-  by `core.admin`/`core.manage` via `access.xml`), never the token-authenticated API.
+  is always false (no logged-in identity). The L2 article-write `core.edit` gate is
+  intentionally absent. All API access (L1 type templates and L2 per-article layouts
+  alike) is governed entirely by the Bearer token's scope hierarchy
+  (`read` < `write` < `admin`), ETag optimistic-locking, and rate-limiting. Joomla
+  ACL governs only the **admin component** (`com_ytbmcp` is gated by
+  `core.admin`/`core.manage` via `access.xml`), never the token-authenticated API.
 
 - **Treat Bearer tokens like Joomla API tokens** — never commit them, rotate exposed
   ones, and revoke from **Components → YT Builder MCP → Bearer Keys**.
