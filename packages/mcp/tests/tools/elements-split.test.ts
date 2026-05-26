@@ -11,15 +11,17 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
 import { buildElementsTools } from '../../src/tools/elements/index.js';
+import { makeTestPool } from '../helpers/test-pool.js';
 
-function fakeClient(): RestClient {
-    return new RestClient({
+function fakeClient(): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async () => new Response('{}')) as unknown as typeof fetch,
     });
 }
@@ -50,7 +52,7 @@ describe('elements-split snapshot — public surface preserved', () => {
                 "readOnlyHint": true,
                 "title": "List Elements",
               },
-              "description": "List elements in a template as a flat array with JSON-Pointer paths + types. Scope with \`root_path\`/\`depth\` for a subtree, paginate with \`limit\`/\`cursor\` for large templates. \`fields[]\` narrows each row.",
+              "description": "List elements in a template as a flat array with JSON-Pointer paths + types. Scope with \`root_path\`/\`depth\` for a subtree, paginate with \`limit\`/\`cursor\` for large templates. \`fields[]\` narrows each row. Operates on the default site unless site_id is provided.",
               "hasOutputSchema": true,
               "inputSchemaKeys": [
                 "cursor",
@@ -58,6 +60,7 @@ describe('elements-split snapshot — public surface preserved', () => {
                 "fields",
                 "limit",
                 "root_path",
+                "site_id",
                 "template_id",
               ],
               "name": "yootheme_builder_element_list",
@@ -70,10 +73,11 @@ describe('elements-split snapshot — public surface preserved', () => {
                 "readOnlyHint": true,
                 "title": "Get Element",
               },
-              "description": "Get the full element object at a specific JSON-Pointer path, including props and children. Use yootheme_builder_element_list to discover paths.",
+              "description": "Get the full element object at a specific JSON-Pointer path, including props and children. Use yootheme_builder_element_list to discover paths. Operates on the default site unless site_id is provided.",
               "hasOutputSchema": true,
               "inputSchemaKeys": [
                 "element_path",
+                "site_id",
                 "template_id",
               ],
               "name": "yootheme_builder_element_get",
@@ -86,7 +90,7 @@ describe('elements-split snapshot — public surface preserved', () => {
                 "readOnlyHint": false,
                 "title": "Add Element",
               },
-              "description": "Add a new element to a template. Provide \`parent_path\` (or "" for root), \`element_type\` (e.g. "headline", "text", "grid"), and optional \`props\` / \`children\`. Returns the new element's JSON-Pointer path. Requires ETag.",
+              "description": "Add a new element to a template. Provide \`parent_path\` (or "" for root), \`element_type\` (e.g. "headline", "text", "grid"), and optional \`props\` / \`children\`. Returns the new element's JSON-Pointer path. Requires ETag. Operates on the default site unless site_id is provided.",
               "hasOutputSchema": false,
               "inputSchemaKeys": [
                 "children",
@@ -94,6 +98,7 @@ describe('elements-split snapshot — public surface preserved', () => {
                 "etag",
                 "parent_path",
                 "props",
+                "site_id",
                 "template_id",
               ],
               "name": "yootheme_builder_element_add",
@@ -106,13 +111,14 @@ describe('elements-split snapshot — public surface preserved', () => {
                 "readOnlyHint": false,
                 "title": "Update Element Settings",
               },
-              "description": "Update \`props\` on an element. Default replaces all props; pass \`merge:true\` for server-side deep-merge (only request keys overwritten, others survive — avoids read-modify-write races). Requires ETag.",
+              "description": "Update \`props\` on an element. Default replaces all props; pass \`merge:true\` for server-side deep-merge (only request keys overwritten, others survive — avoids read-modify-write races). Requires ETag. Operates on the default site unless site_id is provided.",
               "hasOutputSchema": false,
               "inputSchemaKeys": [
                 "element_path",
                 "etag",
                 "merge",
                 "props",
+                "site_id",
                 "template_id",
               ],
               "name": "yootheme_builder_element_update_settings",
@@ -125,11 +131,12 @@ describe('elements-split snapshot — public surface preserved', () => {
                 "readOnlyHint": false,
                 "title": "Move Element",
               },
-              "description": "Move an element to a new parent + index in the tree. Useful for reordering or reparenting (e.g. moving a card from one grid column to another). Requires ETag.",
+              "description": "Move an element to a new parent + index in the tree. Useful for reordering or reparenting (e.g. moving a card from one grid column to another). Requires ETag. Operates on the default site unless site_id is provided.",
               "hasOutputSchema": false,
               "inputSchemaKeys": [
                 "element_path",
                 "etag",
+                "site_id",
                 "template_id",
                 "to_index",
                 "to_parent_path",
@@ -144,11 +151,12 @@ describe('elements-split snapshot — public surface preserved', () => {
                 "readOnlyHint": false,
                 "title": "Clone Element",
               },
-              "description": "Clone an element as a sibling (same parent, immediately after the source). Returns the new element's path. Requires ETag.",
+              "description": "Clone an element as a sibling (same parent, immediately after the source). Returns the new element's path. Requires ETag. Operates on the default site unless site_id is provided.",
               "hasOutputSchema": false,
               "inputSchemaKeys": [
                 "element_path",
                 "etag",
+                "site_id",
                 "template_id",
               ],
               "name": "yootheme_builder_element_clone",
@@ -161,12 +169,13 @@ describe('elements-split snapshot — public surface preserved', () => {
                 "readOnlyHint": false,
                 "title": "Delete Element",
               },
-              "description": "PERMANENTLY delete an element and all its children. Cannot be undone. Always ask the user to confirm first, then call again with \`confirm: true\`. Requires ETag.",
+              "description": "PERMANENTLY delete an element and all its children. Cannot be undone. Always ask the user to confirm first, then call again with \`confirm: true\`. Requires ETag. Operates on the default site unless site_id is provided.",
               "hasOutputSchema": false,
               "inputSchemaKeys": [
                 "confirm",
                 "element_path",
                 "etag",
+                "site_id",
                 "template_id",
               ],
               "name": "yootheme_builder_element_delete",

@@ -18,9 +18,11 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
+import { makeTestPool } from './test-pool.js';
 
 export interface ErrorScenario {
     readonly label: string;
@@ -87,19 +89,19 @@ export const ERROR_SCENARIOS: readonly ErrorScenario[] = [
  * envelope so RestError extracts `code` + `message` consistently with
  * production traffic.
  */
-export function makeFailingClient(scenario: ErrorScenario): RestClient {
+export function makeFailingClient(scenario: ErrorScenario): ClientPool {
     if (scenario.isNetwork === true) {
-        return new RestClient({
+        return makeTestPool({
             baseUrl: 'https://example.com',
-            bearerToken: 't',
+            bearer: 't',
             fetch: vi.fn(async () => {
                 throw new TypeError('fetch failed');
             }) as unknown as typeof fetch,
         });
     }
-    return new RestClient({
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async () => {
             const body = {
                 code: `synthetic_${String(scenario.status)}`,
@@ -117,11 +119,22 @@ export function makeFailingClient(scenario: ErrorScenario): RestClient {
     });
 }
 
+/**
+ * Strip the W6 `withSiteMeta` text-prefix `[<id-or-label> @ <host>] `
+ * from a tool result's first text block before JSON.parse. Tests that
+ * previously parsed `content[0].text` directly broke after W6.3 wired
+ * `withSiteMeta` into every handler — they get the prefix for free
+ * even on error envelopes (so the user knows which site failed).
+ */
+export function stripSitePrefix(text: string): string {
+    return text.replace(/^\[[^\]]+\] /, '');
+}
+
 /** Extract the parsed `{error,status,code,context,hint}` payload from a tool result. */
 export function extractErrorPayload(
     result: { content?: Array<{ text?: string }>; isError?: boolean },
 ): Record<string, unknown> {
-    const text = result.content?.[0]?.text ?? '';
+    const text = stripSitePrefix(result.content?.[0]?.text ?? '');
     try {
         return JSON.parse(text) as Record<string, unknown>;
     } catch {

@@ -1,6 +1,6 @@
 {
     "name": "@wootsup/yt-builder-mcp",
-    "version": "1.0.1",
+    "version": "1.1.5",
     "type": "module",
     "description": "YT Builder MCP — drive your page builder from Claude, Cursor, Codex, Gemini and 5 other MCP-capable AI assistants. Built for YOOtheme Pro 4.0+. Independent third-party project, not affiliated with YOOtheme GmbH.",
     "license": "MIT",
@@ -66,10 +66,12 @@
         "@modelcontextprotocol/sdk": "^1.27.0",
         "@clack/prompts": "^0.7.0",
         "pino": "^10.3.1",
+        "proper-lockfile": "^4.1.2",
         "zod": "^4.3.6"
     },
     "devDependencies": {
         "@types/node": "^20.11.0",
+        "@types/proper-lockfile": "^4.1.4",
         "@typescript-eslint/eslint-plugin": "^8.0.0",
         "@typescript-eslint/parser": "^8.0.0",
         "@vitest/coverage-v8": "^1.4.0",

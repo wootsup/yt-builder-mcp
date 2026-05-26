@@ -14,18 +14,20 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
 import { buildElementsTools } from '../../src/tools/elements.js';
 import { buildInspectionTools } from '../../src/tools/inspection.js';
 import { buildPagesTools } from '../../src/tools/pages.js';
 import { buildSourcesTools } from '../../src/tools/sources.js';
+import { makeTestPool, stripSitePrefix } from '../helpers/test-pool.js';
 
-function fakeClient(handler: (url: string) => Response | Promise<Response>): RestClient {
-    return new RestClient({
+function fakeClient(handler: (url: string) => Response | Promise<Response>): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url);
@@ -209,7 +211,7 @@ describe('yootheme_builder_page_get_layout — flat:true switch', () => {
         const result = await tool.handler({ template_id: 'home' });
         // No structuredContent (legacy jsonResult), but parsed text should
         // include the nested layout.
-        const parsed = JSON.parse(result.content[0]!.text as string) as Record<string, unknown>;
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
         expect(parsed.layout).toBeDefined();
         expect(parsed.elements).toBeUndefined();
     });
@@ -225,7 +227,7 @@ describe('yootheme_builder_page_get_layout — flat:true switch', () => {
         );
         const tool = tools.find((t) => t.name === 'yootheme_builder_page_get_layout')!;
         const result = await tool.handler({ template_id: 'home', flat: true });
-        const parsed = JSON.parse(result.content[0]!.text as string) as Record<string, unknown>;
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
         const elements = parsed.elements as Array<Record<string, unknown>>;
         expect(elements).toHaveLength(2);
         expect(elements[0]?.path).toBe('/layout/0');
@@ -248,7 +250,7 @@ describe('yootheme_builder_page_get_layout — flat:true switch', () => {
             flat: true,
             fields: ['path', 'element_type'],
         });
-        const parsed = JSON.parse(result.content[0]!.text as string) as Record<string, unknown>;
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
         const elements = parsed.elements as Array<Record<string, unknown>>;
         expect(elements[0]).toEqual({ path: '/layout/0', element_type: 'section' });
         expect(parsed.projected_fields).toEqual(['path', 'element_type']);

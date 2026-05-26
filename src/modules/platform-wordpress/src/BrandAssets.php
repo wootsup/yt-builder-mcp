@@ -20,20 +20,11 @@ namespace WootsUp\BuilderMcp\Platform\WordPress;
 
 final class BrandAssets
 {
-    /** Primary WootsUp teal — CTAs, badges, brand-mark. */
+    /** Primary WootsUp teal — used inside the logo SVG mark (only brand colour). */
     public const COLOR_TEAL = '#2fd1cd';
 
-    /** Brand ink (dark text on light surfaces). */
+    /** Brand ink — dark logo/text contrast token (theme-agnostic brand value). */
     public const COLOR_INK = '#0a1421';
-
-    /** Subtle teal tint for badges + soft highlights (rgba string). */
-    public const COLOR_TEAL_TINT = 'rgba(47, 209, 205, 0.15)';
-
-    /** Neutral border for cards / section dividers. */
-    public const COLOR_BORDER = '#e0e0e0';
-
-    /** Muted text (footer, secondary metadata). */
-    public const COLOR_MUTED = '#646970';
 
     /**
      * Render the WootsUp logo as an inline SVG string.
@@ -98,41 +89,23 @@ final class BrandAssets
     /**
      * Return the inline `<style>` block for the Settings-page brand surfaces.
      *
-     * Kept inline (no enqueued stylesheet) so the page is fully self-contained
-     * — operators can copy/paste the rendered DOM into bug reports without
-     * losing the visual context.
+     * W11-T2 (2026-05-24): the WP-Admin Settings page was redesigned to render
+     * with standard WordPress admin markup (`.wrap` heading, `nav-tab-wrapper`,
+     * `.form-table`, `.widefat`, `.card`, `.notice`, `.button`). The bespoke
+     * brand surface — the former `.ytb-*` inline `<style>` block (brand header
+     * card, custom badges, brand-footer lock-up, custom CTA colours) — was
+     * removed entirely so the page looks native to wp-admin. This mirrors the
+     * Joomla-side W11 native redesign for 1:1 cross-platform parity. The ONLY
+     * brand element kept is the logo SVG ({@see self::renderLogo()}).
+     *
+     * This method is retained as a no-op for call-site / back-compat stability
+     * (any third party or parity-twin still calling it gets a safe empty string
+     * instead of a fatal).
+     *
+     * @deprecated W11-T2 — styling dropped; the Settings page is now native WP-admin.
      */
     public static function renderInlineStyles(): string
     {
-        return '<style id="ytb-mcp-brand-styles">'
-            . '.ytb-brand-header{display:flex;align-items:center;gap:16px;padding:20px 24px;background:#fff;border:1px solid '
-            . self::COLOR_BORDER . ';border-radius:6px;margin:16px 0 0;}'
-            . '.ytb-brand-header__mark{flex:0 0 auto;}'
-            . '.ytb-brand-header__body{flex:1 1 auto;}'
-            . '.ytb-brand-header__title{margin:0;font-size:20px;line-height:1.2;color:' . self::COLOR_INK . ';display:flex;align-items:center;gap:10px;flex-wrap:wrap;}'
-            . '.ytb-brand-header__tagline{margin:6px 0 0;color:' . self::COLOR_MUTED . ';font-size:13px;}'
-            . '.ytb-brand-header__ctas{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}'
-            . '.ytb-version-badge{background:' . self::COLOR_TEAL_TINT . ';color:' . self::COLOR_INK
-            . ';padding:2px 8px;border-radius:4px;font-size:12px;font-weight:500;font-family:Menlo,Consolas,monospace;}'
-            . '.ytb-unofficial-badge{background:#fff4d1;color:#7a5b00;border:1px solid #e8d180;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.4px;cursor:help;}'
-            . '.ytb-brand-cta-primary{background:' . self::COLOR_TEAL . ' !important;color:' . self::COLOR_INK
-            . ' !important;border-color:' . self::COLOR_TEAL . ' !important;text-shadow:none !important;box-shadow:none !important;}'
-            . '.ytb-brand-cta-primary:hover,.ytb-brand-cta-primary:focus{background:#26b8b4 !important;border-color:#26b8b4 !important;color:' . self::COLOR_INK . ' !important;}'
-            . '.ytb-tab-panel{background:#fff;border:1px solid ' . self::COLOR_BORDER . ';border-top:none;padding:20px 24px;margin-bottom:24px;}'
-            . '.ytb-tab-panel .form-table select{min-width:160px;max-width:240px;padding:4px 8px;font-size:14px;}'
-            . '.ytb-diag-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:12px;}'
-            . '.ytb-diag-card{border:1px solid ' . self::COLOR_BORDER . ';padding:14px 16px;border-radius:4px;background:#fafafa;}'
-            . '.ytb-diag-card h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:0.5px;color:' . self::COLOR_MUTED . ';}'
-            . '.ytb-diag-card dl{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;margin:0;font-size:13px;}'
-            . '.ytb-diag-card dt{color:' . self::COLOR_MUTED . ';font-weight:500;}'
-            . '.ytb-diag-card dd{margin:0;font-family:Menlo,Consolas,monospace;word-break:break-all;}'
-            . '.ytb-about-cmd{display:block;background:' . self::COLOR_INK . ';color:#e6f7f6;padding:12px 14px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:13px;overflow-x:auto;}'
-            . '.ytb-about-clients{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 16px;padding:0;list-style:none;}'
-            . '.ytb-about-clients li{background:#f0f0f1;color:' . self::COLOR_INK . ';padding:4px 10px;border-radius:12px;font-size:12px;}'
-            . '.ytb-brand-footer{margin-top:32px;padding:16px 0;border-top:1px solid ' . self::COLOR_BORDER . ';color:'
-            . self::COLOR_MUTED . ';font-size:13px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;}'
-            . '.ytb-brand-footer__mark{flex:0 0 auto;}'
-            . '.ytb-brand-footer__copy{flex:1 1 auto;}'
-            . '</style>';
+        return '';
     }
 }

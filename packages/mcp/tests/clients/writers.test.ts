@@ -54,11 +54,11 @@ describe('claudeDesktopClient', () => {
     it('writes the config with our server entry', async () => {
         const path = claudeDesktopClient.configPath();
 
-        await claudeDesktopClient.apply('yootheme-builder', FAKE_CONFIG);
+        await claudeDesktopClient.apply('yt-builder-mcp', FAKE_CONFIG);
         expect(existsSync(path)).toBe(true);
 
         const data = readJson<{ mcpServers: Record<string, unknown> }>(path);
-        expect(data.mcpServers['yootheme-builder']).toEqual({
+        expect(data.mcpServers['yt-builder-mcp']).toEqual({
             command: 'npx',
             args: ['-y', '@wootsup/yt-builder-mcp'],
             env: { YTB_MCP_WP_URL: 'https://example.com', YTB_MCP_BEARER_TOKEN: 'tok' },
@@ -70,60 +70,60 @@ describe('claudeDesktopClient', () => {
         mkdirSync(dirname(path), { recursive: true });
         writeFileSync(path, JSON.stringify({ mcpServers: { other: { command: 'foo' } } }));
 
-        await claudeDesktopClient.apply('yootheme-builder', FAKE_CONFIG);
+        await claudeDesktopClient.apply('yt-builder-mcp', FAKE_CONFIG);
         const data = readJson<{ mcpServers: Record<string, unknown> }>(path);
         expect(data.mcpServers.other).toEqual({ command: 'foo' });
-        expect(data.mcpServers['yootheme-builder']).toBeDefined();
+        expect(data.mcpServers['yt-builder-mcp']).toBeDefined();
     });
 
     it('overwrites the same server key on second apply (idempotent)', async () => {
         const path = claudeDesktopClient.configPath();
-        await claudeDesktopClient.apply('yootheme-builder', FAKE_CONFIG);
-        await claudeDesktopClient.apply('yootheme-builder', {
+        await claudeDesktopClient.apply('yt-builder-mcp', FAKE_CONFIG);
+        await claudeDesktopClient.apply('yt-builder-mcp', {
             ...FAKE_CONFIG,
             env: { YTB_MCP_WP_URL: 'https://example.com', YTB_MCP_BEARER_TOKEN: 'newtok' },
         });
         const data = readJson<{ mcpServers: Record<string, { env: Record<string, string> }> }>(
             path,
         );
-        expect(data.mcpServers['yootheme-builder']!.env.YTB_MCP_BEARER_TOKEN).toBe('newtok');
+        expect(data.mcpServers['yt-builder-mcp']!.env.YTB_MCP_BEARER_TOKEN).toBe('newtok');
     });
 });
 
 describe('cursorClient', () => {
     it('writes ~/.cursor/mcp.json with mcpServers map', async () => {
-        await cursorClient.apply('yootheme-builder', FAKE_CONFIG);
+        await cursorClient.apply('yt-builder-mcp', FAKE_CONFIG);
         const path = cursorClient.configPath();
         const data = readJson<{ mcpServers: Record<string, unknown> }>(path);
-        expect(data.mcpServers['yootheme-builder']).toBeDefined();
+        expect(data.mcpServers['yt-builder-mcp']).toBeDefined();
     });
 });
 
 describe('zedClient', () => {
     it('writes ~/.config/zed/settings.json with context_servers map', async () => {
-        await zedClient.apply('yootheme-builder', FAKE_CONFIG);
+        await zedClient.apply('yt-builder-mcp', FAKE_CONFIG);
         const path = zedClient.configPath();
         const data = readJson<{ context_servers: Record<string, { command: { path: string } }> }>(
             path,
         );
-        expect(data.context_servers['yootheme-builder']!.command.path).toBe('npx');
+        expect(data.context_servers['yt-builder-mcp']!.command.path).toBe('npx');
     });
 });
 
 describe('continueClient', () => {
     it('writes ~/.continue/config.json with modelContextProtocolServers list', async () => {
-        await continueClient.apply('yootheme-builder', FAKE_CONFIG);
+        await continueClient.apply('yt-builder-mcp', FAKE_CONFIG);
         const path = continueClient.configPath();
         const data = readJson<{
             experimental: { modelContextProtocolServers: Array<{ name: string }> };
         }>(path);
         expect(data.experimental.modelContextProtocolServers).toHaveLength(1);
-        expect(data.experimental.modelContextProtocolServers[0]!.name).toBe('yootheme-builder');
+        expect(data.experimental.modelContextProtocolServers[0]!.name).toBe('yt-builder-mcp');
     });
 
     it('replaces an existing entry with the same name', async () => {
-        await continueClient.apply('yootheme-builder', FAKE_CONFIG);
-        await continueClient.apply('yootheme-builder', FAKE_CONFIG);
+        await continueClient.apply('yt-builder-mcp', FAKE_CONFIG);
+        await continueClient.apply('yt-builder-mcp', FAKE_CONFIG);
         const path = continueClient.configPath();
         const data = readJson<{
             experimental: { modelContextProtocolServers: Array<{ name: string }> };
@@ -144,11 +144,11 @@ describe('clineClient', () => {
     });
 
     it('writes the Cline MCP settings JSON with mcpServers map', async () => {
-        await clineClient.apply('yootheme-builder', FAKE_CONFIG);
+        await clineClient.apply('yt-builder-mcp', FAKE_CONFIG);
         const path = clineClient.configPath();
         expect(existsSync(path)).toBe(true);
         const data = readJson<{ mcpServers: Record<string, unknown> }>(path);
-        expect(data.mcpServers['yootheme-builder']).toEqual({
+        expect(data.mcpServers['yt-builder-mcp']).toEqual({
             command: 'npx',
             args: ['-y', '@wootsup/yt-builder-mcp'],
             env: { YTB_MCP_WP_URL: 'https://example.com', YTB_MCP_BEARER_TOKEN: 'tok' },
@@ -160,15 +160,15 @@ describe('clineClient', () => {
         mkdirSync(dirname(path), { recursive: true });
         writeFileSync(path, JSON.stringify({ mcpServers: { other: { command: 'foo' } } }));
 
-        await clineClient.apply('yootheme-builder', FAKE_CONFIG);
+        await clineClient.apply('yt-builder-mcp', FAKE_CONFIG);
         const data = readJson<{ mcpServers: Record<string, unknown> }>(path);
         expect(data.mcpServers.other).toEqual({ command: 'foo' });
-        expect(data.mcpServers['yootheme-builder']).toBeDefined();
+        expect(data.mcpServers['yt-builder-mcp']).toBeDefined();
     });
 
     it('overwrites the same server key on second apply (idempotent)', async () => {
-        await clineClient.apply('yootheme-builder', FAKE_CONFIG);
-        await clineClient.apply('yootheme-builder', {
+        await clineClient.apply('yt-builder-mcp', FAKE_CONFIG);
+        await clineClient.apply('yt-builder-mcp', {
             ...FAKE_CONFIG,
             env: { YTB_MCP_WP_URL: 'https://example.com', YTB_MCP_BEARER_TOKEN: 'rotated' },
         });
@@ -176,7 +176,7 @@ describe('clineClient', () => {
         const data = readJson<{ mcpServers: Record<string, { env: Record<string, string> }> }>(
             path,
         );
-        expect(data.mcpServers['yootheme-builder']!.env.YTB_MCP_BEARER_TOKEN).toBe('rotated');
+        expect(data.mcpServers['yt-builder-mcp']!.env.YTB_MCP_BEARER_TOKEN).toBe('rotated');
     });
 });
 
@@ -191,11 +191,11 @@ describe('rooCodeClient', () => {
     });
 
     it('writes the Roo Code MCP settings JSON with mcpServers map', async () => {
-        await rooCodeClient.apply('yootheme-builder', FAKE_CONFIG);
+        await rooCodeClient.apply('yt-builder-mcp', FAKE_CONFIG);
         const path = rooCodeClient.configPath();
         expect(existsSync(path)).toBe(true);
         const data = readJson<{ mcpServers: Record<string, unknown> }>(path);
-        expect(data.mcpServers['yootheme-builder']).toEqual({
+        expect(data.mcpServers['yt-builder-mcp']).toEqual({
             command: 'npx',
             args: ['-y', '@wootsup/yt-builder-mcp'],
             env: { YTB_MCP_WP_URL: 'https://example.com', YTB_MCP_BEARER_TOKEN: 'tok' },
@@ -207,15 +207,15 @@ describe('rooCodeClient', () => {
         mkdirSync(dirname(path), { recursive: true });
         writeFileSync(path, JSON.stringify({ mcpServers: { other: { command: 'foo' } } }));
 
-        await rooCodeClient.apply('yootheme-builder', FAKE_CONFIG);
+        await rooCodeClient.apply('yt-builder-mcp', FAKE_CONFIG);
         const data = readJson<{ mcpServers: Record<string, unknown> }>(path);
         expect(data.mcpServers.other).toEqual({ command: 'foo' });
-        expect(data.mcpServers['yootheme-builder']).toBeDefined();
+        expect(data.mcpServers['yt-builder-mcp']).toBeDefined();
     });
 
     it('overwrites the same server key on second apply (idempotent)', async () => {
-        await rooCodeClient.apply('yootheme-builder', FAKE_CONFIG);
-        await rooCodeClient.apply('yootheme-builder', {
+        await rooCodeClient.apply('yt-builder-mcp', FAKE_CONFIG);
+        await rooCodeClient.apply('yt-builder-mcp', {
             ...FAKE_CONFIG,
             env: { YTB_MCP_WP_URL: 'https://example.com', YTB_MCP_BEARER_TOKEN: 'rotated' },
         });
@@ -223,7 +223,7 @@ describe('rooCodeClient', () => {
         const data = readJson<{ mcpServers: Record<string, { env: Record<string, string> }> }>(
             path,
         );
-        expect(data.mcpServers['yootheme-builder']!.env.YTB_MCP_BEARER_TOKEN).toBe('rotated');
+        expect(data.mcpServers['yt-builder-mcp']!.env.YTB_MCP_BEARER_TOKEN).toBe('rotated');
     });
 });
 
@@ -242,7 +242,7 @@ describe('clineClient.isDetected', () => {
     });
 
     it('returns true when the settings file exists directly', async () => {
-        await clineClient.apply('yootheme-builder', FAKE_CONFIG);
+        await clineClient.apply('yt-builder-mcp', FAKE_CONFIG);
         expect(clineClient.isDetected()).toBe(true);
     });
 });
@@ -253,7 +253,7 @@ describe('rooCodeClient.isDetected', () => {
     });
 
     it('returns true once the settings file is written', async () => {
-        await rooCodeClient.apply('yootheme-builder', FAKE_CONFIG);
+        await rooCodeClient.apply('yt-builder-mcp', FAKE_CONFIG);
         expect(rooCodeClient.isDetected()).toBe(true);
     });
 });

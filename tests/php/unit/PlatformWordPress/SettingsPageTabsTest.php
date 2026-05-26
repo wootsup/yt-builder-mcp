@@ -111,10 +111,11 @@ final class SettingsPageTabsTest extends TestCase
         $output = $this->renderOutput($this->page());
         self::assertStringContainsString('>Bearer Keys<', $output);
         self::assertStringContainsString('Generate New Key', $output);
-        // The diagnostics grid wrapper element (not the CSS rule) must
-        // NOT appear on the default tab. The inline <style> block always
-        // declares `.ytb-diag-grid` — we look for the DIV usage instead.
-        self::assertStringNotContainsString('<div class="ytb-diag-grid"', $output);
+        // The native generate form uses a `.form-table` (wp-admin standard).
+        self::assertStringContainsString('class="form-table"', $output);
+        // Diagnostics-only content (the native `.card` panels) must not leak
+        // onto the default Keys tab.
+        self::assertStringNotContainsString('REST surface', $output);
     }
 
     public function test_unknown_tab_falls_back_to_keys(): void
@@ -133,7 +134,11 @@ final class SettingsPageTabsTest extends TestCase
         $output = $this->renderOutput($this->page());
 
         self::assertStringContainsString('Diagnostics', $output);
-        self::assertStringContainsString('ytb-diag-grid', $output);
+        // W11-T2: diagnostics render in native wp-admin `.card` panels with
+        // `.widefat striped` tables — not the dropped `.ytb-diag-grid` CSS.
+        self::assertStringContainsString('class="card"', $output);
+        self::assertStringContainsString('widefat striped', $output);
+        self::assertStringNotContainsString('ytb-diag-grid', $output);
         self::assertStringContainsString('Plugin', $output);
         self::assertStringContainsString('YOOtheme Pro', $output);
         self::assertStringContainsString('WordPress', $output);
@@ -165,26 +170,161 @@ final class SettingsPageTabsTest extends TestCase
         self::assertStringContainsString('github.com/wootsup/yt-builder-mcp', $output);
     }
 
-    public function test_every_tab_renders_brand_header_with_logo_and_version_badge(): void
+    /**
+     * W11-T2 native contract: every tab renders a native wp-admin `<h1>`
+     * page heading (`wp-heading-inline`) with the logo SVG inline (the only
+     * brand element) + a plain version `<span>`. The dropped `.ytb-brand-header`
+     * card / `.ytb-version-badge` pill must NOT appear.
+     */
+    public function test_every_tab_renders_native_heading_with_logo_and_version(): void
     {
+        $version = defined('YTB_MCP_VERSION') ? (string) \YTB_MCP_VERSION : 'dev';
         foreach ([SettingsPage::TAB_KEYS, SettingsPage::TAB_DIAGNOSTICS, SettingsPage::TAB_ABOUT] as $tab) {
             $_GET['tab'] = $tab;
             $output = $this->renderOutput($this->page());
-            self::assertStringContainsString('ytb-brand-header', $output, "tab {$tab}: brand header missing");
+            self::assertStringContainsString('class="wp-heading-inline"', $output, "tab {$tab}: native heading missing");
             self::assertStringContainsString('data-testid="wootsup-logo"', $output, "tab {$tab}: logo missing");
-            self::assertStringContainsString('ytb-version-badge', $output, "tab {$tab}: version badge missing");
+            self::assertStringContainsString('v' . $version, $output, "tab {$tab}: version missing");
+            self::assertStringContainsString('unofficial', $output, "tab {$tab}: unofficial label missing");
+            // No custom brand chrome.
+            self::assertStringNotContainsString('ytb-brand-header', $output, "tab {$tab}: brand-header card leaked");
+            self::assertStringNotContainsString('ytb-version-badge', $output, "tab {$tab}: version-badge pill leaked");
         }
     }
 
-    public function test_every_tab_renders_footer_brand_lockup(): void
+    /**
+     * W11-T2: native footer — a top divider (`<hr>`) + muted `.description`
+     * lock-up with the small logo SVG. The dropped `.ytb-brand-footer` flex
+     * card must NOT appear.
+     */
+    public function test_every_tab_renders_native_footer_lockup(): void
     {
         foreach ([SettingsPage::TAB_KEYS, SettingsPage::TAB_DIAGNOSTICS, SettingsPage::TAB_ABOUT] as $tab) {
             $_GET['tab'] = $tab;
             $output = $this->renderOutput($this->page());
-            self::assertStringContainsString('ytb-brand-footer', $output, "tab {$tab}: brand footer missing");
+            self::assertStringNotContainsString('ytb-brand-footer', $output, "tab {$tab}: brand-footer card leaked");
             self::assertStringContainsString('WootsUp', $output);
             self::assertStringContainsString('getimo productions', $output);
         }
+    }
+
+    /**
+     * W11-T2 anti-regression: the bespoke brand stylesheet must never be
+     * injected again. No `.ytb-*` brand CSS rule and no inline `<style>`
+     * brand block on any tab — the page is native wp-admin.
+     */
+    public function test_no_custom_brand_css_is_injected(): void
+    {
+        foreach ([SettingsPage::TAB_KEYS, SettingsPage::TAB_DIAGNOSTICS, SettingsPage::TAB_ABOUT] as $tab) {
+            $_GET['tab'] = $tab;
+            $output = $this->renderOutput($this->page());
+            self::assertStringNotContainsString('ytb-mcp-brand-styles', $output, "tab {$tab}: brand <style> block injected");
+            self::assertStringNotContainsString('ytb-brand-cta-primary', $output, "tab {$tab}: brand CTA class leaked");
+            self::assertStringNotContainsString('ytb-tab-panel', $output, "tab {$tab}: brand tab-panel class leaked");
+            self::assertStringNotContainsString('ytb-about-cmd', $output, "tab {$tab}: brand about-cmd class leaked");
+        }
+    }
+
+    /**
+     * The native generate-key form uses wp-admin's own `.form-table`, and the
+     * submit button is a plain `primary` type — the brand CTA modifier
+     * (`ytb-brand-cta-primary`) that used to be appended to submit_button's
+     * type argument must be gone, so the button inherits wp-admin's native
+     * `.button-primary` styling.
+     */
+    public function test_keys_tab_uses_native_wp_components(): void
+    {
+        $_GET['tab'] = SettingsPage::TAB_KEYS;
+        $output = $this->renderOutput($this->page());
+        self::assertStringContainsString('class="form-table"', $output);
+        // The test-bootstrap submit_button stub echoes the type verbatim as a
+        // class; assert the native `primary` type with no brand modifier.
+        self::assertStringContainsString('<button class="primary">', $output);
+        self::assertStringNotContainsString('ytb-brand-cta-primary', $output);
+    }
+
+    /**
+     * W11-T6: the native redesign dropped the header CTA row; it must be
+     * restored with native `.button`s — Generate Key (deep-link to the Keys
+     * tab generate anchor), Documentation, and a PROMINENT wootsup.com link
+     * (the only link to the product site anywhere on the surface).
+     */
+    public function test_header_renders_generate_documentation_and_wootsup_ctas(): void
+    {
+        foreach ([SettingsPage::TAB_KEYS, SettingsPage::TAB_DIAGNOSTICS, SettingsPage::TAB_ABOUT] as $tab) {
+            $_GET['tab'] = $tab;
+            $output = $this->renderOutput($this->page());
+            // Generate Key — native primary button deep-linking to the anchor.
+            self::assertMatchesRegularExpression(
+                '/<a class="button button-primary" href="[^"]*#ytb-mcp-generate">Generate Key<\/a>/',
+                $output,
+                "tab {$tab}: Generate Key header CTA missing",
+            );
+            // Documentation — plain secondary button.
+            self::assertStringContainsString('>Documentation</a>', $output, "tab {$tab}: Documentation CTA missing");
+            // wootsup.com — prominent product-site CTA.
+            self::assertStringContainsString('https://wootsup.com', $output, "tab {$tab}: wootsup.com CTA missing");
+            self::assertStringContainsString('>wootsup.com</a>', $output, "tab {$tab}: wootsup.com label missing");
+        }
+    }
+
+    /** W11-T6: the generate form heading carries the deep-link anchor. */
+    public function test_keys_tab_generate_form_has_anchor(): void
+    {
+        $_GET['tab'] = SettingsPage::TAB_KEYS;
+        $output = $this->renderOutput($this->page());
+        self::assertStringContainsString('id="ytb-mcp-generate"', $output);
+    }
+
+    /** W11-T6: the footer carries the wootsup.com product-site link. */
+    public function test_footer_links_to_wootsup_com(): void
+    {
+        foreach ([SettingsPage::TAB_KEYS, SettingsPage::TAB_DIAGNOSTICS, SettingsPage::TAB_ABOUT] as $tab) {
+            $_GET['tab'] = $tab;
+            $output = $this->renderOutput($this->page());
+            self::assertMatchesRegularExpression(
+                '/<a href="https:\/\/wootsup\.com"[^>]*>wootsup\.com<\/a>/',
+                $output,
+                "tab {$tab}: footer wootsup.com link missing",
+            );
+        }
+    }
+
+    /** W11-T6 parity: the Diagnostics tab surfaces the Identity URL row. */
+    public function test_diagnostics_tab_surfaces_identity_url(): void
+    {
+        $_GET['tab'] = SettingsPage::TAB_DIAGNOSTICS;
+        $GLOBALS['ytb_test_rest_routes'] = ['/yt-builder-mcp/v1/health'];
+        $output = $this->renderOutput($this->page());
+        self::assertStringContainsString('Identity URL', $output);
+        self::assertStringContainsString('yt-builder-mcp/v1/identity', $output);
+    }
+
+    /**
+     * W11-T6: the reveal box must be a native `.card` (parity with Joomla,
+     * which had to drop the success-alert because Atum recoloured contained
+     * buttons). It must NOT be a `.notice notice-success`. Both copy buttons
+     * (Site URL + Bearer token) must share ONE uniform `.button` style.
+     */
+    public function test_reveal_box_is_native_card_with_uniform_copy_buttons(): void
+    {
+        $kid = 'testkid05';
+        $GLOBALS['ytb_test_transients'] = [
+            'ytb_mcp_revealed_token_' . $kid => ['value' => 'ytb_live_GGG.HHH', 'expires' => 0],
+        ];
+        $_GET['revealed'] = $kid;
+
+        $output = $this->renderOutput($this->page());
+
+        // Native card, not a contextual success notice.
+        self::assertStringContainsString('class="card ytb-reveal"', $output);
+        self::assertStringNotContainsString('notice notice-success', $output);
+        // Download CTA stays a native hero primary button.
+        self::assertStringContainsString('button button-hero button-primary', $output);
+        // Uniform copy buttons — both plain `.button`, no `.button-primary`.
+        self::assertStringContainsString('class="button" data-ytb-copy="ytb-mcp-site-url"', $output);
+        self::assertStringContainsString('class="button" data-ytb-copy="ytb-mcp-revealed-token"', $output);
+        self::assertStringNotContainsString('class="button button-primary" data-ytb-copy="ytb-mcp-revealed-token"', $output);
     }
 
     public function test_tab_navigation_marks_active_tab(): void

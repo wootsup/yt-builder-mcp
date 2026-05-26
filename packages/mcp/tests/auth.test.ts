@@ -6,7 +6,16 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { ENV_BEARER, ENV_TEST_MODE, ENV_TIMEOUT, ENV_WP_URL, isTestMode, loadConfig } from '../src/auth.js';
+import {
+    ENV_BEARER,
+    ENV_PLATFORM,
+    ENV_SITE_URL,
+    ENV_TEST_MODE,
+    ENV_TIMEOUT,
+    ENV_WP_URL,
+    isTestMode,
+    loadConfig,
+} from '../src/auth.js';
 import { ConfigError } from '../src/errors.js';
 
 // Realistic Bearer test fixtures — match the production format
@@ -163,6 +172,73 @@ describe('loadConfig', () => {
                 }),
             ).toThrowError(/Missing YTB_MCP_BEARER_TOKEN/);
         });
+    });
+});
+
+// ── Wave 7 — YTB_MCP_SITE_URL + YTB_MCP_PLATFORM ────────────────────
+describe('loadConfig — Wave 7 platform-agnostic env vars', () => {
+    it('prefers YTB_MCP_SITE_URL over YTB_MCP_WP_URL when both are set', () => {
+        const cfg = loadConfig({
+            env: {
+                [ENV_SITE_URL]: 'https://site.example.com',
+                [ENV_WP_URL]: 'https://legacy.example.com',
+                [ENV_BEARER]: VALID_BEARER_LIVE,
+            },
+        });
+        expect(cfg.baseUrl).toBe('https://site.example.com');
+    });
+
+    it('falls back to YTB_MCP_WP_URL when only the legacy var is set', () => {
+        const cfg = loadConfig({
+            env: {
+                [ENV_WP_URL]: 'https://legacy.example.com',
+                [ENV_BEARER]: VALID_BEARER_LIVE,
+            },
+        });
+        expect(cfg.baseUrl).toBe('https://legacy.example.com');
+    });
+
+    it('parses YTB_MCP_PLATFORM=joomla into platformHint', () => {
+        const cfg = loadConfig({
+            env: {
+                [ENV_SITE_URL]: 'https://example.com',
+                [ENV_BEARER]: VALID_BEARER_LIVE,
+                [ENV_PLATFORM]: 'joomla',
+            },
+        });
+        expect(cfg.platformHint).toBe('joomla');
+    });
+
+    it('parses YTB_MCP_PLATFORM=wordpress into platformHint', () => {
+        const cfg = loadConfig({
+            env: {
+                [ENV_SITE_URL]: 'https://example.com',
+                [ENV_BEARER]: VALID_BEARER_LIVE,
+                [ENV_PLATFORM]: 'wordpress',
+            },
+        });
+        expect(cfg.platformHint).toBe('wordpress');
+    });
+
+    it('ignores YTB_MCP_PLATFORM with an unrecognised value (no hint set)', () => {
+        const cfg = loadConfig({
+            env: {
+                [ENV_SITE_URL]: 'https://example.com',
+                [ENV_BEARER]: VALID_BEARER_LIVE,
+                [ENV_PLATFORM]: 'drupal',
+            },
+        });
+        expect(cfg.platformHint).toBeUndefined();
+    });
+
+    it('platformHint is undefined when YTB_MCP_PLATFORM is not set', () => {
+        const cfg = loadConfig({
+            env: {
+                [ENV_SITE_URL]: 'https://example.com',
+                [ENV_BEARER]: VALID_BEARER_LIVE,
+            },
+        });
+        expect(cfg.platformHint).toBeUndefined();
     });
 });
 

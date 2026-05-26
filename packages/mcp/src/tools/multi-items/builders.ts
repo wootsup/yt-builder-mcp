@@ -18,12 +18,14 @@
  * @license MIT
  */
 
-import type { RestClient } from '../../client.js';
-import { ELEMENT_PATH, ETAG, TEMPLATE_ID } from '../shared-schemas.js';
+import type { ClientPool } from '../../sites/client-pool.js';
+import { withSiteRetry } from '../pool-resolve-helper.js';
+import { ELEMENT_PATH, ETAG, SITE_ID_SCHEMA, TEMPLATE_ID } from '../shared-schemas.js';
 import {
     defineTool,
     mutating,
     readOnly,
+    withSiteMeta,
     type AnyToolDefinition,
 } from '../tool-builder.js';
 import {
@@ -36,23 +38,30 @@ import {
     type MultiItemsHandlerDeps,
 } from './inspect-handler.js';
 
-export function buildMultiItemsTools(client: RestClient): readonly AnyToolDefinition[] {
-    const deps: MultiItemsHandlerDeps = { client };
-
+export function buildMultiItemsTools(pool: ClientPool): readonly AnyToolDefinition[] {
+    // W6.3 — per-handler resolveSiteOrError. The handlers consume a
+    // single-field `MultiItemsHandlerDeps`, so we synthesise it inline
+    // with the resolved client.
     return [
         defineTool({
             name: 'yootheme_builder_inspect_multi_items_binding',
             description:
                 'Reports Multi-Items binding state: container/item pair (grid↔grid_item, ' +
                 'slideshow↔slideshow_item, …), current binding level (none|container|item), ' +
-                'and a recommended_fix when the binding sits on the container instead of the child.',
+                'and a recommended_fix when the binding sits on the container instead of the child. ' +
+                'Operates on the default site unless site_id is provided.',
             inputSchema: {
+                site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
             },
             outputSchema: INSPECT_MULTI_ITEMS_OUTPUT_SCHEMA,
             annotations: readOnly('Inspect Multi-Items Binding'),
-            handler: (input) => handleInspectMultiItemsBinding(deps, input),
+            handler: async ({ site_id, ...rest }) =>
+                withSiteRetry(pool, site_id, async (client, site) => {
+                    const deps: MultiItemsHandlerDeps = { client };
+                    return withSiteMeta(await handleInspectMultiItemsBinding(deps, rest), site);
+                }),
         }),
 
         defineTool({
@@ -60,15 +69,21 @@ export function buildMultiItemsTools(client: RestClient): readonly AnyToolDefini
             description:
                 'Strips `props.source.props.*.implode` directives from an element binding. ' +
                 'Returns audit log + new ETag. Idempotent (cleaned_count: 0 when nothing to ' +
-                'remove). Requires ETag.',
+                'remove). Requires ETag. ' +
+                'Operates on the default site unless site_id is provided.',
             inputSchema: {
+                site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
                 etag: ETAG,
             },
             outputSchema: CLEAN_IMPLODE_OUTPUT_SCHEMA,
             annotations: mutating('Clean Implode Directives'),
-            handler: (input) => handleCleanImplodeDirectives(deps, input),
+            handler: async ({ site_id, ...rest }) =>
+                withSiteRetry(pool, site_id, async (client, site) => {
+                    const deps: MultiItemsHandlerDeps = { client };
+                    return withSiteMeta(await handleCleanImplodeDirectives(deps, rest), site);
+                }),
         }),
     ];
 }

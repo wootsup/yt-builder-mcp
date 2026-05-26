@@ -5,9 +5,11 @@
  * Pins:
  *  - SVG markup invariants (viewBox, aria-label, teal fill, role=img)
  *  - Size clamping (1..512) so the inline mark can't be poisoned
- *  - Inline-styles block exposes the contract classes the SettingsPage
- *    uses (`ytb-brand-header`, `ytb-brand-cta-primary`, `ytb-tab-panel`,
- *    `ytb-diag-grid`, `ytb-about-cmd`, `ytb-brand-footer`)
+ *  - W11-T2 (2026-05-24): the WP-Admin Settings page was redesigned to
+ *    render with native wp-admin markup, so the bespoke brand surface (the
+ *    former `.ytb-*` inline `<style>` block) was removed entirely.
+ *    renderInlineStyles() is now a deprecated no-op; the logo SVG is the
+ *    ONLY brand element kept. Mirrors the Joomla-side W11 native redesign.
  *
  * @package WootsUp\BuilderMcp\Tests
  */
@@ -70,34 +72,25 @@ final class BrandAssetsTest extends TestCase
 
     public function test_color_constants_exist_and_are_strings(): void
     {
+        // Only the two brand-mark colours survive the W11-T2 native redesign:
+        // teal (logo rect) + ink (logo/text contrast). The former neutral
+        // palette (TEAL_TINT / BORDER / MUTED) only fed the dropped `.ytb-*`
+        // brand CSS, so those constants were removed.
         self::assertIsString(BrandAssets::COLOR_TEAL);
         self::assertIsString(BrandAssets::COLOR_INK);
-        self::assertIsString(BrandAssets::COLOR_TEAL_TINT);
-        self::assertIsString(BrandAssets::COLOR_BORDER);
-        self::assertIsString(BrandAssets::COLOR_MUTED);
     }
 
-    public function test_inline_styles_define_contract_classes(): void
+    /**
+     * W11-T2: the bespoke `.ytb-*` brand stylesheet was dropped so the
+     * Settings page renders native to wp-admin. renderInlineStyles() stays a
+     * deprecated no-op for call-site stability — it must emit nothing.
+     */
+    public function test_inline_styles_is_now_a_deprecated_noop(): void
     {
-        $css = BrandAssets::renderInlineStyles();
-        foreach ([
-            '.ytb-brand-header',
-            '.ytb-brand-cta-primary',
-            '.ytb-tab-panel',
-            '.ytb-diag-grid',
-            '.ytb-diag-card',
-            '.ytb-about-cmd',
-            '.ytb-about-clients',
-            '.ytb-brand-footer',
-            '.ytb-version-badge',
-        ] as $cls) {
-            self::assertStringContainsString($cls, $css, "missing brand contract class: {$cls}");
-        }
-    }
-
-    public function test_inline_styles_use_brand_teal(): void
-    {
-        $css = BrandAssets::renderInlineStyles();
-        self::assertStringContainsString(BrandAssets::COLOR_TEAL, $css);
+        self::assertSame(
+            '',
+            BrandAssets::renderInlineStyles(),
+            'renderInlineStyles() must emit nothing — the Settings page is now native wp-admin.',
+        );
     }
 }

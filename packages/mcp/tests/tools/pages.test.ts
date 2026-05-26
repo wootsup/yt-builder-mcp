@@ -1,18 +1,21 @@
 /**
  * Tests for the page tools — URL composition + error mapping.
  *
+ * W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
+ *
  * @license MIT
  */
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
 import { buildPagesTools } from '../../src/tools/pages.js';
+import { makeTestPool, stripSitePrefix } from '../helpers/test-pool.js';
 
-function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): RestClient {
-    return new RestClient({
+function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url, init ?? {});
@@ -70,6 +73,81 @@ describe('buildPagesTools', () => {
         expect(seen[0]).toContain('/pages/post-archive/layout');
     });
 
+    // ─── F-208 (Audit 2026-05-26) — flat mode rel_path consistency ──
+    // REST `/pages/{id}/layout` returns the WHOLE template object as
+    // `data.layout` — that object has its OWN `layout` key carrying
+    // the actual node tree. Naively calling flattenLayout(data.layout)
+    // emits paths like `/layout/layout/children/0` (double prefix),
+    // inconsistent with element_list (`/children/0`). Unwrap the
+    // template envelope so flat-mode emits the SAME rel_path shape
+    // element_list does.
+
+    it('page_get_layout(flat:true) emits rel_path stripped of /layout/layout double-prefix', async () => {
+        const tools = buildPagesTools(
+            fakeClient(() =>
+                jsonResponse({
+                    template_id: 'home',
+                    // The PHP returns the WHOLE template object here:
+                    // {layout: <node-tree>, name, ...}. The TS handler
+                    // must descend one extra hop.
+                    layout: {
+                        name: 'home',
+                        layout: {
+                            '0': {
+                                type: 'section',
+                                children: [{ type: 'text' }],
+                            },
+                        },
+                    },
+                    etag: 'e0',
+                    layout_root_pointer: '/templates/home/layout',
+                }),
+            ),
+        );
+        const result = await findTool(tools, 'yootheme_builder_page_get_layout').handler({
+            template_id: 'home',
+            flat: true,
+        });
+        const body = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as {
+            elements?: Array<{ path?: string; rel_path?: string }>;
+        };
+        expect(Array.isArray(body.elements)).toBe(true);
+        const paths = (body.elements ?? []).map((e) => e.rel_path);
+        // No element may carry the double-prefix /layout/layout/...
+        for (const p of paths) {
+            expect(p).not.toMatch(/\/layout\/layout/);
+        }
+        // rel_path must match element_list's shape (no `/layout` prefix).
+        expect(paths).toContain('/0');
+        expect(paths).toContain('/0/children/0');
+    });
+
+    it('page_get_layout(flat:true) tolerates the legacy un-wrapped layout payload', async () => {
+        // Back-compat path: if REST ever returns the plain layout tree
+        // (no template-envelope), the handler must still produce clean
+        // rel_paths. flattenLayout already handles this shape directly.
+        const tools = buildPagesTools(
+            fakeClient(() =>
+                jsonResponse({
+                    layout: {
+                        '0': { type: 'section', children: [{ type: 'text' }] },
+                    },
+                    etag: 'e0',
+                }),
+            ),
+        );
+        const result = await findTool(tools, 'yootheme_builder_page_get_layout').handler({
+            template_id: 'home',
+            flat: true,
+        });
+        const body = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as {
+            elements?: Array<{ rel_path?: string }>;
+        };
+        const paths = (body.elements ?? []).map((e) => e.rel_path);
+        expect(paths).toContain('/0');
+        expect(paths).toContain('/0/children/0');
+    });
+
     it('page_save sends If-Match when etag is provided', async () => {
         let seenIfMatch: string | null = null;
         const tools = buildPagesTools(
@@ -93,7 +171,7 @@ describe('buildPagesTools', () => {
             template_id: 'missing',
         });
         expect(result.isError).toBe(true);
-        const parsed = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
         expect(parsed.error).toBe('nope');
         expect(parsed.status).toBe(404);
         expect(parsed.context).toMatchObject({ template_id: 'missing' });
@@ -122,7 +200,7 @@ describe('buildPagesTools', () => {
             template_id: 'home',
         });
         expect(seen[0]).toContain('/pages/home/summary');
-        const body = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+        const body = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
         expect(body.counts_by_type).toMatchObject({ section: 2, headline: 1 });
         expect(body.bound_count).toBe(1);
         expect(body.max_depth).toBe(3);
@@ -137,7 +215,7 @@ describe('buildPagesTools', () => {
             template_id: 'ghost',
         });
         expect(result.isError).toBe(true);
-        const parsed = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
         expect(parsed.status).toBe(404);
         expect(parsed.context).toMatchObject({ template_id: 'ghost' });
     });

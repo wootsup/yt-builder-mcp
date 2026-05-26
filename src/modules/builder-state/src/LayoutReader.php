@@ -24,14 +24,14 @@ declare(strict_types=1);
 
 namespace WootsUp\BuilderMcp\State;
 
-final class LayoutReader
+final class LayoutReader implements LayoutReaderInterface
 {
     /** wp_option key per spike-outcomes. */
     public const OPTION = 'yootheme';
 
-    private readonly StateRevision $revision;
+    private readonly StateRevisionInterface $revision;
 
-    public function __construct(?StateRevision $revision = null)
+    public function __construct(?StateRevisionInterface $revision = null)
     {
         $this->revision = $revision ?? new StateRevision();
     }
@@ -144,7 +144,7 @@ final class LayoutReader
      * Return the underlying StateRevision tracker. Exposed so writers
      * (LayoutWriter::persist) can bump it inside their critical section.
      */
-    public function getRevision(): StateRevision
+    public function getRevision(): StateRevisionInterface
     {
         return $this->revision;
     }

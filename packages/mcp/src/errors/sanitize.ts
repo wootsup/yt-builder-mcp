@@ -60,6 +60,16 @@ const SECRET_KEYS = new Set<string>([
     'sessionToken',
     'id_token',
     'idToken',
+    // W12-R1.3 (A2-M2) — 1Password Secret References are not secrets
+    // per se (the ref string itself is safe to log), BUT they identify
+    // the vault path + item + field of a real bearer. Surfacing them
+    // verbatim in an error payload that ends up in a Discord paste, a
+    // GitHub issue, or an LLM-shared transcript leaks the production
+    // 1Password layout to anyone reading. Treat as secret to be safe.
+    'bearer_ref',
+    'bearerRef',
+    'token_ref',
+    'tokenRef',
 ]);
 
 /**

@@ -2,9 +2,9 @@
     "dxt_version": "0.1",
     "name": "@wootsup/yt-builder-mcp",
     "display_name": "YT Builder MCP for YOOtheme Pro (unofficial)",
-    "version": "1.0.1",
-    "description": "Drive your page builder programmatically from Claude, Cursor, Codex, Gemini and 5 other MCP-capable AI assistants — read layouts, edit settings, add elements, bind dynamic sources. Built for YOOtheme Pro 4.0+. Independent third-party project, not affiliated with YOOtheme GmbH.",
-    "long_description": "YT Builder MCP gives AI assistants a typed, scoped, and idempotent surface for your YOOtheme Pro page builder. Tools cover page discovery, layout inspection, element CRUD, source binding, and diagnostics. Bearer auth, optimistic locking via ETag, scope hierarchy (read < write < admin), and structured-error responses keep the agent safe and the workflow correct on first try. Independent third-party project — YOOtheme® is a registered trademark of YOOtheme GmbH (yootheme.com); YT Builder MCP is built by WootsUp (getimo productions) and is not affiliated with, endorsed by, or sponsored by YOOtheme.",
+    "version": "1.1.5",
+    "description": "Drive your YOOtheme Pro Page Builder programmatically from Claude, Cursor, Codex, Gemini and 5 other MCP-capable AI assistants — read layouts, edit settings, add elements, bind dynamic sources. Works on WordPress and Joomla 5/6. Built for YOOtheme Pro 4.0+. Independent third-party project, not affiliated with YOOtheme GmbH.",
+    "long_description": "YT Builder MCP gives AI assistants a typed, scoped, and idempotent surface for your YOOtheme Pro Page Builder, on either WordPress or Joomla 5/6. Tools cover page discovery, layout inspection, element CRUD, source binding, and diagnostics. Bearer auth, optimistic locking via ETag, scope hierarchy (read < write < admin), and structured-error responses keep the agent safe and the workflow correct on first try. Independent third-party project — YOOtheme® is a registered trademark of YOOtheme GmbH (yootheme.com); YT Builder MCP is built by WootsUp (getimo productions) and is not affiliated with, endorsed by, or sponsored by YOOtheme.",
     "icon": "icon.png",
     "author": {
         "name": "WootsUp",
@@ -21,6 +21,8 @@
         "yootheme",
         "yootheme-pro",
         "wordpress",
+        "joomla",
+        "cms",
         "page-builder",
         "mcp",
         "model-context-protocol",
@@ -37,24 +39,39 @@
                 "${__dirname}/dist/index.js"
             ],
             "env": {
-                "YTB_MCP_WP_URL": "${user_config.YTB_MCP_WP_URL}",
+                "YTB_MCP_SITES_FILE": "${user_config.YTB_MCP_SITES_FILE}",
+                "YTB_MCP_SITE_URL": "${user_config.YTB_MCP_SITE_URL}",
+                "YTB_MCP_PLATFORM": "${user_config.YTB_MCP_PLATFORM}",
                 "YTB_MCP_BEARER_TOKEN": "${user_config.YTB_MCP_BEARER_TOKEN}"
             }
         }
     },
     "user_config": {
-        "YTB_MCP_WP_URL": {
+        "YTB_MCP_SITE_URL": {
             "type": "string",
-            "title": "WordPress site URL",
-            "description": "Base URL of the WordPress install (e.g. https://example.com). Without trailing slash.",
-            "required": true
+            "title": "Site URL (connect one site)",
+            "description": "Fill this if you connect a SINGLE site (most people). The address of your YOOtheme site, e.g. https://example.com, or https://example.com/wordpress if WordPress runs in a subfolder. No trailing slash. Leave empty if you use the Sites file below.",
+            "required": false
         },
         "YTB_MCP_BEARER_TOKEN": {
             "type": "string",
-            "title": "Bearer token",
-            "description": "Bearer token generated in wp-admin → Tools → YT Builder MCP → Generate Key.",
-            "required": true,
+            "title": "Bearer token (for that one site)",
+            "description": "Fill this if you connect a SINGLE site. Paste the key you generated in your CMS admin: WordPress under Tools, YT Builder MCP; Joomla under Components, YT Builder MCP, then Generate Key. The 'write' scope is enough. Leave empty if you use the Sites file below.",
+            "required": false,
             "sensitive": true
+        },
+        "YTB_MCP_PLATFORM": {
+            "type": "string",
+            "title": "Platform (one site, optional)",
+            "description": "Leave this on 'auto'. The server detects WordPress or Joomla by itself. Only set 'wordpress' or 'joomla' if your host blocks the automatic check.",
+            "required": false,
+            "default": "auto"
+        },
+        "YTB_MCP_SITES_FILE": {
+            "type": "string",
+            "title": "Sites file (connect many sites, advanced)",
+            "description": "Only for managing several sites from one install (agencies). Path to a sites.json, e.g. /Users/you/.config/yt-builder-mcp/sites.json. Create and fill it with: npx -y @wootsup/yt-builder-mcp add-site (do not hand-edit). When set, the three single-site fields above are ignored. Most people leave this empty.",
+            "required": false
         }
     },
     "compatibility": {

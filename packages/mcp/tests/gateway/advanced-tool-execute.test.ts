@@ -5,11 +5,12 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
 import { createServer } from '../../src/server.js';
 import { collectAllRegisteredTools } from '../../src/gateway/test-support.js';
+import { makeTestPool } from '../helpers/test-pool.js';
 
 function jsonResponse(body: unknown, status = 200): Response {
     return new Response(JSON.stringify(body), {
@@ -25,12 +26,12 @@ describe('yootheme_builder_advanced — execute mode', () => {
             return jsonResponse({ saved: true, etag: 'e1' });
         }) as unknown as typeof fetch;
 
-        const client = new RestClient({
+        const pool = makeTestPool({
             baseUrl: 'https://example.com',
-            bearerToken: 't',
+            bearer: 't',
             fetch: fetchMock,
         });
-        const { mcp, capturing } = createServer({ client });
+        const { mcp, capturing } = createServer({ pool });
         const all = collectAllRegisteredTools(mcp, capturing);
         const gateway = all.yootheme_builder_advanced!;
 
@@ -47,11 +48,11 @@ describe('yootheme_builder_advanced — execute mode', () => {
     });
 
     it('rejects invalid arguments (unknown key) with a structured error', async () => {
-        const client = new RestClient({
+        const pool = makeTestPool({
             baseUrl: 'https://example.com',
-            bearerToken: 't',
+            bearer: 't',
         });
-        const { mcp, capturing } = createServer({ client });
+        const { mcp, capturing } = createServer({ pool });
         const all = collectAllRegisteredTools(mcp, capturing);
         const gateway = all.yootheme_builder_advanced!;
 

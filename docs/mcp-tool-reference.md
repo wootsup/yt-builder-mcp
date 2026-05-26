@@ -1,6 +1,6 @@
 # MCP Tool Reference
 
-All 21 tools exposed by `@wootsup/yootheme-builder-mcp`. Each tool documents:
+All 21 tools exposed by `@wootsup/yt-builder-mcp`. Each tool documents:
 
 - **Name** — the MCP tool name (use this in your AI prompt)
 - **Description** — what it does
@@ -17,24 +17,36 @@ The tools are organised into five domains: **Health**, **Pages**, **Elements**, 
 
 ### `yootheme_builder_health`
 
-Returns plugin version, YOOtheme version, WP version, storage backend, list of available REST endpoints.
+Returns plugin version, YOOtheme version, CMS version, storage backend, and the list
+of available REST endpoints. The MCP server always sends its Bearer token, so this
+tool receives the **augmented** `/health` payload (the anonymous probe returns only
+`{plugin_version, status}` — see the [REST reference](./rest-api-reference.md#get-health)
+for the field-split). Identical contract on WordPress and Joomla; the CMS-specific
+fields differ (`wp_version` vs Joomla version, storage target).
 
 - **Annotation:** read-only
 - **Input schema:** `{}`
-- **Output:**
+- **Output (WordPress):**
 
 ```json
 {
-  "plugin_version": "0.1.0-alpha.1",
-  "yootheme_version": "4.5.2",
+  "plugin_version": "1.1.0",
+  "status": "ok",
+  "yootheme_version": "4.5.33",
   "wp_version": "6.5.0",
-  "php_version": "8.2.18",
+  "php_version": "8.3.6",
   "storage_type": "wp_option",
   "storage_target": "yootheme",
   "yootheme_loaded": true,
-  "available_endpoints": ["/yootheme-builder-mcp/v1/health", ...]
+  "schema_version": 1,
+  "available_endpoints_count": 25,
+  "available_endpoints": ["/v1/yt-builder-mcp/health", "/v1/yt-builder-mcp/pages", "..."]
 }
 ```
+
+On **Joomla** the shape is the same minus the WP-only fields (`wp_version`,
+`storage_type`/`storage_target`), with the endpoints listed under the
+`/v1/yt-builder-mcp/*` namespace served at `/api/index.php/`.
 
 ### `yootheme_builder_diagnose`
 

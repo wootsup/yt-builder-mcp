@@ -8,19 +8,21 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
 import { createServer } from '../../src/server.js';
 import { collectAllRegisteredTools } from '../../src/gateway/test-support.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
+import { makeTestPool } from '../helpers/test-pool.js';
 
-function makeClient(): RestClient {
-    return new RestClient({ baseUrl: 'https://example.com', bearerToken: 't' });
+function makeClient(): ClientPool {
+    return makeTestPool({ baseUrl: 'https://example.com', bearer: 't' });
 }
 
 describe('annotation pin tests (all lanes)', () => {
     it('every registered tool has annotations (no missing flag set)', () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         for (const [name, tool] of Object.entries(all)) {
             expect(tool.annotations, `${name} missing annotations object`).toBeDefined();
@@ -28,7 +30,7 @@ describe('annotation pin tests (all lanes)', () => {
     });
 
     it('every destructive tool has destructiveHint=true AND a confirm parameter', () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         for (const [name, tool] of Object.entries(all)) {
             const ann = tool.annotations ?? {};
@@ -76,7 +78,7 @@ describe('annotation pin tests (all lanes)', () => {
     });
 
     it('every read-only tool has readOnlyHint=true (list/get convention)', () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         for (const [name, tool] of Object.entries(all)) {
             if (name === 'yootheme_builder_advanced') continue;
@@ -92,7 +94,7 @@ describe('annotation pin tests (all lanes)', () => {
     });
 
     it('gateway tool annotations: non-readOnly, destructive, openWorld, non-idempotent', () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         const gw = all.yootheme_builder_advanced;
         expect(gw).toBeDefined();
@@ -114,7 +116,7 @@ describe('annotation pin tests (all lanes)', () => {
     // as "potentially destructive". Setting all 4 explicitly removes that
     // ambiguity.
     it('every registered tool sets ALL four behavioural hints explicitly', () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         for (const [name, tool] of Object.entries(all)) {
             const ann = tool.annotations ?? {};
@@ -180,7 +182,7 @@ describe('annotation pin tests (all lanes)', () => {
     };
 
     it('per-tool annotation matrix matches T3 spec (Audit-v3)', () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         for (const [name, expected] of Object.entries(EXPECTED_MATRIX)) {
             const tool = all[name];
@@ -194,7 +196,7 @@ describe('annotation pin tests (all lanes)', () => {
     });
 
     it('pin snapshot: per-tool annotation shape (alphabetised)', () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         const snapshot: Record<string, Record<string, unknown>> = {};
         for (const name of Object.keys(all).sort()) {

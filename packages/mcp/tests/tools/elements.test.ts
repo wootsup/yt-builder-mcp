@@ -5,15 +5,17 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
 import { buildElementsTools } from '../../src/tools/elements.js';
+import { makeTestPool, stripSitePrefix } from '../helpers/test-pool.js';
 
-function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): RestClient {
-    return new RestClient({
+function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url, init ?? {});
@@ -50,7 +52,7 @@ describe('buildElementsTools — destructive confirm-guard', () => {
             confirm: false,
         });
         expect(restCalled).toBe(false);
-        const parsed = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
         expect(parsed.preview).toBe(true);
         expect(parsed.warning).toContain('DESTRUCTIVE');
     });
@@ -250,6 +252,121 @@ describe('buildElementsTools — element_list pagination (T2 / N-01)', () => {
     // (~26 of 96 rows visible). When the caller passes a narrow
     // `fields[]` projection, the text table must render those projected
     // (slim) rows in full so a text-only reader sees EVERY node.
+
+    // ─── F-205 (Audit 2026-05-26) — invalid cursor → structured error ──
+    // Previously the handler silently forwarded any cursor string to the
+    // REST layer; an invalid token (`garbage`) was decoded to `null` on
+    // the PHP side and the handler returned page 1 with no signal.
+    // Cold-agents iterating with a typo'd cursor would loop. Shape-
+    // validate up-front and return a structured 400 instead.
+
+    it('element_list rejects a malformed cursor with a structured 400 + hint', async () => {
+        let restCalled = false;
+        const tools = buildElementsTools(
+            fakeClient(() => {
+                restCalled = true;
+                return jsonResponse({ items: [], total: 0 });
+            }),
+        );
+        const result = await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'tpl',
+            cursor: 'garbage',
+        });
+        expect(restCalled).toBe(false);
+        expect(result.isError).toBe(true);
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
+        expect(parsed.error).toMatch(/cursor/i);
+        expect(parsed.context).toMatchObject({ cursor: 'garbage' });
+        expect(parsed.hint).toMatch(/next_cursor/);
+    });
+
+    it('element_list accepts a well-formed cursor (raw o:<digits>)', async () => {
+        let restCalled = false;
+        const tools = buildElementsTools(
+            fakeClient(() => {
+                restCalled = true;
+                return jsonResponse({ items: [], total: 0 });
+            }),
+        );
+        const result = await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'tpl',
+            cursor: 'o:5',
+        });
+        expect(restCalled).toBe(true);
+        expect(result.isError).toBeUndefined();
+    });
+
+    it('element_list accepts a well-formed base64url cursor', async () => {
+        let restCalled = false;
+        const tools = buildElementsTools(
+            fakeClient(() => {
+                restCalled = true;
+                return jsonResponse({ items: [], total: 0 });
+            }),
+        );
+        // base64url('o:5') = 'bzo1'
+        const result = await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'tpl',
+            cursor: 'bzo1',
+        });
+        expect(restCalled).toBe(true);
+        expect(result.isError).toBeUndefined();
+    });
+
+    // ─── F-206 (Audit 2026-05-26) — unknown root_path → structured 404 ──
+    // Previously `element_list({ root_path: '/does/not/exist' })` returned
+    // `0 elements` silently — no signal whether the template is empty or
+    // the pointer is wrong. Distinguish: explicit `root_path` supplied AND
+    // 0 hits == error; `root_path` omitted AND 0 hits == legitimate empty.
+
+    it('element_list returns a structured 404 when an explicit root_path matches nothing', async () => {
+        const tools = buildElementsTools(
+            fakeClient(() => jsonResponse({ items: [], total: 0 })),
+        );
+        const result = await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'tpl',
+            root_path: '/does/not/exist',
+        });
+        expect(result.isError).toBe(true);
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
+        expect(parsed.error).toMatch(/root_path/);
+        expect(parsed.context).toMatchObject({
+            root_path: '/does/not/exist',
+            template_id: 'tpl',
+        });
+        expect(parsed.hint).toMatch(/element_list/);
+        expect(parsed.code).toMatch(/unknown_root_path/);
+    });
+
+    it('element_list returns success (empty items) when root_path is OMITTED and template is truly empty', async () => {
+        const tools = buildElementsTools(
+            fakeClient(() => jsonResponse({ elements: [], total: 0 })),
+        );
+        const result = await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'empty-tpl',
+        });
+        expect(result.isError).toBeUndefined();
+        expect(result.structuredContent?.total).toBe(0);
+        expect((result.structuredContent?.items as unknown[]).length).toBe(0);
+    });
+
+    it('element_list does NOT 404 when an explicit root_path matches but the subtree has zero descendants beyond itself', async () => {
+        // Distinguish empty-subtree from miss: when REST returns an item
+        // that itself matches root_path (or any non-empty list), no 404.
+        const tools = buildElementsTools(
+            fakeClient(() =>
+                jsonResponse({
+                    elements: [{ path: '/0/children/3', element_type: 'text' }],
+                    total: 1,
+                }),
+            ),
+        );
+        const result = await findTool(tools, 'yootheme_builder_element_list').handler({
+            template_id: 'tpl',
+            root_path: '/0/children/3',
+        });
+        expect(result.isError).toBeUndefined();
+    });
 
     it('renders every node in the text table when a narrow fields[] is given', async () => {
         const manyNodes = Array.from({ length: 96 }, (_, i) => ({

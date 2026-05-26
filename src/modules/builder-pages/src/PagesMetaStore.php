@@ -27,7 +27,7 @@ declare(strict_types=1);
 
 namespace WootsUp\BuilderMcp\Pages;
 
-final class PagesMetaStore
+final class PagesMetaStore implements PagesMetaStoreInterface
 {
     public const OPTION = 'ytb_mcp_pages_meta';
 

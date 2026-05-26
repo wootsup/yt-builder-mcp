@@ -59,7 +59,7 @@ function makeDeps(overrides: Partial<WizardDeps> = {}): WizardDeps {
         writeClient: vi.fn(
             async (id: string, _server: string, _config: McpServerConfig): Promise<WriteResult> => {
                 const path = join(tmpHome, `${id}-config.json`);
-                writeFileSync(path, '{"mcpServers":{"yootheme-builder":{}}}', 'utf-8');
+                writeFileSync(path, '{"mcpServers":{"yt-builder-mcp":{}}}', 'utf-8');
                 const r: WriteResult = {
                     id,
                     label: id,
@@ -163,7 +163,7 @@ describe('runWizard — write failure + rollback', () => {
     it('returns 4 and rolls back partial writes on failure', async () => {
         // Two clients selected; first write succeeds, second fails.
         const tmpFile = join(tmpHome, 'cd.json');
-        writeFileSync(tmpFile, '{"mcpServers":{"yootheme-builder":{"old":true}}}', 'utf-8');
+        writeFileSync(tmpFile, '{"mcpServers":{"yt-builder-mcp":{"old":true}}}', 'utf-8');
         const previousContent = readFileSync(tmpFile, 'utf-8');
 
         let callCount = 0;
@@ -176,7 +176,7 @@ describe('runWizard — write failure + rollback', () => {
                 callCount += 1;
                 if (callCount === 1) {
                     // First succeeds — overwrite the existing file.
-                    writeFileSync(tmpFile, '{"mcpServers":{"yootheme-builder":{"new":true}}}', 'utf-8');
+                    writeFileSync(tmpFile, '{"mcpServers":{"yt-builder-mcp":{"new":true}}}', 'utf-8');
                     return {
                         id,
                         label: id,
@@ -221,12 +221,12 @@ describe('runWizard — dist-tag handshake mismatch', () => {
 
     it('returns 5 when handshake hard-fails (e.g. server stopped accepting key)', async () => {
         const tmpFile = join(tmpHome, 'cd.json');
-        writeFileSync(tmpFile, '{"mcpServers":{"yootheme-builder":{"old":true}}}', 'utf-8');
+        writeFileSync(tmpFile, '{"mcpServers":{"yt-builder-mcp":{"old":true}}}', 'utf-8');
         const previousContent = readFileSync(tmpFile, 'utf-8');
 
         const deps = makeDeps({
             writeClient: vi.fn(async (id: string): Promise<WriteResult> => {
-                writeFileSync(tmpFile, '{"mcpServers":{"yootheme-builder":{"new":true}}}', 'utf-8');
+                writeFileSync(tmpFile, '{"mcpServers":{"yt-builder-mcp":{"new":true}}}', 'utf-8');
                 return {
                     id,
                     label: id,

@@ -18,12 +18,14 @@ import {
     buildBindingDetail,
     flattenSourcesPayload,
     mapSourceRow,
+    remapOriginForPlatform,
 } from '../format/sources-format.js';
 import type { McpServerWithElicitation } from '../elicitation.js';
 import {
     DEFAULT_FIELDS_SOURCES_LIST,
     projectFields,
     projectedFieldsEcho,
+    projectionFeedback,
 } from '../sparse-fields.js';
 import {
     errorResult,
@@ -37,6 +39,9 @@ export const SOURCES_LIST_OUTPUT_SCHEMA = z.object({
     items: z.array(z.record(z.string(), z.unknown())),
     total: z.number(),
     projected_fields: z.array(z.string()).optional(),
+    // F-004 fix (2026-05-25 exhaustive audit): see sparse-fields::projectionFeedback.
+    available_fields: z.array(z.string()).optional(),
+    unknown_fields: z.array(z.string()).optional(),
 });
 
 export const BINDING_OUTPUT_SCHEMA = z.object({
@@ -68,19 +73,34 @@ export async function handleSourcesList(
         const data = await client.get<{ sources?: unknown }>('/sources');
         const payload = data.sources ?? data;
         const flat = flattenSourcesPayload(payload);
-        const mapped = flat.map(mapSourceRow);
+        // F-A5-1 (v1.1.5): the Joomla REST plugin tags native sources
+        // (Article / Category / Tag) with the legacy `wordpress` group
+        // key. Remap to `joomla` based on the bound client's platform
+        // so agents reasoning across WP+Joomla sites get truthful
+        // origins. See `remapOriginForPlatform` for the rationale.
+        const remapped = remapOriginForPlatform(flat, client.getPlatform().kind);
+        const mapped = remapped.map(mapSourceRow);
         const mappedRecords = mapped as unknown as Record<string, unknown>[];
         const items = projectFields(mappedRecords, fields, DEFAULT_FIELDS_SOURCES_LIST);
         const echo = projectedFieldsEcho(fields, DEFAULT_FIELDS_SOURCES_LIST);
+        const feedback = projectionFeedback(mappedRecords, fields);
+        const unknownNote =
+            feedback !== undefined && feedback.unknown_fields.length > 0
+                ? ` (unknown fields ignored: ${feedback.unknown_fields.join(', ')}; available: ${feedback.available_fields.join(', ')})`
+                : '';
         const toolkitResult = tableResult(mappedRecords, {
             columns: [...SOURCES_TABLE_COLUMNS],
-            header: (count) => `${String(count)} sources`,
+            header: (count) => `${String(count)} sources${unknownNote}`,
             footer: 'Use yootheme_builder_element_bind_source to bind one.',
         });
         return structuredResult(toolkitResult, {
             items,
             total: items.length,
             ...(echo !== undefined ? { projected_fields: [...echo] } : {}),
+            ...(feedback !== undefined ? {
+                available_fields: [...feedback.available_fields],
+                unknown_fields: [...feedback.unknown_fields],
+            } : {}),
         });
     } catch (e) {
         return errorResult({

@@ -55,6 +55,17 @@ if (!function_exists('update_option')) {
      */
     function update_option(string $option, $value, ?bool $autoload = null): bool
     {
+        // Faithful WP contract: update_option applies the
+        // `pre_update_option_{$option}` value filter BEFORE persisting, so
+        // tests model the real filter chain (e.g. YOOtheme's / an mu-plugin's
+        // json-encoder, and LayoutWriter's own pin filter). add_option does
+        // NOT run this filter — matching WordPress.
+        if (function_exists('apply_filters')) {
+            /** @var mixed $old */
+            $old = $GLOBALS['ytb_test_options'][$option] ?? false;
+            /** @var mixed $value */
+            $value = apply_filters('pre_update_option_' . $option, $value, $old, $option);
+        }
         // Test sentinel: when `ytb_test_update_option_force_return` is set,
         // the stub returns the configured value (typically false to emulate
         // the "no-op" return path) WHILE still persisting the value. This
@@ -171,6 +182,82 @@ if (!function_exists('wp_cache_flush')) {
     {
         $GLOBALS['ytb_test_wp_cache'] = [];
         return true;
+    }
+}
+
+if (!function_exists('wp_json_encode')) {
+    /**
+     * @param mixed $data
+     *
+     * @return string|false
+     */
+    function wp_json_encode($data, int $options = 0, int $depth = 512)
+    {
+        return json_encode($data, $options, $depth);
+    }
+}
+
+if (!isset($GLOBALS['ytb_test_filters']) || !is_array($GLOBALS['ytb_test_filters'])) {
+    $GLOBALS['ytb_test_filters'] = [];
+}
+
+if (!function_exists('add_filter')) {
+    function add_filter(string $hook, callable $callback, int $priority = 10, int $accepted_args = 1): bool
+    {
+        $GLOBALS['ytb_test_filters'][$hook][] = [
+            'cb' => $callback,
+            'priority' => $priority,
+            'args' => $accepted_args,
+        ];
+        return true;
+    }
+}
+
+if (!function_exists('remove_filter')) {
+    function remove_filter(string $hook, callable $callback, int $priority = 10): bool
+    {
+        if (!isset($GLOBALS['ytb_test_filters'][$hook]) || !is_array($GLOBALS['ytb_test_filters'][$hook])) {
+            return false;
+        }
+        foreach ($GLOBALS['ytb_test_filters'][$hook] as $i => $entry) {
+            if ($entry['cb'] === $callback && (int) $entry['priority'] === $priority) {
+                unset($GLOBALS['ytb_test_filters'][$hook][$i]);
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+if (!function_exists('apply_filters')) {
+    /**
+     * Minimal but faithful: runs registered callbacks in ascending priority,
+     * threading the value through, honouring each callback's accepted_args
+     * (0 → called with no args, matching WordPress' pin-filter idiom).
+     *
+     * @param mixed $value
+     * @param mixed ...$args
+     *
+     * @return mixed
+     */
+    function apply_filters(string $hook, $value, ...$args)
+    {
+        if (empty($GLOBALS['ytb_test_filters'][$hook]) || !is_array($GLOBALS['ytb_test_filters'][$hook])) {
+            return $value;
+        }
+        $entries = array_values($GLOBALS['ytb_test_filters'][$hook]);
+        usort($entries, static fn (array $a, array $b): int => (int) $a['priority'] <=> (int) $b['priority']);
+        foreach ($entries as $entry) {
+            $accepted = (int) $entry['args'];
+            if ($accepted === 0) {
+                $callArgs = [];
+            } else {
+                $callArgs = array_slice(array_merge([$value], $args), 0, $accepted);
+            }
+            /** @var mixed $value */
+            $value = ($entry['cb'])(...$callArgs);
+        }
+        return $value;
     }
 }
 
@@ -691,4 +778,15 @@ if (!function_exists('register_rest_route')) {
         $GLOBALS['ytb_test_rest_route_args'][$key] = $args;
         return true;
     }
+}
+
+
+// =========================================================================
+// Joomla CMS stubs — loaded for the `joomla` testsuite. Idempotent (uses
+// the YTB_JOOMLA_STUBS_LOADED sentinel), so loading them here for every
+// suite is safe.
+// =========================================================================
+
+if (file_exists(__DIR__ . "/joomla-bootstrap.php")) {
+    require_once __DIR__ . "/joomla-bootstrap.php";
 }

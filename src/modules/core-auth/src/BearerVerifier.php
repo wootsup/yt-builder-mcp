@@ -26,9 +26,15 @@ final class BearerVerifier
      */
     private const MAX_HEADER_BYTES = 8192;
 
+    /**
+     * @param KeyStoreInterface $keyStore Cross-platform keystore (WP: KeyStore,
+     *        Joomla: \WootsUp\BuilderMcp\Platform\Joomla\Auth\JoomlaKeyStore).
+     *        Wave-2 type-widening preserves WP backward-compat — WP KeyStore
+     *        already implements the interface so existing tests pass unchanged.
+     */
     public function __construct(
         private readonly KeyService $keyService,
-        private readonly KeyStore $keyStore,
+        private readonly KeyStoreInterface $keyStore,
     ) {
     }
 

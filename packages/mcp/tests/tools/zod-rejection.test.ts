@@ -15,17 +15,19 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { RestClient } from '../../src/client.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
 import { buildElementsTools } from '../../src/tools/elements.js';
 import { buildSourcesTools } from '../../src/tools/sources.js';
+import { makeTestPool } from '../helpers/test-pool.js';
 
-function noopClient(): RestClient {
-    return new RestClient({
+function noopClient(): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn() as unknown as typeof fetch,
     });
 }

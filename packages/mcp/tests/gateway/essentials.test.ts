@@ -1,8 +1,9 @@
 /**
  * Pin-tests for the gateway essentials manifest.
  *
- * These pins enforce Wave G.1 design intent:
- *   - ESSENTIAL_TOOLS = the 15 L1 tools forwarded as first-class entries.
+ * These pins enforce Wave G.1 design intent (post-W7):
+ *   - ESSENTIAL_TOOLS = the 17 L1 tools forwarded as first-class entries
+ *     (15 pre-W7 + sites_list + sites_test added by Multi-Site W7).
  *   - DIRECT_TOP_LEVEL_TOOLS = the 2 L3 tools registered directly on the
  *     real McpServer (health + diagnose) — they bypass the CapturingServer.
  *   - The two sets are disjoint.
@@ -20,8 +21,9 @@ import {
 } from '../../src/gateway/essentials.js';
 
 describe('gateway essentials manifest', () => {
-    it('ESSENTIAL_TOOLS has exactly 15 entries (L1 forwarded surface)', () => {
-        expect(ESSENTIAL_TOOLS.length).toBe(15);
+    it('ESSENTIAL_TOOLS has exactly 17 entries (L1 forwarded surface, post-W7)', () => {
+        // Pre-W7: 15. W7 Multi-Site: +2 (sites_list + sites_test).
+        expect(ESSENTIAL_TOOLS.length).toBe(17);
     });
 
     it('DIRECT_TOP_LEVEL_TOOLS has exactly 2 entries (L3 direct surface: health + diagnose)', () => {
@@ -30,7 +32,7 @@ describe('gateway essentials manifest', () => {
         expect(DIRECT_TOP_LEVEL_TOOLS).toContain('yootheme_builder_diagnose');
     });
 
-    it('ESSENTIAL_TOOLS contains the 15 expected canonical L1 names', () => {
+    it('ESSENTIAL_TOOLS contains the 17 expected canonical L1 names (post-W7)', () => {
         expect([...ESSENTIAL_TOOLS].sort()).toEqual(
             [
                 'yootheme_builder_pages_list',
@@ -51,6 +53,9 @@ describe('gateway essentials manifest', () => {
                 'yootheme_builder_template_summary',
                 // 1.0.1: prop-key discovery promoted L2 → L1.
                 'yootheme_builder_element_type_get_schema',
+                // W7 (Multi-Site): registry-discovery + connectivity-probe.
+                'yootheme_builder_sites_list',
+                'yootheme_builder_sites_test',
             ].sort(),
         );
     });

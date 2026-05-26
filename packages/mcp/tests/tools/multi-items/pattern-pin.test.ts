@@ -10,9 +10,10 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../../src/client.js';
+import type { ClientPool } from '../../../src/sites/client-pool.js';
 import {
     ITEM_CHILDREN_OF_CONTAINER,
     buildMultiItemsTools,
@@ -21,13 +22,14 @@ import {
     isItem,
     itemOf,
 } from '../../../src/tools/multi-items/index.js';
+import { makeTestPool, stripSitePrefix } from '../../helpers/test-pool.js';
 
 function fakeClient(
     handler: (url: string, init: RequestInit) => Response | Promise<Response>,
-): RestClient {
-    return new RestClient({
+): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url, init ?? {});
@@ -90,7 +92,7 @@ describe('Multi-Items pattern pin (TS side)', () => {
                 element_path: '/templates/tpl/layout/children/0',
             });
 
-            const parsed = JSON.parse(result.content[0]!.text) as {
+            const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as {
                 report: { container_type: string; item_type: string };
             };
             expect(parsed.report.container_type).toBe(container);

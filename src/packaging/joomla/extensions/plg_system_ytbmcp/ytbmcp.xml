@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension type="plugin" group="system" method="upgrade">
+    <name>plg_system_ytbmcp</name>
+    <author>WootsUp</author>
+    <creationDate>2026-05-24</creationDate>
+    <copyright>(C) 2026 getimo productions</copyright>
+    <license>GPL-2.0-or-later</license>
+    <authorEmail>hello@wootsup.com</authorEmail>
+    <authorUrl>https://wootsup.com</authorUrl>
+    <version>1.1.0</version>
+    <description>PLG_SYSTEM_YTBMCP_XML_DESCRIPTION</description>
+
+    <scriptfile>script.php</scriptfile>
+
+    <!--
+      Database schema (idempotent INSERT IGNORE / CREATE TABLE IF NOT EXISTS).
+
+      The four files referenced below live canonically in
+      yt-builder-mcp/src/modules/platform-joomla/src/Storage/sql/ and are
+      copied into this manifest's sql/ slot by
+      yt-builder-mcp/scripts/build-joomla-package.php at build-time. The
+      packaging slot is intentionally empty in source control — see
+      sql/README.md. Audit-A1 F-001 (Wave 4 fix-round F3).
+    -->
+    <!--
+      EVERY <file> MUST carry charset="utf8" — for BOTH mysql AND postgresql.
+      Joomla's Installer::parseSQLFiles() treats the charset attribute as an
+      EXECUTION GATE, not a charset setter (libraries/src/Installer/Installer.php:
+      `$fCharset = strtolower(charset) === 'utf8' ? 'utf8' : ''; if ($fCharset !== 'utf8') continue;`).
+      A "utf8mb4" attribute — OR a MISSING attribute (computes to '') — makes Joomla
+      SILENTLY skip the file → no tables created, install still reports success →
+      every OptionStore/TransientStore/StateLock write throws (table missing), is
+      swallowed by catch(\Throwable), returns false → no signing_secret, no keys,
+      all Bearer auth dead. R8-A5 P1: the postgresql entries previously had NO
+      charset attribute, so on a PostgreSQL Joomla host the three tables were never
+      created (the code has explicit ON CONFLICT DO NOTHING PG branches → PG is an
+      intended target). The CREATE TABLE statements inside the .sql files keep their
+      own driver-appropriate charset (MySQL: `CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`;
+      Postgres ignores those MySQL clauses in its own .sql) — the manifest attribute
+      only gates which file Joomla picks, it does not set the table charset. Matches
+      core com_content convention (charset="utf8" on every driver).
+    -->
+    <install>
+        <sql>
+            <file driver="mysql" charset="utf8">sql/install.mysql.sql</file>
+            <file driver="postgresql" charset="utf8">sql/install.postgresql.sql</file>
+        </sql>
+    </install>
+    <uninstall>
+        <sql>
+            <file driver="mysql" charset="utf8">sql/uninstall.mysql.sql</file>
+            <file driver="postgresql" charset="utf8">sql/uninstall.postgresql.sql</file>
+        </sql>
+    </uninstall>
+
+    <namespace path="src">WootsUp\Plugin\System\Ytbmcp</namespace>
+
+    <!--
+      `modules` is REQUIRED (Wave 7 deploy-fix). The release build copies
+      the shared yt-builder-mcp PSR-4 code (WootsUp\BuilderMcp\*) into
+      plugin_root/modules/ and the composer autoloader (vendor/composer/
+      autoload_psr4.php) maps every WootsUp\BuilderMcp\* namespace to
+      $baseDir/modules/<module>/src. Joomla's PluginAdapter copies ONLY the
+      folders listed here — omitting `modules` ships a plugin whose
+      autoloader points at a non-existent directory, so EVERY REST
+      controller fatals with a class-not-found (e.g. JoomlaJsonResponse) and
+      returns 500. Keep `modules` listed.
+    -->
+    <files>
+        <filename plugin="ytbmcp">ytbmcp.php</filename>
+        <filename>script.php</filename>
+        <folder>services</folder>
+        <folder>src</folder>
+        <folder>sql</folder>
+        <folder>modules</folder>
+        <folder>vendor</folder>
+    </files>
+
+    <languages folder="language">
+        <language tag="en-GB">en-GB/plg_system_ytbmcp.ini</language>
+        <language tag="en-GB">en-GB/plg_system_ytbmcp.sys.ini</language>
+    </languages>
+
+    <!--
+      Plugin parameters surfaced in System → Manage → Plugins →
+      System - YT Builder MCP. Audit-A5 P1-1 (Wave 4 fix-round F3):
+      `delete_data_on_uninstall` lets the admin opt-in to a full DB
+      wipe on uninstall. Default is "0" (no) so customer data survives
+      a deactivation toggle — matching the WP-side opt-in default.
+    -->
+    <config>
+        <fields name="params">
+            <fieldset name="uninstall_behaviour"
+                      label="PLG_SYSTEM_YTBMCP_FIELDSET_UNINSTALL_LABEL"
+                      description="PLG_SYSTEM_YTBMCP_FIELDSET_UNINSTALL_DESC">
+                <field name="delete_data_on_uninstall"
+                       type="radio"
+                       layout="joomla.form.field.radio.switcher"
+                       default="0"
+                       label="PLG_SYSTEM_YTBMCP_FIELD_DELETE_DATA_LABEL"
+                       description="PLG_SYSTEM_YTBMCP_FIELD_DELETE_DATA_DESC">
+                    <option value="0">JNO</option>
+                    <option value="1">JYES</option>
+                </field>
+            </fieldset>
+        </fields>
+    </config>
+</extension>

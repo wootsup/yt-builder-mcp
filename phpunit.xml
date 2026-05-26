@@ -3,9 +3,13 @@
   <testsuites>
     <testsuite name="unit">
       <directory>tests/php/unit</directory>
+      <exclude>tests/php/unit/Platform/Joomla</exclude>
     </testsuite>
     <testsuite name="integration">
       <directory>tests/php/integration</directory>
+    </testsuite>
+    <testsuite name="joomla">
+      <directory>tests/php/unit/Platform/Joomla</directory>
     </testsuite>
   </testsuites>
   <source restrictNotices="true" restrictWarnings="true" ignoreIndirectDeprecations="true">
@@ -13,4 +17,25 @@
       <directory>src</directory>
     </include>
   </source>
+  <!--
+    Round-4 audit A3 P2: coverage emission + enforcement.
+
+    PHPUnit 11 deliberately removed XML-level coverage thresholds in
+    favour of CLI-level fail flags. The `composer test:joomla` script
+    therefore wraps phpunit with `fail-on-warning`, `fail-on-risky`,
+    `fail-on-incomplete`, and `fail-on-empty-test-suite` so the CI
+    gate breaks when a new platform-joomla class lands without test
+    coverage hooks. Direct `vendor/bin/phpunit` invocation still
+    emits the text-summary coverage report but skips the gate.
+
+    Round-3 audit A3 P2-3 history: the line:70 / class:60 thresholds
+    proposed in the original comment are aspirational targets, not
+    enforced today because the in-process MockJoomlaDatabase covers
+    only the parts of the Joomla runtime our adapters actually touch.
+  -->
+  <coverage>
+    <report>
+      <text outputFile="php://stdout" showOnlySummary="true"/>
+    </report>
+  </coverage>
 </phpunit>

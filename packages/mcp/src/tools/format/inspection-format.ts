@@ -150,12 +150,167 @@ function countFields(fields: unknown): number {
     return Object.keys(fields as Record<string, unknown>).length;
 }
 
+// F-201 (Audit 2026-05-26): cap so the rendered tabular field list cannot
+// blow the toolkit `detail` 8000-char budget. The largest element type
+// observed in the wild (`grid`) carries 148 field descriptors — at ~70
+// chars per row that would be ~10 kB which truncates. 50 rows comfortably
+// fits and the footer points the agent at `structuredContent.fields` for
+// the full list.
+const FIELD_TABLE_CAP = 50;
+
+interface FieldDescriptor {
+    readonly name: string;
+    readonly type: string;
+    readonly label: string;
+    readonly required: boolean;
+}
+
+function asFieldDescriptor(raw: unknown): FieldDescriptor | null {
+    if (raw === null || typeof raw !== 'object') return null;
+    const obj = raw as Record<string, unknown>;
+    const name = typeof obj.name === 'string' ? obj.name : '';
+    if (name === '') return null;
+    return {
+        name,
+        type: typeof obj.type === 'string' ? obj.type : '',
+        label: typeof obj.label === 'string' ? obj.label : '',
+        // F-201 follow-up (reviewer Gap 1): honour an explicit
+        // `required: true` flag on the field descriptor.
+        //
+        // Upstream-status: the live YT REST endpoint backing
+        // `element_type_get_schema` does NOT surface required-ness today
+        // (`Inspector::projectField` emits only
+        // `{name, type, label?, default?, enum?, group?}` — YT4 itself
+        // treats required-ness as UI-validation, not schema-declared).
+        // The renderer still honours the flag so the moment upstream
+        // adds a required-marker the table updates automatically with
+        // no code change here.
+        required: obj.required === true,
+    };
+}
+
+function normaliseFieldList(fields: unknown): FieldDescriptor[] {
+    if (Array.isArray(fields)) {
+        const out: FieldDescriptor[] = [];
+        for (const raw of fields) {
+            const d = asFieldDescriptor(raw);
+            if (d !== null) out.push(d);
+        }
+        return out;
+    }
+    if (fields !== null && typeof fields === 'object') {
+        // Back-compat: record-shaped (legacy back-end).
+        const out: FieldDescriptor[] = [];
+        for (const [name, def] of Object.entries(fields as Record<string, unknown>)) {
+            const type =
+                def !== null && typeof def === 'object'
+                    ? (typeof (def as Record<string, unknown>).type === 'string'
+                          ? (def as Record<string, unknown>).type as string
+                          : '')
+                    : '';
+            const label =
+                def !== null && typeof def === 'object'
+                    && typeof (def as Record<string, unknown>).label === 'string'
+                    ? (def as Record<string, unknown>).label as string
+                    : '';
+            const required =
+                def !== null && typeof def === 'object'
+                    && (def as Record<string, unknown>).required === true;
+            out.push({ name, type, label, required });
+        }
+        return out;
+    }
+    return [];
+}
+
+function padRight(s: string, width: number): string {
+    if (s.length >= width) return s.slice(0, width);
+    return s + ' '.repeat(width - s.length);
+}
+
+/**
+ * F-201 (Audit 2026-05-26): render the field descriptor list as a
+ * markdown-light text table for the LLM. Layout:
+ *
+ *     NAME              | TYPE         | LABEL
+ *     ----------------- | ------------ | ----------------
+ *   * content           | editor       | Content     ← required
+ *     link              | link         | Link
+ *
+ * The leading 2-char gutter carries `* ` for required fields and two
+ * spaces for optional fields, keeping column alignment intact whether
+ * or not any row is required. A legend at the foot of the table
+ * explains the marker semantics so the LLM doesn't have to guess.
+ *
+ * Required-marker upstream-status: see `asFieldDescriptor` above — live
+ * YT REST does not surface required-ness, so the marker is dormant
+ * until upstream adds the flag. The test fixture proves the renderer
+ * is ready.
+ *
+ * Capped at FIELD_TABLE_CAP rows; large element types (`grid` = 148
+ * fields) get a footer pointing the agent at `structuredContent.fields`
+ * for the full list.
+ *
+ * Returns `undefined` when the field list is empty so the caller can
+ * skip the section entirely.
+ */
+function buildFieldTable(fields: FieldDescriptor[]): string | undefined {
+    if (fields.length === 0) return undefined;
+    // Column widths: name 24, type 14, label fills remainder (cap 36).
+    const nameW = 24;
+    const typeW = 14;
+    const labelW = 36;
+    const lines: string[] = ['[Fields]'];
+    // Header row — the gutter is empty here (no row gets a `*`).
+    lines.push(
+        `  ${padRight('NAME', nameW)} | ${padRight('TYPE', typeW)} | ${padRight('LABEL', labelW)}`,
+    );
+    lines.push(
+        `  ${'-'.repeat(nameW)} | ${'-'.repeat(typeW)} | ${'-'.repeat(labelW)}`,
+    );
+    const visible = fields.slice(0, FIELD_TABLE_CAP);
+    let anyRequired = false;
+    for (const f of visible) {
+        const prefix = f.required ? '* ' : '  ';
+        if (f.required) anyRequired = true;
+        lines.push(
+            `${prefix}${padRight(f.name, nameW)} | ${padRight(f.type, typeW)} | ${padRight(f.label, labelW)}`,
+        );
+    }
+    // Legend: only emit when at least one visible row is required, so
+    // the common (no-required) case stays uncluttered. The literal
+    // string `* = required` is the assertion target in the test.
+    if (anyRequired) {
+        lines.push('');
+        lines.push('* = required');
+    }
+    if (fields.length > FIELD_TABLE_CAP) {
+        // Detect required-ness in the truncated tail too so the legend
+        // still fires when the only required rows are beyond the cap.
+        if (!anyRequired) {
+            const tailRequired = fields.slice(FIELD_TABLE_CAP).some((f) => f.required);
+            if (tailRequired) {
+                lines.push('');
+                lines.push('* = required');
+            }
+        }
+        const remaining = fields.length - FIELD_TABLE_CAP;
+        lines.push('');
+        lines.push(
+            `…and ${String(remaining)} more — see structuredContent.fields for the full list.`,
+        );
+    }
+    return lines.join('\n');
+}
+
 export function buildTypeSchemaDetail(payload: {
     name: string;
     label?: string;
     origin?: string;
     fields?: unknown;
-}): { groups: DetailGroup[]; title?: string } {
+}): { groups: DetailGroup[]; title?: string; appendText?: string } {
+    const normalisedFields = normaliseFieldList(payload.fields);
+    const appendText = buildFieldTable(normalisedFields);
     return {
         title: `Element type: ${payload.name}`,
         groups: [
@@ -179,5 +334,6 @@ export function buildTypeSchemaDetail(payload: {
                 ],
             },
         ],
+        ...(appendText !== undefined ? { appendText } : {}),
     };
 }

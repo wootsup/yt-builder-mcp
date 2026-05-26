@@ -45,12 +45,17 @@ export function mapSourceRow(input: Record<string, unknown>): SourceRow {
 
 /**
  * The REST plugin exposes sources EITHER as a grouped object
- * `{apimapper:[…], wordpress:[…], essentials:[…]}` OR (post-refactor)
- * as a flat array of `{name, label, origin, kind}`. This helper
- * normalises both into a flat array — flattening adds `origin` from the
- * group key when absent.
+ * `{apimapper:[…], wordpress:[…], essentials:[…], joomla:[…]}` OR
+ * (post-refactor) as a flat array of `{name, label, origin, kind}`.
+ * This helper normalises both into a flat array — flattening adds
+ * `origin` from the group key when absent.
+ *
+ * F-A5-1 (v1.1.5): `joomla` is included so Joomla's native content
+ * sources (Article, Category, Tag, etc.) flow through when the host
+ * plugin uses that group key. See also {@link remapOriginForPlatform}
+ * for the per-platform normalisation applied after flattening.
  */
-const KNOWN_ORIGINS = ['apimapper', 'wordpress', 'essentials'] as const;
+const KNOWN_ORIGINS = ['apimapper', 'wordpress', 'essentials', 'joomla'] as const;
 
 export function flattenSourcesPayload(
     payload: unknown,
@@ -75,6 +80,39 @@ export function flattenSourcesPayload(
         return out;
     }
     return [];
+}
+
+/**
+ * F-A5-1 (v1.1.5) — Joomla content sources arrive tagged with
+ * `origin: "wordpress"` because YT Pro historically uses that group
+ * key for "host-CMS-native" sources. On Joomla that label is wrong:
+ * `Article` / `Category` / `Tag` are Joomla concepts, not WordPress.
+ *
+ * The MCP server knows the bound client's platform via
+ * {@link RestClient.getPlatform}, so we remap unconditionally:
+ *
+ *   platform === 'joomla' AND origin === 'wordpress' → 'joomla'
+ *
+ * The unconditional remap is safe in v1.x: the Joomla host plugin
+ * never serves WP-named sources (WP custom-post-type integrations
+ * don't apply on Joomla), so any row tagged `wordpress` on a Joomla
+ * site is by definition a Joomla-native source mis-labelled by the
+ * upstream group key. A server-side fix is tracked separately for
+ * v1.2; until then this keeps cross-platform agent reasoning honest.
+ */
+export function remapOriginForPlatform(
+    rows: Record<string, unknown>[],
+    platformKind: 'wordpress' | 'joomla',
+): Record<string, unknown>[] {
+    if (platformKind !== 'joomla') {
+        return rows;
+    }
+    return rows.map((row) => {
+        if (row.origin === 'wordpress') {
+            return { ...row, origin: 'joomla' };
+        }
+        return row;
+    });
 }
 
 // ─── Detail builder (Design §3.2 row 17) ─────────────────────────────

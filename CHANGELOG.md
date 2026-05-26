@@ -5,7 +5,117 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows [Semantic Versioning](https://semver.org/).
 
-## [1.0.1] `Latest` - 2026-05-23
+## [1.1.5] `Latest` - 2026-05-26
+
+### Changed
+
+- **Tool descriptions enriched with discovery keywords. Claude Desktop surfaces all 20 advertised tools (was 16), including pages_list, sites_list, sources_list, get_etag.** `mcp` `discoverability`
+- **Template summary declares an output schema. Strict MCP hosts render structured-content cards.** `mcp`
+- **Field-projection feedback (available_fields + unknown_fields) on list tools so typos are visible.** `mcp`
+- **Element-pointer paths consistent across tools (all emit /children/0 style); element_path vs rel_path disambiguated.** `mcp`
+- **element_type_get_schema shows a real field table (NAME | TYPE | LABEL), paginated for big types like grid (148 fields).** `mcp`
+- **Paginated element listings show "N of M (page X of Y)" header + next_cursor footer.** `mcp`
+- **Pages list clarifies single-call behavior (no pagination).** `mcp`
+- **Joomla sources_list returns origin: "joomla" for native Joomla sources (was "wordpress").** `mcp` `joomla` `cross-platform`
+- **MCP server-info version sourced from package.json (no more constant drift on initialize).** `mcp`
+- **Joomla L2 articles surface is REST-only in v1.x; MCP coverage planned for v1.2.0.** `docs` `joomla`
+
+### Fixed
+
+- **WordPress front-end stays up after writes. The YOOtheme storage option is pinned as JSON, preventing the PHP-array corruption that 500'd every page.** `wordpress` `stability`
+- **Claude Desktop accepts every tool result. Site metadata moved from structuredContent to result-level _meta; strict outputSchema validation stops returning -32602.** `mcp`
+- **Joomla parity round. REST endpoints auto-bootstrap YOOtheme, /elements/:path routes correctly, ETag bumps on L2 writes, /health surfaces yootheme_version, deploy script handles the Joomla package end-to-end.** `joomla`
+- **Error envelopes tightened: structured 400 for invalid pagination cursor, structured 404 for unknown root_path, host-boundary validation for missing required args.** `mcp`
+
+## [1.1.4] - 2026-05-26
+
+### Changed
+
+- **Template summary tool now ships an explicit output schema — Claude Desktop, Cursor, and other strict hosts can validate responses and surface richer structured-content cards.**
+- **Pages list description clarifies that all pages return in a single call (no pagination) — fewer wasted retries when an agent expects cursor-based paging.**
+- **Audit harness updated to reflect the current v1.x scope (L1 templates only); the Joomla L2 article MCP surface is on the v1.2.0 roadmap.**
+
+## [1.1.3] - 2026-05-26
+
+### Changed
+
+- **Tool descriptions enriched with discovery keywords. `pages_list`, `sites_list`, `sources_list`, and `get_etag` now lead with explicit verbs ("List all pages, templates...", "List all sites configured...", "Get the current ETag...") and carry keyword synonyms. Hosts that use semantic tool-search (Claude Desktop ToolSearch, etc.) should now surface these discovery tools more reliably.** `mcp` `discoverability`
+
+## [1.1.2] - 2026-05-26
+
+### Changed
+
+- **`element_type_get_schema` now shows a real field table (`NAME | TYPE | LABEL`) instead of a truncated keys-only summary. The docs always said to call this before `element_add`, but the previous output gave you no type info — you had to guess prop types. Now you can see exactly what each field expects, paginated for the big types (grid has 148).** `mcp` `schema`
+- **Element listings tell you which page you got. With pagination active, the header reads `N of M (page X of Y)` and the footer hints at the `next_cursor` to copy into the next call. No more silent truncation.** `mcp` `pagination`
+- **Layout traversal paths are consistent across tools. `page_get_layout` flat mode now emits `/children/0` style paths matching `element_list` and `page_get_schema`. The earlier `/layout/layout/children/0` double-prefix is gone, so you can copy a path between tools without rewriting it.** `mcp` `paths`
+
+### Fixed
+
+- **Calling `element_type_get_schema` with neither `element_type` nor `type_name` now fails at the host boundary with a clear input-validation error. The previous behaviour bounced you back to the handler with a generic 400 — now your host can catch the typo pre-flight.** `mcp` `input-validation`
+- **An invalid pagination `cursor` now returns a structured 400 with a hint to omit it for page 1. Earlier releases silently returned page 1 on garbage, which made it look like your cursor worked.** `mcp` `pagination`
+- **An unknown `root_path` on `element_list` now returns a structured 404 with a recovery hint instead of an empty list. The old `0 elements` response was indistinguishable from a legitimately empty subtree.** `mcp` `errors`
+
+## [1.1.1] - 2026-05-26
+
+### Changed
+
+- **List tools tell you which fields exist. Pass `fields:["foo"]` to pages_list, element_list, sources_list, or element_types_list, and the response now includes `available_fields` (every key you can pick from) and `unknown_fields` (anything you asked for that does not match an item). Previously the response was a silent `items:[{},{},…]`.** `mcp` `projection`
+- **`page_get_schema` now returns `rel_path` (`/children/0`) instead of the fully-qualified `/templates/<id>/layout/...` pointer. Matches the column you already see on `element_list` and `page_get_layout`, so you can copy a path between tools without rewriting it.** `mcp` `paths`
+- **Tool input description disambiguates `element_path` (the input arg used everywhere) from `rel_path` (the projection column on list output). Removes the cross-tool typo that produced -32602 input-validation errors.** `mcp` `dx`
+
+### Fixed
+
+- **The WordPress front-end stays up after writes. I now save the YOOtheme storage option as a JSON string and pin it with a one-shot filter, so a write can no longer corrupt the option into a PHP array that crashes every page with `json_decode(): Argument #1 must be of type string, array given`.** `wordpress` `stability`
+- **Claude Desktop accepts every tool result. Site-awareness metadata moved out of `structuredContent` to the result-level `_meta`, so strict outputSchema validation stops rejecting calls with -32602 "Failed to call tool". Affected every tool that declares an outputSchema.** `mcp` `host-compat`
+- **Joomla REST endpoints now load YOOtheme automatically. Sources, element-type schemas, and template parsers used to return empty results because `\YOOtheme\app` was never registered for `com_api` requests. The dispatcher now bootstraps YOOtheme once per request, transparently.** `joomla` `bootstrap`
+- **Joomla element-pointer URLs resolve correctly. Two bugs combined: a route rule that produced a double-capture in the compiled regex, and a registration order that let `/elements/:path` swallow longer URLs like `/elements/:path/multi-items/inspect`. Both fixed; every element-pointer endpoint now hits the controller you expect.** `joomla` `routing`
+- **Joomla ETag advances on per-article writes. The global state-revision counter now ticks on L2 article-element writes too, not just L1 template writes. `yootheme_builder_get_etag` reflects every mutation.** `joomla` `etag`
+- **Joomla health endpoint surfaces `yootheme_version`. Was missing for the augmented (bearer-gated) payload, making cross-platform agents branch unnecessarily. Now matches the WordPress shape one-to-one.** `joomla` `health`
+- **The deploy script handles the yt-builder-mcp Joomla package. Earlier releases shipped the WordPress fixes only; the Joomla install path was hardcoded for a different product and reported "no extensions found" on every run. Now product-aware, with per-sub-extension install diagnostics.** `joomla` `deploy`
+
+## [1.1.0] - 2026-05-25
+
+### Added
+
+- ****Joomla 5/6 support.** Yesterday we shipped the 1.0.1 WordPress release. Today's 1.1.0 brings the same YT Builder MCP server to Joomla 5/6 with 1:1 feature parity. Install the `pkg_ytbmcp` package and get the same REST surface, the same admin UI, and the same L1 builder-state writer that has shipped on WordPress since 1.0.0. The package installs three sub-extensions (system plugin, webservices plugin, admin component).**
+- **L2 per-article layout storage on Joomla. Write builder layouts directly to `#__content.fulltext` of individual articles with their own optimistic-lock ETags, governed solely by the Bearer scope hierarchy.**
+- **Joomla admin component with 3-tab dashboard (Keys, Diagnostics, About) at 1:1 parity with the WordPress settings page: key generate / list / revoke, reveal-token notice, copy-as-markdown diagnostics, supported-clients and license table.**
+- **One-click Claude Desktop install on Joomla. The same `.dxt` Desktop Extension bundle that ships on WordPress is built into and served from `media/com_ytbmcp/`, with a download CTA in the admin Keys tab.**
+- **Published Joomla `update.xml` feed for in-CMS update parity with the WordPress `info.json` feed. Both platforms now self-update from `updates.wootsup.com/yt-builder-mcp/`.**
+- **Rich branded post-install panel on Joomla (postflight: YOOtheme Pro, PHP, and Joomla compatibility checks plus getting-started tiles, dark-mode aware) mirroring the WordPress experience.**
+- **Branded `YOOtheme Pro required` admin notice on Joomla when YT is absent. No more silently missing menu entries.**
+- **Component `access.xml` plus `core.admin` / `core.manage` capability guard on the Joomla admin dashboard so the component is governed by Joomla's permission UI. Branded menu icon and component `<config>` included.**
+- **Byte-stable, reproducible Joomla package ZIP. Two builds of the same source produce a byte-identical `pkg_ytbmcp_v{version}.zip`.**
+- **Upgrade self-heal on Joomla. Prunes stale media on update and on a request-time sentinel so leftover files from a previous version never bleed into the new one.**
+- **Standards-compliant dark-mode support for the admin UI on both platforms (`[data-bs-theme]` + Bootstrap `--bs-*` vars). Native-Joomla and native-WordPress admin look (custom brand CSS dropped, branded logo retained).**
+- ****Multi-site support across both platforms.** Drive many YOOtheme sites from one MCP install. Configure each site in `~/.config/yt-builder-mcp/sites.json` (chmod 0600). Every tool accepts an optional `site_id` parameter and falls back to the default site when omitted.**
+- **Five new CLI subcommands for multi-site management: `add-site`, `list-sites`, `remove-site`, `set-default`, `test-site`. Run via `npx -y @wootsup/yt-builder-mcp <subcommand>`.**
+- **1Password integration for Bearer storage. Use `bearer_ref: "op://Vault/Item/credential"` instead of inline tokens. The MCP server shells out to the `op` CLI on first use per site and caches the resolved token in memory.**
+- **Two new L1 tools: `sites_list` and `sites_test`. Discover configured site_ids without leaving the MCP surface; pre-flight one site without mutating anything.**
+- **Site-awareness in every reply. Text responses are prefixed with `[label @ host]`; structured payloads carry `_meta.site_id`, `_meta.site_url`, and `_meta.platform` so the calling agent always knows which site answered.**
+- **`YTB_MCP_SITES_FILE` user-config field in the DXT manifest. Point Claude Desktop at a multi-site registry; the legacy single-site env vars stay supported for backward compatibility.**
+
+### Changed
+
+- **Cross-platform interface extraction: `LayoutReaderInterface`, `LayoutWriterInterface`, and `StateRevisionInterface` are now the single contract that both the WordPress and Joomla adapters satisfy — no behavioural change for existing WordPress installations.**
+- **`BearerVerifier` constructor type-widened to `KeyStoreInterface` so the same verifier can drive WordPress and Joomla key stores. Existing WordPress tests pass unchanged.**
+- **3-tier encryption-key resolver on Joomla — `YTB_MCP_ENCRYPTION_KEY` constant → out-of-webroot key file → hardened fallback under `media/ytb_mcp_secure/` (deliberately non-manifest-owned so package uninstall does not orphan a preserved encrypted signing-secret). Legacy `media/com_ytbmcp/.encryption_key` is migrated verbatim on first resolve — no token break.**
+
+### Fixed
+
+- **Reliable admin YOOtheme Pro version detection on Joomla via `#__extensions` — no more false `YOOtheme required` notice or empty version in Diagnostics when YT is actually installed.**
+- **Header CTAs and prominent wootsup.com link in the admin UI on both platforms; reveal-box native card with uniform copy buttons (WordPress + Joomla parity).**
+- **WordPress custom auto-updater (Update URI + `updates.wootsup.com` `info.json`) for update parity with the Joomla feed — publish gated.**
+- **Tier-3 fallback encryption key on Joomla is relocated to `media/ytb_mcp_secure/` outside the component manifest tree so package uninstall does not orphan a preserved encrypted signing-secret.**
+
+### Security
+
+- **L2 per-article writes on Joomla are governed solely by the Bearer scope hierarchy (the per-article `core.edit` ACL gate was removed per ADR `l2-bearer-as-authority` and is now counter-pinned by `L2BearerAuthorityPinTest`).**
+- **Cache-flush scoping per ADR-002: `flushL1()` invalidates only the YT cache layer (no Joomla-side `alloptions` equivalent exists), `flushL2($articleId)` additionally cleans the `com_content` cache-group and the `page` group when `plg_system_cache` is active — no unscoped global flushes.**
+- **Customer data preserved by default on Joomla uninstall — the destructive table-DROP path requires explicit opt-in via the `delete_data` plugin parameter.**
+- **Bearer references via `op://...` keep secrets out of `sites.json` and out of tool-call payloads; the MCP server resolves the token via the local `op` CLI and caches it in memory only.**
+
+## [1.0.1] - 2026-05-23
 
 ### Added
 
@@ -143,6 +253,12 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - **Fixed** - Bug fixes
 - **Security** - Security updates
 
-[1.0.1]: https://github.com/wootsup/yt-builder-mcp/compare/v1.0.0...HEAD
+[1.1.5]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.4...HEAD
+[1.1.4]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.3...v1.1.4
+[1.1.3]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.2...v1.1.3
+[1.1.2]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.1...v1.1.2
+[1.1.1]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/wootsup/yt-builder-mcp/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/wootsup/yt-builder-mcp/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/wootsup/yt-builder-mcp/releases/tag/v1.0.0
 

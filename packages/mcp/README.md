@@ -79,7 +79,7 @@ in `tools/list`** (well under Cursor's ~40-tool cap):
   clean_implode_directives, element_type_get_schema).
 
 Total: **23 domain tools + 1 gateway = 24**. Surface: **11 entries
-in tools/list**. See `skills/yootheme-builder/SKILL.md` for the
+in tools/list**. See `skills/yt-builder-mcp/SKILL.md` for the
 full catalog and the 5 canonical workflows.
 
 ## Tool catalogue — 23 domain tools
@@ -144,8 +144,10 @@ When launched by an AI client (or directly):
 
 | Variable | Required? | Purpose |
 |----------|-----------|---------|
-| `YTB_MCP_WP_URL` | Yes | WordPress base URL (e.g. `https://example.com`). Trailing slash is stripped. |
-| `YTB_MCP_BEARER_TOKEN` | Yes | Bearer key from wp-admin. Format-checked client-side: must match `ytb_(live\|test)_<payload>.<sig>`. Do **not** prepend `Bearer ` — the MCP server adds it. |
+| `YTB_MCP_SITE_URL` | Yes | Host CMS base URL (e.g. `https://example.com`). Works for BOTH WordPress and Joomla. Trailing slash is stripped. |
+| `YTB_MCP_WP_URL` | No (deprecated) | Legacy alias for `YTB_MCP_SITE_URL`; still honoured for pre-Wave-7 configurations. A non-fatal deprecation notice is written to stderr when this is used without `YTB_MCP_SITE_URL`. |
+| `YTB_MCP_BEARER_TOKEN` | Yes | Bearer key from wp-admin (WordPress: Tools → "YT Builder MCP") or Administrator → Components → "YT Builder MCP" (Joomla). Format-checked client-side: must match `ytb_(live\|test)_<payload>.<sig>`. Do **not** prepend `Bearer ` — the MCP server adds it. |
+| `YTB_MCP_PLATFORM` | No | Explicit platform hint: `wordpress` or `joomla`. Set to `joomla` when `YTB_MCP_SITE_URL` is an origin-only Joomla URL (no `/api/index.php/` in the path). Defaults to URL-shape auto-detection. |
 | `YTB_MCP_TIMEOUT_MS` | No | REST timeout (default 15000). |
 | `YTB_MCP_TEST_MODE` | No | `1` skips the stdio loop (smoke tests). |
 
@@ -157,15 +159,25 @@ client's MCP config file:
 ```json
 {
   "mcpServers": {
-    "yootheme-builder": {
+    "yt-builder-mcp": {
       "command": "npx",
       "args": ["-y", "@wootsup/yt-builder-mcp"],
       "env": {
-        "YTB_MCP_WP_URL": "https://example.com",
+        "YTB_MCP_SITE_URL": "https://example.com",
         "YTB_MCP_BEARER_TOKEN": "ytb_live_…"
       }
     }
   }
+}
+```
+
+For a Joomla install at an origin-only URL, also set the platform hint:
+
+```json
+"env": {
+  "YTB_MCP_SITE_URL": "https://example.com/joomla",
+  "YTB_MCP_BEARER_TOKEN": "ytb_live_…",
+  "YTB_MCP_PLATFORM": "joomla"
 }
 ```
 
@@ -213,7 +225,7 @@ The CLI returns POSIX-style exit codes for scripting / CI:
 
 ## Documentation
 
-- [SKILL.md (bundled agent skill)](./skills/yootheme-builder/SKILL.md) — 5 canonical workflows, gateway model, tool catalog
+- [SKILL.md (bundled agent skill)](./skills/yt-builder-mcp/SKILL.md) — 5 canonical workflows, gateway model, tool catalog
 - [REST API Reference](https://github.com/wootsup/yt-builder-mcp/blob/main/docs/rest-api-reference.md)
 - [MCP Tool Reference](https://github.com/wootsup/yt-builder-mcp/blob/main/docs/mcp-tool-reference.md)
 

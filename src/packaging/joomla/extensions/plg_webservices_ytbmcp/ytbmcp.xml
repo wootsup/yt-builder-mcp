@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension type="plugin" group="webservices" method="upgrade">
+    <name>plg_webservices_ytbmcp</name>
+    <author>WootsUp</author>
+    <creationDate>2026-05-24</creationDate>
+    <copyright>(C) 2026 getimo productions</copyright>
+    <license>GPL-2.0-or-later</license>
+    <authorEmail>hello@wootsup.com</authorEmail>
+    <authorUrl>https://wootsup.com</authorUrl>
+    <version>1.1.0</version>
+    <description>PLG_WEBSERVICES_YTBMCP_XML_DESCRIPTION</description>
+
+    <!--
+      WHY A SEPARATE webservices-group PLUGIN (Wave 7 deploy-fix):
+
+      Joomla's ApiApplication::route() imports ONLY `webservices`-group
+      plugins immediately before dispatching `onBeforeApiRoute`
+      (libraries/src/Application/ApiApplication.php:234). `system`-group
+      plugins are not imported until ApiApplication::dispatch() at line 427,
+      which runs AFTER routing has resolved. A `system` plugin's
+      `onBeforeApiRoute` listener is therefore NEVER called on a live API
+      request → every yt-builder-mcp route 404s. This webservices plugin is
+      the canonical Joomla home for `onBeforeApiRoute` route registration
+      (mirrors every core plg_webservices_* plugin). The system plugin keeps
+      the autoloader / session-strip / shared-module bootstrap / scheduler
+      duties; this one owns ONLY the 31-route map dispatching into
+      com_ytbmcp's api/ controllers.
+    -->
+
+    <namespace path="src">WootsUp\Plugin\WebServices\Ytbmcp</namespace>
+
+    <files>
+        <folder plugin="ytbmcp">services</folder>
+        <folder>src</folder>
+    </files>
+
+    <languages folder="language">
+        <language tag="en-GB">en-GB/plg_webservices_ytbmcp.ini</language>
+        <language tag="en-GB">en-GB/plg_webservices_ytbmcp.sys.ini</language>
+    </languages>
+</extension>

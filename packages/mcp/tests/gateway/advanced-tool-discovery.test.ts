@@ -9,16 +9,18 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
 import { createServer } from '../../src/server.js';
 import { collectAllRegisteredTools } from '../../src/gateway/test-support.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
+import { makeTestPool } from '../helpers/test-pool.js';
 
-function makeClient(): RestClient {
-    return new RestClient({
+function makeClient(): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async () => {
             throw new Error(
                 'no network call expected in discovery mode',
@@ -29,7 +31,7 @@ function makeClient(): RestClient {
 
 describe('yootheme_builder_advanced — discovery mode', () => {
     it('returns inputSchema (JSON-projected) for a captured tool, without invoking it', async () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         const gateway = all.yootheme_builder_advanced;
         expect(gateway).toBeDefined();
@@ -50,7 +52,7 @@ describe('yootheme_builder_advanced — discovery mode', () => {
     });
 
     it('discovery text contains the tool name and a call-back hint', async () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         const gateway = all.yootheme_builder_advanced!;
 

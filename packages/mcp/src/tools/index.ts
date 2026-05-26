@@ -6,7 +6,8 @@
  * @license MIT
  */
 
-import type { RestClient } from '../client.js';
+import type { ClientPool } from '../sites/client-pool.js';
+import { buildSitesTools } from '../sites/tools/index.js';
 import { buildElementsTools } from './elements/index.js';
 import type { McpServerWithElicitation } from './elicitation.js';
 import { buildHealthTools } from './health.js';
@@ -27,18 +28,31 @@ export interface BuildAllToolsOptions {
     readonly elicitation?: McpServerWithElicitation;
 }
 
+/**
+ * W6 — pool-based registration entrypoint. Pre-W6 this took a bare
+ * `RestClient`; W6 introduces the {@link ClientPool} as the single
+ * source of REST clients (multi-site). Each domain builder now
+ * resolves the pool per-handler via `resolveSiteOrError` and wraps
+ * every result in `withSiteMeta` (Commit 3 of the W6 trio).
+ */
 export function buildAllTools(
-    client: RestClient,
+    pool: ClientPool,
     options: BuildAllToolsOptions = {},
 ): readonly AnyToolDefinition[] {
     const deps = options.elicitation !== undefined ? { elicitation: options.elicitation } : {};
     return [
-        ...buildHealthTools(client),
-        ...buildPagesTools(client),
-        ...buildElementsTools(client, deps),
-        ...buildSourcesTools(client, deps),
-        ...buildMultiItemsTools(client),
-        ...buildInspectionTools(client),
+        ...buildHealthTools(pool),
+        ...buildPagesTools(pool),
+        ...buildElementsTools(pool, deps),
+        ...buildSourcesTools(pool, deps),
+        ...buildMultiItemsTools(pool),
+        ...buildInspectionTools(pool),
+        // W7 — Multi-Site registry tools (L1). The aggregator pulls
+        // `pool.registry` internally (W12-R1.3); the sites_list handler
+        // reads the registry without ever resolving a bearer or hitting
+        // the network, while sites_test threads the pool through to
+        // probe one specific site.
+        ...buildSitesTools(pool),
     ];
 }
 

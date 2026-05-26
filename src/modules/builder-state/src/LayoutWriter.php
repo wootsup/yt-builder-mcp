@@ -34,15 +34,23 @@ namespace WootsUp\BuilderMcp\State;
 use WootsUp\BuilderMcp\Util\SecurityLogger;
 use WootsUp\BuilderMcp\Yootheme\YoothemeAdapter;
 
-final class LayoutWriter
+final class LayoutWriter implements LayoutWriterInterface
 {
     private readonly YoothemeAdapter $yootheme;
-    private readonly StateLock $stateLock;
+    /**
+     * Audit-A1 F-003 (Wave 4 fix-round F3): widened from concrete
+     * {@see StateLock} to {@see StateLockInterface} so this writer can
+     * accept the Joomla impl when called from the platform-joomla
+     * adapter (in practice the Joomla side instantiates its own
+     * JoomlaLayoutWriter, but the contract widening keeps the
+     * dependency on the abstraction rather than the concretion).
+     */
+    private readonly StateLockInterface $stateLock;
 
     public function __construct(
-        private readonly LayoutReader $reader,
+        private readonly LayoutReaderInterface $reader,
         ?YoothemeAdapter $yootheme = null,
-        ?StateLock $stateLock = null,
+        ?StateLockInterface $stateLock = null,
     ) {
         $this->yootheme = $yootheme ?? new YoothemeAdapter();
         $this->stateLock = $stateLock ?? new StateLock();
@@ -96,7 +104,7 @@ final class LayoutWriter
      *
      * @param mixed $value
      */
-    public function writeByPointer(string $pointer, $value): void
+    public function writeByPointer(string $pointer, mixed $value): void
     {
         $templateId = self::extractTemplateId($pointer);
         $this->stateLock->withTemplateLock($templateId, function () use ($pointer, $value): void {
@@ -229,17 +237,52 @@ final class LayoutWriter
      */
     private function persist(array $state): void
     {
-        // T6 R-01 (1): first-write uses add_option with explicit
-        // autoload=false. \get_option returns the documented WP default of
-        // `false` when the option is absent, but a real value can also be
-        // false-y. We therefore use the existence sentinel produced by
-        // passing a distinct default to detect "option does not exist yet".
-        $optionExists = \get_option(LayoutReader::OPTION, '__ytb_mcp_absent__') !== '__ytb_mcp_absent__';
-        if (!$optionExists) {
-            \add_option(LayoutReader::OPTION, $state, '', false);
-        } else {
-            // Pass `null` for autoload to preserve the existing setting.
-            \update_option(LayoutReader::OPTION, $state, null);
+        // INCIDENT 2026-05-25 (dev.wootsup.com 500 on every front-end page):
+        // the `yootheme` option MUST be stored as a JSON STRING. YOOtheme's
+        // front-end Storage::addJson() runs json_decode() on read and fatals
+        // with "json_decode(): Argument #1 ($json) must be of type string,
+        // array given" if the option holds a PHP array. We used to pass a raw
+        // PHP array and rely on an EXTERNAL `pre_update_option_yootheme`
+        // mu-plugin to json-encode it; on hosts without that filter WordPress
+        // serialized the array and the YOOtheme front-end died. We now encode
+        // the canonical JSON string ourselves (no external dependency) and PIN
+        // it with a one-shot highest-priority filter so the stored bytes are
+        // deterministic regardless of whether any other pre_update filter
+        // (YOOtheme's own or an mu-plugin) is registered — neither a missing
+        // filter (→ array) nor a present one (→ double-encode) can corrupt it.
+        $json = \wp_json_encode($state, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        if (!is_string($json)) {
+            throw new \RuntimeException(
+                'LayoutWriter::persist failed — builder state is not JSON-encodable.',
+            );
+        }
+
+        $pinHook = 'pre_update_option_' . LayoutReader::OPTION;
+        $pin = static fn (): string => $json;
+        if (function_exists('add_filter')) {
+            \add_filter($pinHook, $pin, PHP_INT_MAX, 0);
+        }
+        try {
+            // T6 R-01 (1): first-write uses add_option with explicit
+            // autoload=false. \get_option returns the documented WP default of
+            // `false` when the option is absent, but a real value can also be
+            // false-y. We therefore use the existence sentinel produced by
+            // passing a distinct default to detect "option does not exist yet".
+            $optionExists = \get_option(LayoutReader::OPTION, '__ytb_mcp_absent__') !== '__ytb_mcp_absent__';
+            if (!$optionExists) {
+                // add_option does NOT run pre_update_option_* filters, so pass
+                // the JSON string directly — a filter-less host then still
+                // stores a string, never a serialized array.
+                \add_option(LayoutReader::OPTION, $json, '', false);
+            } else {
+                // Pass `null` for autoload to preserve the existing setting.
+                // The pinned filter forces the stored value to $json.
+                \update_option(LayoutReader::OPTION, $json, null);
+            }
+        } finally {
+            if (function_exists('remove_filter')) {
+                \remove_filter($pinHook, $pin, PHP_INT_MAX);
+            }
         }
 
         // T6 R-01 (2): invalidate object-cache before verify-read so a
@@ -253,25 +296,21 @@ final class LayoutWriter
 
         /** @var mixed $verify */
         $verify = \get_option(LayoutReader::OPTION, null);
-        // Maria-Story E2E root-cause 2026-05-22: dev sites can install an
-        // mu-plugin (`yootheme-option-fix.php`) that coerces the option to a
-        // JSON-string via `pre_update_option_yootheme`. Our write passes a
-        // PHP array; the mu-plugin filter replaces it with `json_encode($v)`
-        // before WP persists. The verify-read then returns a JSON-string,
-        // never an array. Strict identity AND serialize-compare both fail.
+        // We persisted the canonical JSON string $json (pinned, deterministic).
+        // A correct write reads it back BYTE-IDENTICALLY, so compare the raw
+        // stored value directly to $json.
         //
-        // Solution: decode the verify-read if it comes back as a JSON-string,
-        // then compare the decoded shape to what we passed in. Matches
-        // LayoutReader::read()'s own JSON-vs-array fallback logic.
-        $verifyState = $verify;
-        if (is_string($verify)) {
-            $decoded = \json_decode($verify, true);
-            if (is_array($decoded)) {
-                $verifyState = $decoded;
-            }
-        }
-        $expected = \serialize($state);
-        $actual = \serialize($verifyState);
+        // Do NOT json_decode($verify, true) and re-encode for the compare:
+        // assoc-decode collapses empty JSON objects `{}` (e.g. a binding's
+        // empty `filters`) into empty arrays `[]`, which re-encode to `[]` and
+        // produce a spurious same-length "write_failed" on a correct write.
+        // If a host installs an `option_yootheme` READ filter that hands back
+        // a decoded structure, fall back to re-encoding it (objects preserved,
+        // assoc=false) so empty objects survive.
+        $expected = $json;
+        $actual = is_string($verify)
+            ? $verify
+            : (string) \wp_json_encode($verify, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         if ($expected !== $actual) {
             // R2.9 security-event breadcrumb so write-failures don't surface
             // only as opaque 500s without a forensics trail.

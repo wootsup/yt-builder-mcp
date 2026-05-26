@@ -25,6 +25,7 @@ import {
     DEFAULT_FIELDS_PAGES_LIST,
     projectFields,
     projectedFieldsEcho,
+    projectionFeedback,
 } from '../sparse-fields.js';
 import {
     errorResult,
@@ -51,10 +52,15 @@ export async function handlePagesList(
         // projected per-item slice.
         const items = projectFields(mapped, fields, DEFAULT_FIELDS_PAGES_LIST);
         const echo = projectedFieldsEcho(fields, DEFAULT_FIELDS_PAGES_LIST);
+        const feedback = projectionFeedback(mapped, fields);
+        const unknownNote =
+            feedback !== undefined && feedback.unknown_fields.length > 0
+                ? ` (unknown fields ignored: ${feedback.unknown_fields.join(', ')}; available: ${feedback.available_fields.join(', ')})`
+                : '';
         const toolkitResult = tableResult(mapped, {
             columns: [...PAGES_TABLE_COLUMNS],
             compactColumns: [...PAGES_COMPACT_COLUMNS],
-            header: (count) => `${String(count)} pages`,
+            header: (count) => `${String(count)} pages${unknownNote}`,
             footer: 'Use yootheme_builder_page_get_schema <id> to inspect.',
         });
         return structuredResult(toolkitResult, {
@@ -62,6 +68,10 @@ export async function handlePagesList(
             total: items.length,
             ...(typeof data.etag === 'string' ? { etag: data.etag } : {}),
             ...(echo !== undefined ? { projected_fields: [...echo] } : {}),
+            ...(feedback !== undefined ? {
+                available_fields: [...feedback.available_fields],
+                unknown_fields: [...feedback.unknown_fields],
+            } : {}),
         });
     } catch (e) {
         return errorResult({
@@ -93,7 +103,25 @@ export async function handlePageGetLayout(
         // flat: true → depth-first walk on the nested layout. Apply
         // pickFields per element when `fields[]` was passed; echo the
         // projection so the AI knows the per-item shape it received.
-        const flatElements = flattenLayout(data.layout);
+        //
+        // F-208 (Audit 2026-05-26): the REST envelope nests the actual
+        // node tree as `data.layout.layout` — `data.layout` is the
+        // WHOLE template object (`{name, layout: {…children…}, …}`),
+        // so walking `data.layout` directly produced double-prefixed
+        // paths (`/layout/layout/children/0`). Detect the template
+        // envelope by presence of an inner `layout` field and descend
+        // one extra hop. Back-compat: when `data.layout` is already
+        // the node tree (no inner `layout` key), pass it through.
+        const layoutRoot =
+            data.layout !== null &&
+            typeof data.layout === 'object' &&
+            !Array.isArray(data.layout) &&
+            'layout' in (data.layout as Record<string, unknown>) &&
+            (data.layout as Record<string, unknown>).layout !== null &&
+            typeof (data.layout as Record<string, unknown>).layout === 'object'
+                ? (data.layout as Record<string, unknown>).layout
+                : data.layout;
+        const flatElements = flattenLayout(layoutRoot);
         const projected = projectFields(
             flatElements as unknown as Record<string, unknown>[],
             fields,
@@ -225,7 +253,17 @@ export async function handleTemplateSummary(
             named_sections: { path: string; name: string }[];
             etag: string;
         }>(`/pages/${encodeURIComponent(template_id)}/summary`);
-        return jsonResult(data);
+        // F-AUDIT-2 (2026-05-26): template_summary now declares
+        // TEMPLATE_SUMMARY_OUTPUT_SCHEMA. The SDK requires
+        // `structuredContent` when an outputSchema is present, otherwise
+        // it raises `-32602 Output validation error`. Wrap the raw body
+        // with `structuredResult` so the text leg (LLM-readable JSON)
+        // stays unchanged AND the structuredContent leg validates.
+        const toolkitResult = jsonResult(data);
+        return structuredResult(
+            { content: toolkitResult.content },
+            data as unknown as Record<string, unknown>,
+        );
     } catch (e) {
         return errorResult({
             error: e,

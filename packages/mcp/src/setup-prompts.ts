@@ -31,6 +31,7 @@ import {
 import { SERVER_NAME, SERVER_VERSION } from './server.js';
 import { decodeToken, normaliseUrl } from './setup-token.js';
 import type { WizardAnswers } from './setup-wizard-types.js';
+import { SITE_ID_REGEX } from './sites/schema.js';
 
 /**
  * Interactive multi-step prompt sequence — Wave 6.5 UX-parity with
@@ -101,25 +102,28 @@ export async function defaultPrompt(input: {
     }
     const wpUrl = normaliseUrl(wpUrlRaw as string);
 
-    // 3. Profile name — multi-site switching. Default 'default'.
-    const profileRaw = await text({
-        message: 'Profile name (for switching between sites):',
+    // 3. Site ID — multi-site registry key. Default 'default'.
+    //    Renamed from `profileName` in W9 to align with the sites.json
+    //    schema's `site_id` field. Same validation rules (SITE_ID_REGEX
+    //    shape: letters / digits / dash / underscore), same default.
+    const siteRaw = await text({
+        message: 'Site ID (e.g. wp-acme):',
         placeholder: 'default',
         initialValue: 'default',
         validate: (v) => {
             const trimmed = v.trim();
-            if (trimmed === '') return 'Profile name is required.';
-            if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
+            if (trimmed === '') return 'Site ID is required.';
+            if (!SITE_ID_REGEX.test(trimmed)) {
                 return 'Use letters, digits, dashes, or underscores only.';
             }
             return undefined;
         },
     });
-    if (isCancel(profileRaw)) {
+    if (isCancel(siteRaw)) {
         cancel('Setup cancelled.');
         return null;
     }
-    const profileName = (profileRaw as string).trim();
+    const siteId = (siteRaw as string).trim();
 
     // 4. AI client selection (multi-select; pre-checks detected ones).
     const clientChoices = ALL_CLIENTS.map((c) => {
@@ -146,7 +150,7 @@ export async function defaultPrompt(input: {
         wpUrl,
         bearer,
         selectedClients: selectedRaw as string[],
-        profileName,
+        siteId,
     };
 }
 

@@ -40,13 +40,15 @@
             "WootsUp\\BuilderMcp\\SourceBinding\\": "src/modules/builder-source-binding/src/",
             "WootsUp\\BuilderMcp\\Cache\\": "src/modules/builder-cache/src/",
             "WootsUp\\BuilderMcp\\Yootheme\\": "src/modules/core-yootheme/src/",
-            "WootsUp\\BuilderMcp\\Platform\\WordPress\\": "src/modules/platform-wordpress/src/"
+            "WootsUp\\BuilderMcp\\Platform\\WordPress\\": "src/modules/platform-wordpress/src/",
+            "WootsUp\\BuilderMcp\\Platform\\Joomla\\": "src/modules/platform-joomla/src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
             "WootsUp\\BuilderMcp\\Tests\\Unit\\": "tests/php/unit/",
-            "WootsUp\\BuilderMcp\\Tests\\Integration\\": "tests/php/integration/"
+            "WootsUp\\BuilderMcp\\Tests\\Integration\\": "tests/php/integration/",
+            "WootsUp\\BuilderMcp\\Tests\\Unit\\Platform\\Joomla\\": "tests/php/unit/Platform/Joomla/"
         }
     },
     "config": {
@@ -59,6 +61,7 @@
         "test": "phpunit",
         "test:unit": "phpunit --testsuite=unit",
         "test:integration": "phpunit --testsuite=integration",
+        "test:joomla": "phpunit --testsuite=joomla --fail-on-warning --fail-on-risky --fail-on-incomplete --fail-on-empty-test-suite",
         "phpstan": "phpstan analyse --memory-limit=512M src/"
     }
 }

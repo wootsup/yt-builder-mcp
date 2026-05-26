@@ -5,15 +5,17 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../../src/client.js';
+import type { ClientPool } from '../../../src/sites/client-pool.js';
 import { buildMultiItemsTools } from '../../../src/tools/multi-items/index.js';
+import { makeTestPool, stripSitePrefix } from '../../helpers/test-pool.js';
 
-function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): RestClient {
-    return new RestClient({
+function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url, init ?? {});
@@ -94,7 +96,7 @@ describe('inspect_multi_items_binding', () => {
             element_path: '/templates/tpl/layout/children/1',
         });
 
-        const parsed = JSON.parse(result.content[0]!.text) as {
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as {
             report: { current_binding_level: string; warning?: string };
         };
         expect(parsed.report.current_binding_level).toBe('container');
@@ -154,7 +156,7 @@ describe('clean_implode_directives', () => {
             element_path: '/0',
             etag: '"e2"',
         });
-        const parsed = JSON.parse(result.content[0]!.text) as {
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as {
             cleaned_count: number;
             removed_directives: Array<{ prop_name: string }>;
         };

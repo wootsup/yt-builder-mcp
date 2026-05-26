@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    com_ytbmcp component options/config schema (W9-T7, gap #8).
+
+    Joomla's com_config renders the component "Options" toolbar button (and
+    its Permissions tab) from administrator/config.xml. Without this file the
+    component has no Options screen at all — only the system-plugin params
+    (System -> Manage -> Plugins -> System - YT Builder MCP) are reachable.
+
+    RATIONALE — why this is intentionally minimal:
+    yt-builder-mcp carries NO persistent component-level settings. The product
+    state lives elsewhere:
+      - Bearer keys + signing secret  -> #__ytb_mcp_options (DB), managed from
+                                          the Keys tab of the dashboard.
+      - "Delete all data on uninstall" -> a SYSTEM-PLUGIN param (it gates the
+                                          uninstall lifecycle, which is owned by
+                                          plg_system_ytbmcp::uninstall(), not the
+                                          component). Surfacing a duplicate here
+                                          would be a setting the code never reads
+                                          — explicitly avoided per the parity bar.
+
+    So this schema exists for ONE reason: to enable the Options + Permissions
+    screen at component level per Joomla convention. The only fieldset that
+    carries a real, wired control is `permissions` (the standard rules field
+    that writes #__assets rules for the com_ytbmcp asset — the same asset the
+    JoomlaAdminAccess core.admin/core.manage gate authorises against).
+-->
+<config>
+    <!-- Permissions tab: the standard rules field. Writes the ACL rules for
+         the com_ytbmcp asset — consumed by the component's capability gate
+         (WootsUp\BuilderMcp\Platform\Joomla\Auth\JoomlaAdminAccess) and the
+         access.xml-declared core.admin / core.options / core.manage actions. -->
+    <fieldset name="permissions"
+              label="JCONFIG_PERMISSIONS_LABEL"
+              description="JCONFIG_PERMISSIONS_DESC">
+        <field
+            name="rules"
+            type="rules"
+            label="JCONFIG_PERMISSIONS_LABEL"
+            filter="rules"
+            validate="rules"
+            class="inputbox"
+            component="com_ytbmcp"
+            section="component" />
+    </fieldset>
+</config>

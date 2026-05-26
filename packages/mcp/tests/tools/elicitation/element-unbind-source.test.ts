@@ -13,14 +13,16 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../../src/client.js';
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
+import type { ClientPool } from '../../../src/sites/client-pool.js';
 import type { McpServerWithElicitation } from '../../../src/tools/elicitation.js';
 import { buildSourcesTools } from '../../../src/tools/sources.js';
+import { makeTestPool, stripSitePrefix } from '../../helpers/test-pool.js';
 
-function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): RestClient {
-    return new RestClient({
+function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url, init ?? {});
@@ -143,7 +145,7 @@ describe('element_unbind_source — elicitation (Wave G.4.2)', () => {
             etag: '"e0"',
         });
         expect(restCalled).toBe(false);
-        const parsed = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
         expect(parsed.preview).toBe(true);
         expect(parsed.warning).toContain('DESTRUCTIVE');
     });

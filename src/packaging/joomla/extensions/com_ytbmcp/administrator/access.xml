@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    com_ytbmcp component ACL rule set.
+
+    Surfaces the component in Joomla's Global Configuration → Permissions
+    UI so a site can govern who reaches the admin dashboard + the Bearer-key
+    generate / revoke tasks. The capability gate
+    (WootsUp\BuilderMcp\Platform\Joomla\Auth\JoomlaAdminAccess) enforces
+    `core.admin` OR `core.manage` on the `com_ytbmcp` asset — the Joomla
+    parity-twin of WordPress's `manage_options` gate.
+
+    Joomla auto-discovers `administrator/access.xml` for components; it does
+    not need an explicit manifest reference. `core.options` lets a site
+    delegate "configure the component" independently of full admin.
+-->
+<access component="com_ytbmcp">
+    <section name="component">
+        <action name="core.admin" title="JACTION_ADMIN" />
+        <action name="core.options" title="JACTION_OPTIONS" />
+        <action name="core.manage" title="JACTION_MANAGE" />
+    </section>
+</access>

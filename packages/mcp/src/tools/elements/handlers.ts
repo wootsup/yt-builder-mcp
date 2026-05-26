@@ -20,6 +20,7 @@ import { detailResult, tableResult, type TableColumn } from '@getimo/mcp-toolkit
 import { z } from 'zod';
 
 import { encodeElementPath, type RestClient } from '../../client.js';
+import { RestError } from '../../errors.js';
 import type { McpServerWithElicitation } from '../elicitation.js';
 import {
     ELEMENTS_COMPACT_COLUMNS,
@@ -30,6 +31,7 @@ import {
 import {
     DEFAULT_FIELDS_ELEMENT_LIST,
     projectFields,
+    projectionFeedback,
     projectedFieldsEcho,
 } from '../sparse-fields.js';
 import {
@@ -95,6 +97,12 @@ export const ELEMENT_LIST_OUTPUT_SCHEMA = z.object({
     // N-01: present only when the call was paginated and more rows remain.
     next_cursor: z.string().optional(),
     projected_fields: z.array(z.string()).optional(),
+    // F-005 fix (2026-05-25 exhaustive audit): projection-feedback so
+    // callers passing the wrong field name (e.g. `type` instead of
+    // `element_type`) get an explicit hint instead of silently-empty
+    // table columns. See sparse-fields.ts::projectionFeedback.
+    available_fields: z.array(z.string()).optional(),
+    unknown_fields: z.array(z.string()).optional(),
 });
 
 export const ELEMENT_GET_OUTPUT_SCHEMA = z.object({
@@ -143,6 +151,35 @@ function columnsFromFields(fields: readonly string[]): TableColumn[] {
 }
 
 
+/**
+ * F-205 (Audit 2026-05-26): shape-validate a cursor token up-front.
+ *
+ * The server-side cursor format (see `ElementOps::encodeCursor`) is
+ * base64url-encoded `o:<digits>`. Accept ALSO the raw `o:<digits>`
+ * form so hand-crafted iteration scripts + tests don't break. Anything
+ * else is a typo / corrupted token and must be rejected with a
+ * structured 400 — silently returning page 1 (the pre-fix behaviour)
+ * makes cold-agents loop on invalid cursors.
+ *
+ * We deliberately do NOT validate the cursor against the actual page
+ * state (no decode + range-check) — only shape.
+ */
+function isValidCursorShape(cursor: string): boolean {
+    if (cursor.length === 0) return false;
+    // Form A: raw `o:<digits>`.
+    if (/^o:\d+$/.test(cursor)) return true;
+    // Form B: base64url (charset only). Must decode to `o:<digits>`.
+    if (!/^[A-Za-z0-9_-]+$/.test(cursor)) return false;
+    try {
+        const padded = cursor.replace(/-/g, '+').replace(/_/g, '/');
+        const padLen = (4 - (padded.length % 4)) % 4;
+        const decoded = Buffer.from(padded + '='.repeat(padLen), 'base64').toString('utf8');
+        return /^o:\d+$/.test(decoded);
+    } catch {
+        return false;
+    }
+}
+
 export async function handleElementList(
     { client }: ElementsHandlerDeps,
     {
@@ -161,6 +198,23 @@ export async function handleElementList(
         cursor?: string;
     },
 ): Promise<ToolResult> {
+    // F-205 (Audit 2026-05-26): validate cursor shape BEFORE the REST
+    // call so an invalid token surfaces a structured 400 instead of
+    // silently returning page 1.
+    if (typeof cursor === 'string' && cursor !== '' && !isValidCursorShape(cursor)) {
+        return errorResult({
+            error: new RestError({
+                status: 400,
+                code: 'yootheme_builder_mcp.elements.invalid_cursor',
+                message: `Invalid cursor "${cursor}" — expected an opaque token from a prior call's next_cursor.`,
+                body: null,
+            }),
+            context: { cursor, template_id },
+            hint:
+                'Omit `cursor` for page 1, or copy the `next_cursor` field ' +
+                "from a prior `element_list` call's response.",
+        });
+    }
     try {
         // N-01 (Audit-v3): forward the transport-safe scoping params as
         // query string. The REST layer returns the pagination envelope
@@ -188,11 +242,42 @@ export async function handleElementList(
             : Array.isArray(data.elements)
                 ? data.elements
                 : [];
+        // F-206 (Audit 2026-05-26): distinguish "explicit root_path
+        // pointer not found" from "template is truly empty". Without
+        // this branch, `element_list({root_path: '/does/not/exist'})`
+        // returned `0 elements` silently — cold agents had no signal
+        // whether the pointer was a typo or the subtree empty. Only
+        // raise when (a) the caller PASSED a non-empty root_path AND
+        // (b) the REST returned 0 rows. Omitted root_path on a truly
+        // empty template stays a success.
+        if (
+            typeof root_path === 'string' &&
+            root_path !== '' &&
+            rawSource.length === 0
+        ) {
+            return errorResult({
+                error: new RestError({
+                    status: 404,
+                    code: 'yootheme_builder_mcp.elements.unknown_root_path',
+                    message: `root_path "${root_path}" not found in template "${template_id}".`,
+                    body: null,
+                }),
+                context: { root_path, template_id },
+                hint:
+                    'Verify via yootheme_builder_element_list (omit root_path) ' +
+                    'to discover existing JSON-Pointers in the template.',
+            });
+        }
         const mapped = rawSource
             .filter((x): x is Record<string, unknown> => x !== null && typeof x === 'object')
             .map(mapElementRow);
         const items = projectFields(mapped, fields, DEFAULT_FIELDS_ELEMENT_LIST);
         const echo = projectedFieldsEcho(fields, DEFAULT_FIELDS_ELEMENT_LIST);
+        const feedback = projectionFeedback(mapped, fields);
+        const unknownNote =
+            feedback !== undefined && feedback.unknown_fields.length > 0
+                ? ` (unknown fields ignored: ${feedback.unknown_fields.join(', ')}; available: ${feedback.available_fields.join(', ')})`
+                : '';
 
         // N-01 (Audit v4): when the caller passes an explicit narrow
         // `fields[]`, render the text table from the projected (slim)
@@ -208,7 +293,7 @@ export async function handleElementList(
                   {
                       columns: columnsFromFields(fields),
                       header: (count) =>
-                          `${String(count)} elements in template "${template_id}"`,
+                          `${String(count)} elements in template "${template_id}"${unknownNote}`,
                       footer: 'Use yootheme_builder_element_get <path> for full data.',
                   },
                   'full',
@@ -217,7 +302,7 @@ export async function handleElementList(
                   columns: [...ELEMENTS_TABLE_COLUMNS],
                   compactColumns: [...ELEMENTS_COMPACT_COLUMNS],
                   header: (count) =>
-                      `${String(count)} elements in template "${template_id}"`,
+                      `${String(count)} elements in template "${template_id}"${unknownNote}`,
                   footer: 'Use yootheme_builder_element_get <path> for full data.',
               });
         return structuredResult(toolkitResult, {
@@ -228,6 +313,10 @@ export async function handleElementList(
                 ? { next_cursor: data.next_cursor }
                 : {}),
             ...(echo !== undefined ? { projected_fields: [...echo] } : {}),
+            ...(feedback !== undefined ? {
+                available_fields: [...feedback.available_fields],
+                unknown_fields: [...feedback.unknown_fields],
+            } : {}),
         });
     } catch (e) {
         return errorResult({

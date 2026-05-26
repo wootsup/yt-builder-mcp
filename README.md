@@ -3,7 +3,15 @@
 > **Drive your page builder via MCP.** Built for YOOtheme Pro 4.0+ — connect Claude Desktop, Claude Code, Cursor, Zed, Continue, Cline, Roo Code, Codex CLI or Gemini CLI in one command.
 > Free WordPress plugin + NPM package. GPLv2 + MIT.
 
-[![Version](https://img.shields.io/badge/version-0.2.0--alpha.1-blue)]() [![Status](https://img.shields.io/badge/Wave%20A%2FB%2FC%2FD-shipped-brightgreen)]() [![License: GPLv2 / MIT](https://img.shields.io/badge/license-GPLv2%20%2B%20MIT-blue)]()
+[![Version](https://img.shields.io/badge/version-1.1.0-blue)]() [![Status](https://img.shields.io/badge/Wave%20A%2FB%2FC%2FD-shipped-brightgreen)]() [![License: GPLv2 / MIT](https://img.shields.io/badge/license-GPLv2%20%2B%20MIT-blue)]()
+
+> **🟢 Joomla 5/6 port — functional on dev** (branch `feat/yt-builder-mcp-joomla`).
+> The full REST surface (read + write + L2 article extensions) is live-verified on
+> `dev.wootsup.com/joomla`, the 3-tab admin component (Keys / Diagnostics / About) is
+> at WordPress parity, and the npm wrapper auto-detects Joomla from the URL shape.
+> See the **Joomla install** section below and the
+> [Joomla foundation ADRs](docs/adr/2026-05-24-joomla-port-foundation-adrs.md) for
+> architectural decisions. WordPress remains primary; no breaking changes planned for v1.0.x.
 
 > Independent third-party project. YOOtheme® is a registered trademark of YOOtheme GmbH
 > ([yootheme.com](https://yootheme.com)). YT Builder MCP is built by WootsUp (getimo
@@ -89,7 +97,7 @@ Download the latest plugin ZIP from
 [GitHub Releases](https://github.com/wootsup/yt-builder-mcp/releases),
 then upload it via **WP-Admin → Plugins → Add New → Upload Plugin**.
 
-(A WordPress.org listing is planned once the plugin leaves alpha.)
+(A WordPress.org listing is planned for a future release.)
 
 You need:
 
@@ -129,6 +137,58 @@ Open Claude (or any configured client) and try:
 > List my pages.
 
 You should see all your templates.
+
+---
+
+## Quickstart (Joomla)
+
+The Joomla package ships the same MCP surface; only the install + key-generation
+steps differ. After step 3 below, the wizard (step "Run the wizard" above) works
+identically — it auto-detects Joomla from your site URL.
+
+### 1 — Install the Joomla package
+
+Download the latest Joomla package ZIP (`pkg_ytbmcp-*.zip`) from
+[GitHub Releases](https://github.com/wootsup/yt-builder-mcp/releases),
+then upload it via **Administrator → System → Install → Extensions → Upload Package File**.
+
+You need:
+
+- Joomla 5.x or 6.x
+- PHP 8.2+
+- YOOtheme Pro 4.0+ (active template; v4 + v5 both supported)
+
+### 2 — Enable the plugins
+
+The post-install script auto-enables them, but verify under
+**System → Manage → Plugins**:
+
+- **System – YT Builder MCP** (`plg_system_ytbmcp`) — bootstraps the extension
+- **Web Services – YT Builder MCP** (`plg_webservices_ytbmcp`) — registers the REST routes
+
+Also confirm the Joomla **Web Services** API is on under
+**System → Global Configuration → Server → Web Services → Enable**.
+
+### 3 — Generate a Bearer Key
+
+Go to **Components → YT Builder MCP**, open the **Bearer Keys** tab, and click
+**Generate Key**. Copy the token — it is shown once. (Same key flow as WordPress;
+the **Diagnostics** tab shows the live YOOtheme Pro / Joomla / PHP versions and the
+REST endpoint inventory.)
+
+### 4 — Probe the REST surface
+
+Confirm the plugin is reachable (anonymous health probe — no token needed):
+
+```bash
+curl https://example.com/api/index.php/v1/yt-builder-mcp/health
+# → {"plugin_version":"…","status":"ok"}
+```
+
+Then run the wizard exactly as in the WordPress flow above (`npx -y @wootsup/yt-builder-mcp setup`)
+— paste the Bearer key and your Joomla site URL; the wrapper detects the
+`/api/index.php/` shape automatically (or set `YTB_MCP_PLATFORM=joomla` for an
+origin-only URL).
 
 ---
 
@@ -242,6 +302,7 @@ See [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) for full input/
 | [`docs/rest-api-reference.md`](./docs/rest-api-reference.md) | All REST endpoints with request/response schemas |
 | [`docs/mcp-tool-reference.md`](./docs/mcp-tool-reference.md) | All 21 MCP tools with Zod schemas |
 | [`docs/TOOL-CATALOG.md`](./docs/TOOL-CATALOG.md) | Quick-scan catalog of all MCP tools with sparse-fields hints |
+| [`docs/cross-platform-parity.md`](./docs/cross-platform-parity.md) | WordPress ↔ Joomla intentional divergences + parity decisions |
 | [`CHANGELOG.md`](./CHANGELOG.md) | Version history |
 | [`SECURITY.md`](./SECURITY.md) | How to report security issues |
 
@@ -269,7 +330,7 @@ This is the official **WootsUp yt-builder-mcp** repository. Stable releases are 
 | Wave 4 — NPM Package + MCP Server + Setup-Wizard | done |
 | Wave 5 — Docs + E2E Skeleton + WP.org readme | done |
 | Wave 6 — 6-Axis Audit | round-2 complete |
-| Wave 7 — Joomla Port | optional |
+| Wave 7 — Joomla Port (WP-parity) | in progress — see branch `feat/yt-builder-mcp-joomla`; foundation waves 1-4 + npm-wrapper `JoomlaPlatform` + `live-verify.mjs` Joomla-adapter shipped; per-tool 1:1 parity verification (Wave 8.5) pending deployed Joomla site |
 
 Test coverage: **240 PHPUnit tests / 519 assertions** (plugin) + **62 vitest tests** (NPM package). PHPStan level 8 clean. TypeScript 5 strict clean.
 

@@ -32,7 +32,7 @@ declare(strict_types=1);
 
 namespace WootsUp\BuilderMcp\State;
 
-final class StateRevision
+final class StateRevision implements StateRevisionInterface
 {
     /**
      * The wp_option key.

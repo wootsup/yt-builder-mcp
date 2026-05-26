@@ -3,7 +3,7 @@
  * EtagMiddleware — optimistic-lock enforcement via the `If-Match` header.
  *
  * Wave 3 Task 3.2. Every Wave-3 write-endpoint passes the inbound
- * WP_REST_Request and the *current* ETag (from LayoutReader::etag()) here.
+ * WP_REST_Request and the *current* ETag (from LayoutReaderInterface::etag()) here.
  * If the client supplied an `If-Match: <etag>` header and it does NOT
  * match the current state, this returns a WP_Error 412 Precondition
  * Failed so the route handler short-circuits without mutating anything.

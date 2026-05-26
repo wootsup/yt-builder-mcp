@@ -1,21 +1,28 @@
 # REST API Reference
 
-All endpoints live under the `yootheme-builder-mcp/v1` namespace:
+All endpoints live under the `yt-builder-mcp/v1` namespace. The base URL differs
+by platform:
 
 ```
-https://example.com/wp-json/yootheme-builder-mcp/v1/<endpoint>
+WordPress:  https://example.com/wp-json/yt-builder-mcp/v1/<endpoint>
+Joomla:     https://example.com/api/index.php/v1/yt-builder-mcp/<endpoint>
 ```
 
 ## Authentication
 
-All endpoints except `/health` require a **Bearer token** generated in WP-Admin → YOOtheme Builder MCP → Settings.
+All endpoints except the anonymous `/health` probe require a **Bearer token**:
+
+- **WordPress:** generated in WP-Admin → Tools → "YT Builder MCP" → Bearer Keys.
+- **Joomla:** generated in Administrator → Components → "YT Builder MCP" → Bearer Keys.
 
 ```
-Authorization: Bearer ytbmcp_live_eyJh…
+Authorization: Bearer ytb_live_eyJh….<signature>
 ```
 
-Keys are verified with constant-time `hash_equals()` against an HMAC-SHA256
-hash stored in `wp_options`. The plaintext key is never stored.
+Keys are verified with constant-time `hash_equals()` against an HMAC-SHA256 hash.
+The plaintext key is never stored (WordPress stores the hash in `wp_options`; Joomla
+in `#__extensions.custom_data`). On both platforms the Bearer token's scope hierarchy
+(`read` < `write` < `admin`) is the sole authority on the API surface.
 
 ## Optimistic locking (ETag)
 
@@ -56,6 +63,9 @@ All errors follow the WordPress REST error envelope:
 }
 ```
 
+(Joomla wraps the same `code` / `message` / `data` triple in its own API JSON
+envelope, but the error contract is identical.)
+
 ## Status codes
 
 | Code | Meaning |
@@ -75,34 +85,56 @@ All errors follow the WordPress REST error envelope:
 
 ### `GET /health`
 
-Public. Returns plugin and environment info. Used by the setup wizard to
-sanity-check connectivity before the user even pastes their key.
+Tiered. Used by the setup wizard to sanity-check connectivity before the user even
+pastes their key. The payload is **field-split by authentication** (Wave-6 L4 tier
+reduction): an anonymous caller gets only the minimum needed to confirm "the plugin is
+installed at this URL", while every host-fingerprinting field (YOOtheme/CMS/PHP
+versions, `yootheme_loaded`, storage backend, endpoint inventory) is reserved for
+Bearer-holders. This is identical on WordPress and Joomla (Joomla #19 parity, W9-T4).
 
-**Auth required:** No.
+**Auth required:** No (anonymous payload) / optional (Bearer augments the payload).
 
-**Response 200:**
+**Anonymous response 200** (no `Authorization` header):
 
 ```json
 {
-  "plugin_version": "0.1.0-alpha.1",
-  "yootheme_version": "4.5.2",
-  "wp_version": "6.5.0",
-  "php_version": "8.2.18",
-  "storage_type": "wp_option",
-  "storage_target": "yootheme",
+  "plugin_version": "1.1.0",
+  "status": "ok"
+}
+```
+
+**Bearer-authenticated response 200** (valid `Authorization: Bearer …`):
+
+```json
+{
+  "plugin_version": "1.1.0",
+  "status": "ok",
+  "yootheme_version": "4.5.33",
+  "php_version": "8.3.6",
   "yootheme_loaded": true,
+  "schema_version": 1,
+  "available_endpoints_count": 25,
   "available_endpoints": [
-    "/yootheme-builder-mcp/v1/health",
-    "/yootheme-builder-mcp/v1/pages",
-    ...
+    "/v1/yt-builder-mcp/health",
+    "/v1/yt-builder-mcp/pages",
+    "..."
   ]
 }
 ```
 
-**Example:**
+> WordPress additionally surfaces `wp_version`, `site_url`, `home_url`,
+> `storage_type` / `storage_target` (`wp_option` / `yootheme`) and
+> `yooessentials_version` in the authenticated branch. Joomla surfaces the
+> equivalent CMS/version fields; the shared `{plugin_version, status}` anonymous
+> contract is byte-identical on both platforms.
+
+**Example (anonymous probe):**
 
 ```bash
-curl https://example.com/wp-json/yootheme-builder-mcp/v1/health
+# WordPress
+curl https://example.com/wp-json/yt-builder-mcp/v1/health
+# Joomla
+curl https://example.com/api/index.php/v1/yt-builder-mcp/health
 ```
 
 ---
@@ -122,8 +154,12 @@ Returns the current top-level state ETag for optimistic-lock writes.
 **Example:**
 
 ```bash
+# WordPress
 curl -H "Authorization: Bearer $KEY" \
-  https://example.com/wp-json/yootheme-builder-mcp/v1/etag
+  https://example.com/wp-json/yt-builder-mcp/v1/etag
+# Joomla
+curl -H "Authorization: Bearer $KEY" \
+  https://example.com/api/index.php/v1/yt-builder-mcp/etag
 ```
 
 ---

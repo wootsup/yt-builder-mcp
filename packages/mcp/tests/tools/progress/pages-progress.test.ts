@@ -24,16 +24,18 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../../src/client.js';
+import type { ClientPool } from '../../../src/sites/client-pool.js';
 import { buildPagesTools } from '../../../src/tools/pages.js';
 import type { HandlerExtra } from '../../../src/tools/tool-builder.js';
+import { makeTestPool } from '../../helpers/test-pool.js';
 
-function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): RestClient {
-    return new RestClient({
+function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url, init ?? {});

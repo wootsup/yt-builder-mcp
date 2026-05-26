@@ -16,10 +16,11 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
-import { RestClient } from '../../src/client.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
 import { buildElementsTools } from '../../src/tools/elements.js';
 import { buildHealthTools } from '../../src/tools/health.js';
 import { buildInspectionTools } from '../../src/tools/inspection.js';
@@ -27,11 +28,12 @@ import { buildMultiItemsTools } from '../../src/tools/multi-items/index.js';
 import { buildPagesTools } from '../../src/tools/pages.js';
 import { buildSourcesTools } from '../../src/tools/sources.js';
 import type { AnyToolDefinition } from '../../src/tools/tool-builder.js';
+import { makeTestPool } from '../helpers/test-pool.js';
 
-function fakeClient(handler: (url: string) => Response | Promise<Response>): RestClient {
-    return new RestClient({
+function fakeClient(handler: (url: string) => Response | Promise<Response>): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url);
@@ -247,6 +249,30 @@ describe('structuredContent shape-pin — every outputSchema-declaring tool', ()
                 );
             }
             expect(parsed.success).toBe(true);
+
+            // W12-R2 STRICT-HOST CONTRACT: Zod `.safeParse()` STRIPS
+            // unknown keys, so it silently accepted an undeclared `_meta`
+            // that withSiteMeta used to stamp into structuredContent.
+            // Real hosts (Claude Desktop) validate against the JSON-Schema
+            // form of this outputSchema — emitted with
+            // `additionalProperties:false` for a default (strip) ZodObject
+            // — and REJECT extra keys with `-32602` ("Failed to call
+            // tool") EVEN ON SUCCESS. Mirror that strict contract: a
+            // strip/strict object MUST carry no key beyond its shape.
+            const def = (schema as { _def?: { typeName?: string; unknownKeys?: string } })._def;
+            if (def?.typeName === 'ZodObject' && def.unknownKeys !== 'passthrough') {
+                const allowed = new Set(
+                    Object.keys((schema as unknown as z.ZodObject<z.ZodRawShape>).shape),
+                );
+                const extra = Object.keys(result.structuredContent ?? {}).filter(
+                    (k) => !allowed.has(k),
+                );
+                expect(
+                    extra,
+                    `tool ${c.toolName} structuredContent has undeclared key(s) [${extra.join(', ')}] — ` +
+                    `additionalProperties:false hosts reject this (-32602).`,
+                ).toEqual([]);
+            }
         });
     }
 

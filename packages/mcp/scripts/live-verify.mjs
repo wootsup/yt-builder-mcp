@@ -1,22 +1,48 @@
 #!/usr/bin/env node
 /**
- * Live-verify all 22 registered tools against a real YOOtheme Builder MCP
+ * Live-verify all registered tools against a real YT Builder MCP
  * endpoint (dev.wootsup.com by default).
  *
  * Wave G.9 / Plan §13 / Design §11 Achse 7 (Feature-Verification).
+ * Wave 7 (2026-05-24): platform-agnostic — accepts BOTH WordPress
+ * (`/wp-json/...`) and Joomla (`/api/index.php/v1/...`) base URLs.
+ * Platform is auto-detected from the URL shape; the spawned MCP server
+ * does the runtime detection in its own `RestClient`.
  *
  * What it does:
  *   1. Reads Bearer token from $YTB_MCP_BEARER_TOKEN, $YTB_MCP_BEARER, or
  *      `op read "op://Claude-Secrets/<item>/credential"` (env-driven), or
- *      gracefully skips with a clear note + exit-0 (Phase 6 / Phase 8
- *      manual-token-setup is then the gate).
+ *      gracefully skips with a clear note + exit-0.
  *   2. Spawns the local MCP stdio server (`dist/index.js`) with
- *      $YTB_MCP_WP_URL + Bearer.
+ *      $YTB_MCP_SITE_URL (or legacy $YTB_MCP_WP_URL) + Bearer.
  *   3. Sends JSON-RPC `initialize` + `tools/list`.
- *   4. For each of the 10 surface tools — invokes it with sample inputs.
- *   5. For each of the 11 advanced (captured) tools — invokes it via the
- *      `yootheme_builder_advanced` gateway with sample inputs.
- *   6. Writes a markdown report to `docs/LIVE-VERIFY-REPORT.md`.
+ *   4. Invokes every catalogued tool — direct when listed in
+ *      tools/list, otherwise via the `yootheme_builder_advanced`
+ *      gateway. Lane is derived at runtime.
+ *   5. Writes a markdown report to `docs/LIVE-VERIFY-REPORT.md` that
+ *      records the detected platform alongside the per-tool table.
+ *
+ * Env vars:
+ *   YTB_MCP_SITE_URL                — canonical base URL (WP or Joomla)
+ *   YTB_MCP_WP_URL                  — legacy alias, still honoured
+ *   YTB_MCP_BEARER_TOKEN            — Bearer key
+ *   YTB_MCP_1P_REF                  — 1Password ref for the Bearer
+ *   YTB_MCP_VERIFY_TEMPLATE_ID      — template id to probe (default: home)
+ *
+ * Joomla examples (subdir install — REQUIRES platform hint):
+ *   export YTB_MCP_SITE_URL=https://dev.wootsup.com/joomla
+ *   export YTB_MCP_PLATFORM=joomla       # subdir paths like /joomla don't
+ *                                          # carry a platform hint in the
+ *                                          # URL pathname, so detection
+ *                                          # falls back to wordpress and
+ *                                          # every tool 404s — set this
+ *                                          # explicitly. Origin-only Joomla
+ *                                          # installs (no subdir) can skip
+ *                                          # this if the wrapper is updated
+ *                                          # to detect a Joomla CMS marker.
+ *   export YTB_MCP_BEARER_TOKEN=ytb_live_…
+ *   export YTB_MCP_VERIFY_TEMPLATE_ID=blog
+ *   node ./scripts/live-verify.mjs
  *
  * Exit codes:
  *   0  all tested tools returned non-error (or token absent — skip case)
@@ -38,8 +64,38 @@ const REPO_ROOT = resolve(__dirname, '..');
 const DIST_ENTRY = resolve(REPO_ROOT, 'dist', 'index.js');
 const REPORT_PATH = resolve(REPO_ROOT, 'docs', 'LIVE-VERIFY-REPORT.md');
 
-const WP_URL = process.env.YTB_MCP_WP_URL ?? 'https://dev.wootsup.com';
+// Wave 7: prefer YTB_MCP_SITE_URL (canonical); fall back to legacy
+// YTB_MCP_WP_URL so existing CI/devloop configs keep working.
+const SITE_URL =
+    process.env.YTB_MCP_SITE_URL
+    ?? process.env.YTB_MCP_WP_URL
+    ?? 'https://dev.wootsup.com';
 const TEMPLATE_ID = process.env.YTB_MCP_VERIFY_TEMPLATE_ID ?? 'home';
+
+/**
+ * Auto-detect host platform from the URL shape — mirrors
+ * `src/platform/index.ts::detectPlatformFromUrl`.
+ * Returns 'wordpress' | 'joomla' | 'wordpress' (default fallback).
+ */
+function detectPlatform(url) {
+    if (url.includes('/wp-json/')) return 'wordpress';
+    if (url.includes('/api/index.php/')) return 'joomla';
+    // Origin-only URL — let the MCP server's own platform-detect or
+    // identity probe make the call. For the live-verify report we mark
+    // it as "wordpress (assumed)" since that is still the default.
+    return 'wordpress';
+}
+
+// Allow operator to force-set the platform when the URL is origin-only
+// (Joomla origin URLs like `https://example.com/joomla` do NOT contain
+// the `/api/index.php/` token, so URL-only detection falls back to
+// WordPress). YTB_MCP_PLATFORM=joomla disambiguates.
+const PLATFORM =
+    (process.env.YTB_MCP_PLATFORM ?? '').toLowerCase() === 'joomla'
+        ? 'joomla'
+        : (process.env.YTB_MCP_PLATFORM ?? '').toLowerCase() === 'wordpress'
+            ? 'wordpress'
+            : detectPlatform(SITE_URL);
 
 // ── Tool catalogue (matches src/tools/*) ──────────────────────────────
 //
@@ -101,6 +157,12 @@ const SURFACE_TOOLS = [
     { name: 'yootheme_builder_sources_list', kind: 'read', sampleArgs: {} },
     // Inspection essentials (L1)
     { name: 'yootheme_builder_element_types_list', kind: 'read', sampleArgs: {} },
+    // W7 — sites_list reads the registry only; sites_test probes /health
+    // + /etag for the `default` site (the legacy env-bridge always
+    // materialises a one-site registry with site_id = "default", which is
+    // what live-verify drives). sample_args must use the literal id.
+    { name: 'yootheme_builder_sites_list', kind: 'meta', sampleArgs: {} },
+    { name: 'yootheme_builder_sites_test', kind: 'meta', sampleArgs: { site_id: 'default' } },
     // Gateway (meta — discovery mode is always safe)
     { name: 'yootheme_builder_advanced', kind: 'meta', sampleArgs: { tool: 'yootheme_builder_page_save' } },
 ];
@@ -274,7 +336,18 @@ class StdioClient {
             }
         });
         this.server.stderr.on('data', (chunk) => {
-            process.stderr.write(`[server] ${chunk}`);
+            // Round-6 A2 N-A2-003 defense-in-depth: scrub anything that
+            // looks like a Bearer token shape `ytb_(live|test)_<id>.<sig>`
+            // before mirroring server stderr to the operator console. Even
+            // though the current code paths don't leak tokens, future server
+            // changes (verbose error logs, library debug output) could
+            // surface secrets via this passthrough — masking here keeps the
+            // surface clean by construction.
+            const scrubbed = String(chunk).replace(
+                /ytb_(live|test)_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g,
+                'ytb_$1_***REDACTED***',
+            );
+            process.stderr.write(`[server] ${scrubbed}`);
         });
     }
 
@@ -360,11 +433,25 @@ function classifyToolResult(resp, spec) {
 }
 
 async function runVerification(token, tokenSource) {
+    // Pass BOTH env-var names to the spawned MCP server so it works
+    // regardless of which release line it was built from (pre-Wave-7
+    // releases only know YTB_MCP_WP_URL; Wave-7+ prefers YTB_MCP_SITE_URL
+    // but still honours the legacy alias).
+    // Round-6 A2 N-A2-002: only forward the YTB_MCP_PLATFORM hint when the
+    // operator explicitly set it in their shell. Otherwise let the spawned
+    // server's own URL-shape detection (now `URL.pathname.startsWith` —
+    // Round-6 A1 polish) make the call so the auto-detect path actually
+    // gets exercised end-to-end. Forwarding the derived `PLATFORM` value
+    // unconditionally bypassed that detection in every live-verify run.
     const env = {
         ...process.env,
-        YTB_MCP_WP_URL: WP_URL,
+        YTB_MCP_SITE_URL: SITE_URL,
+        YTB_MCP_WP_URL: SITE_URL,
         YTB_MCP_BEARER_TOKEN: token,
     };
+    if (process.env.YTB_MCP_PLATFORM) {
+        env.YTB_MCP_PLATFORM = process.env.YTB_MCP_PLATFORM;
+    }
     const client = new StdioClient(env);
     client.start();
     try {
@@ -409,7 +496,8 @@ function renderReport({ advertisedNames, results, token, tokenSource, error }) {
     lines.push('# Live-Verify Report — yt-builder-mcp');
     lines.push('');
     lines.push(`- **Generated:** ${now}`);
-    lines.push(`- **Endpoint:** ${WP_URL}`);
+    lines.push(`- **Platform:** ${PLATFORM}`);
+    lines.push(`- **Endpoint:** ${SITE_URL}`);
     lines.push(`- **Bearer-Token source:** ${tokenSource}`);
     lines.push(`- **Bin entry:** ${DIST_ENTRY}`);
     lines.push('');
@@ -425,10 +513,17 @@ function renderReport({ advertisedNames, results, token, tokenSource, error }) {
         lines.push('');
         lines.push('### How to enable next session');
         lines.push('');
-        lines.push('1. **Generate a Bearer key** in WP-Admin → Settings → YOOtheme Builder MCP (or via `wp option get yootheme_builder_mcp_keys`).');
+        lines.push('1. **Generate a Bearer key**:');
+        lines.push('   - **WordPress:** wp-admin → Tools → YT Builder MCP → Bearer Keys');
+        lines.push('   - **Joomla:** Administrator → Components → YT Builder MCP → Bearer Keys');
         lines.push('2. **Store it** in env:');
         lines.push('   ```sh');
-        lines.push('   export YTB_MCP_BEARER_TOKEN="ytbmcp_…"');
+        lines.push('   # WordPress');
+        lines.push('   export YTB_MCP_SITE_URL="https://example.com"');
+        lines.push('   export YTB_MCP_BEARER_TOKEN="ytb_live_…"');
+        lines.push('   # …or Joomla');
+        lines.push('   export YTB_MCP_SITE_URL="https://example.com/joomla"');
+        lines.push('   export YTB_MCP_BEARER_TOKEN="ytb_live_…"');
         lines.push('   node ./scripts/live-verify.mjs');
         lines.push('   ```');
         lines.push('   …or in 1Password:');

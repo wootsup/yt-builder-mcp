@@ -1,0 +1,7 @@
+
+# Audit harness per-run artefacts (2026-05-25 exhaustive audit). Each run
+# rewrites docs/audit-{sweep,phase*}-<iso>.json. Transient, large, noisy
+# in history.
+docs/audit-sweep-*.json
+docs/audit-phase2-*.json
+docs/audit-phase4-*.json

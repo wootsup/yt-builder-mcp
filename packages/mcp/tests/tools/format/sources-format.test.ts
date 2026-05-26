@@ -11,6 +11,7 @@ import {
     mapSourceRow,
     flattenSourcesPayload,
     buildBindingDetail,
+    remapOriginForPlatform,
 } from '../../../src/tools/format/sources-format.js';
 
 describe('sources-format sidecar', () => {
@@ -47,6 +48,52 @@ describe('sources-format sidecar', () => {
         ]);
         expect(flat).toHaveLength(1);
         expect(flat[0]?.origin).toBe('wordpress');
+    });
+
+    it('flattenSourcesPayload picks up the joomla group key (F-A5-1)', () => {
+        const flat = flattenSourcesPayload({
+            joomla: [{ name: 'articles.article', label: 'Article' }],
+            essentials: [],
+        });
+        expect(flat).toHaveLength(1);
+        expect(flat[0]?.origin).toBe('joomla');
+    });
+
+    // ─── F-A5-1 (v1.1.5) ────────────────────────────────────────────
+    // Joomla content sources arrive tagged with `origin: "wordpress"`
+    // because YT Pro historically uses that group key for host-native
+    // sources. The MCP server remaps them based on the bound client's
+    // platform.
+
+    it('remapOriginForPlatform: leaves WordPress rows untouched on WordPress', () => {
+        const rows = [
+            { name: 'wp_posts', origin: 'wordpress' },
+            { name: 'api_a', origin: 'apimapper' },
+        ];
+        const out = remapOriginForPlatform(rows, 'wordpress');
+        expect(out).toEqual(rows);
+    });
+
+    it('remapOriginForPlatform: remaps wordpress→joomla on Joomla', () => {
+        const rows = [
+            { name: 'articles.article', origin: 'wordpress', label: 'Article' },
+            { name: 'tags.tag', origin: 'wordpress', label: 'Tag' },
+            { name: 'api_a', origin: 'apimapper', label: 'A' },
+        ];
+        const out = remapOriginForPlatform(rows, 'joomla');
+        expect(out[0]?.origin).toBe('joomla');
+        expect(out[1]?.origin).toBe('joomla');
+        expect(out[2]?.origin).toBe('apimapper');
+        // Non-origin fields preserved
+        expect(out[0]?.name).toBe('articles.article');
+        expect(out[0]?.label).toBe('Article');
+    });
+
+    it('remapOriginForPlatform: does not mutate inputs', () => {
+        const rows = [{ name: 'articles.article', origin: 'wordpress' }];
+        const out = remapOriginForPlatform(rows, 'joomla');
+        expect(rows[0]?.origin).toBe('wordpress');
+        expect(out[0]?.origin).toBe('joomla');
     });
 
     it('buildBindingDetail returns 2 groups (Element / Binding) when source is set', () => {

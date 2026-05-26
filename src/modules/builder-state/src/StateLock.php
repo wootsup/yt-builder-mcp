@@ -39,8 +39,12 @@ use WootsUp\BuilderMcp\Util\SecurityLogger;
  *           extend this class to record / simulate lock behaviour. Do not
  *           extend in production code — the lock's correctness depends on
  *           the exact add_option-CAS semantics implemented here.
+ *
+ * Implements {@see StateLockInterface} (Audit-A1 F-003, Wave 4 fix-round
+ * F3) so LayoutWriter implementations can type-hint against the cross-
+ * platform contract.
  */
-class StateLock
+class StateLock implements StateLockInterface
 {
     public const LOCK_TTL_SECONDS = 5;
     public const DEFAULT_TIMEOUT_MS = 5000;
@@ -100,7 +104,7 @@ class StateLock
      * @throws \RuntimeException When the lock could not be acquired
      *         within $timeoutMs.
      */
-    public function withTemplateLock(string $templateId, callable $callback, int $timeoutMs = self::DEFAULT_TIMEOUT_MS)
+    public function withTemplateLock(string $templateId, callable $callback, int $timeoutMs = self::DEFAULT_TIMEOUT_MS): mixed
     {
         $acquired = $this->acquireForTemplate($templateId, $timeoutMs);
         if (!$acquired) {

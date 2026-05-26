@@ -11,8 +11,9 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { buildAllTools } from '../../src/tools/index.js';
-import { RestClient } from '../../src/client.js';
+import { makeTestPool } from '../helpers/test-pool.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // SKILL.md lives INSIDE the npm package at packages/mcp/skills/yt-builder-mcp/SKILL.md
@@ -203,6 +204,58 @@ describe('SKILL.md — parameter-name fidelity (Round-1 audit C2 guard)', () => 
     });
 });
 
+describe('SKILL.md — multi-site section (W11)', () => {
+    // W11 pin-tests: the multi-site narrative section must exist and must
+    // mention every load-bearing concept the customer needs in order to
+    // drive multiple YOOtheme sites from one MCP install. Drift in any
+    // of these claims silently degrades the multi-site experience.
+
+    it('contains the "Working with multiple sites" section header', () => {
+        const text = readFileSync(SKILL_PATH, 'utf-8');
+        expect(text).toMatch(/## Working with multiple sites/);
+    });
+
+    it('mentions the site_id parameter at least three times', () => {
+        const text = readFileSync(SKILL_PATH, 'utf-8');
+        const matches = text.match(/site_id/g) ?? [];
+        expect(matches.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('documents both bearer (plain) and bearer_ref (1Password) options', () => {
+        const text = readFileSync(SKILL_PATH, 'utf-8');
+        expect(text).toMatch(/\bbearer\b/);
+        expect(text).toMatch(/\bbearer_ref\b/);
+        // 1Password / op:// reference must be mentioned alongside
+        // bearer_ref so the customer understands the indirection.
+        expect(text).toMatch(/op:\/\//);
+    });
+
+    it('mentions at least three of the five CLI subcommands', () => {
+        const text = readFileSync(SKILL_PATH, 'utf-8');
+        const subcommands = [
+            'add-site',
+            'list-sites',
+            'remove-site',
+            'set-default',
+            'test-site',
+        ];
+        const present = subcommands.filter((s) => text.includes(s));
+        expect(
+            present.length,
+            `expected ≥3 CLI subcommands, saw: ${present.join(', ')}`,
+        ).toBeGreaterThanOrEqual(3);
+    });
+
+    it('warns the customer to restart their AI client after registry mutations', () => {
+        const text = readFileSync(SKILL_PATH, 'utf-8');
+        // The restart caveat must be reachable: both "restart" and an
+        // AI-client noun must appear in the same SKILL.md (loose pin so
+        // wording can evolve without breaking the test).
+        expect(text).toMatch(/restart/i);
+        expect(text).toMatch(/AI[- ]?client|Claude Desktop/i);
+    });
+});
+
 describe('SKILL.md — tool-catalog appendix', () => {
     it('contains the sentinel markers for the auto-generated catalog', () => {
         const text = readFileSync(SKILL_PATH, 'utf-8');
@@ -219,7 +272,7 @@ describe('SKILL.md — tool-catalog appendix', () => {
         const appendix = text.slice(begin, end);
 
         const tools = buildAllTools(
-            new RestClient({ baseUrl: 'https://example.com', bearerToken: 'x' }),
+            makeTestPool({ baseUrl: 'https://example.com', bearer: 'x' }),
         );
         expect(tools.length).toBeGreaterThanOrEqual(20);
         const missing: string[] = [];

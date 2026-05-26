@@ -16,7 +16,11 @@
  * @package WootsUp\BuilderMcp
  */
 
-defined('ABSPATH') || exit;
+// Cross-platform entry guard: WordPress defines ABSPATH; Joomla defines
+// _JEXEC. Either MUST be present — refuse direct web access.
+if (!\defined('ABSPATH') && !\defined('_JEXEC')) {
+    exit;
+}
 
 if (!function_exists('YOOtheme\\app')) {
     return;
@@ -38,4 +42,8 @@ if (file_exists($ytbMcpAutoload)) {
 // No extra hook wrapping needed.
 \YOOtheme\Path::setAlias('~ytb-mcp', __DIR__);
 
-\YOOtheme\app()->load(__DIR__ . '/modules/{core-util,core-storage,core-yootheme,core-auth,builder-state,builder-pages,builder-elements,builder-inspection,builder-source-binding,builder-cache,rest-bridge,platform-wordpress}/bootstrap.php');
+// Brace-glob module loader. Each module's bootstrap.php self-guards on
+// the runtime platform (WP `ABSPATH` vs Joomla `_JEXEC`) so loading both
+// platform-* modules is safe in either host — only the matching one
+// activates side-effects.
+\YOOtheme\app()->load(__DIR__ . '/modules/{core-util,core-storage,core-yootheme,core-auth,builder-state,builder-pages,builder-elements,builder-inspection,builder-source-binding,builder-cache,rest-bridge,platform-wordpress,platform-joomla}/bootstrap.php');

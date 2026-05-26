@@ -1,0 +1,8 @@
+# Build artifacts — populated by yt-builder-mcp/scripts/build-joomla-package.php
+# from the canonical location at:
+#   yt-builder-mcp/src/modules/platform-joomla/src/Storage/sql/
+# See README.md in this directory for the rationale. Audit-A1 F-001.
+install.mysql.sql
+install.postgresql.sql
+uninstall.mysql.sql
+uninstall.postgresql.sql

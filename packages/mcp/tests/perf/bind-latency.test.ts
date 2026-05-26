@@ -20,18 +20,20 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
 import { buildSourcesTools } from '../../src/tools/sources.js';
+import { makeTestPool } from '../helpers/test-pool.js';
 
 const SIMULATED_LATENCY_MS = 5;
 const RUNS = 11; // odd → simple median
 
-function delayedClient(): RestClient {
-    return new RestClient({
+function delayedClient(): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL) => {
             const url = typeof input === 'string' ? input : input.toString();
             await new Promise((resolve) => setTimeout(resolve, SIMULATED_LATENCY_MS));

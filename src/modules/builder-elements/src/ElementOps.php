@@ -24,11 +24,11 @@ namespace WootsUp\BuilderMcp\Elements;
 
 use WootsUp\BuilderMcp\SourceBinding\BindingSerializer;
 use WootsUp\BuilderMcp\State\JsonPointer;
-use WootsUp\BuilderMcp\State\LayoutReader;
+use WootsUp\BuilderMcp\State\LayoutReaderInterface;
 
 final class ElementOps
 {
-    public function __construct(private readonly LayoutReader $reader)
+    public function __construct(private readonly LayoutReaderInterface $reader)
     {
     }
 

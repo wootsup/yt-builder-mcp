@@ -78,6 +78,21 @@ export interface ToolDefinition<TSchema extends ZodRawShape = ZodRawShape> {
     readonly outputSchema?: z.ZodTypeAny;
     readonly annotations: ToolAnnotations;
     readonly handler: ToolHandler<TSchema>;
+    /**
+     * F-203 follow-up (Audit 2026-05-26 reviewer Gap 2): optional refined
+     * `ZodObject` representation of the input shape. When present,
+     * `registerToolOn` forwards THIS to the SDK in place of the raw
+     * `inputSchema` shape — so a top-level `.refine()` / `.superRefine()`
+     * is honoured by the SDK's pre-handler validation and a violation
+     * surfaces as a JSON-RPC `-32602 InvalidParams` envelope BEFORE the
+     * handler runs.
+     *
+     * The handler signature is still derived from `inputSchema: TSchema`
+     * (the raw shape) so the per-handler arg type stays inferred and
+     * stable. The refined object MUST be built from the SAME shape — any
+     * drift will compile-fail on the handler's argument typing.
+     */
+    readonly inputObjectSchema?: z.ZodTypeAny;
 }
 
 /**

@@ -43,7 +43,15 @@ export type {
     WriteResult,
 };
 
-const SERVER_KEY = 'yootheme-builder';
+// 1.0.2 Wave-R Part 2: renamed `yootheme-builder` → `yt-builder-mcp`
+// to match the package slug + REST namespace + GitHub repo + skill
+// folder. Pre-1.0.1 installs (alpha-tester only, per Thomas 2026-05-23)
+// would land their server under the old key; no migration logic is
+// shipped because there were no production installs to migrate. If
+// someone re-runs setup they'll get a fresh `yt-builder-mcp` entry +
+// the legacy `yootheme-builder` entry stays dormant (harmless, points
+// at the same npm package).
+const SERVER_KEY = 'yt-builder-mcp';
 
 /**
  * Run the interactive setup wizard. Returns a process exit-code so the
@@ -144,10 +152,17 @@ export async function runWizard(
     }
 
     // 4. Write configs. Track previous content for rollback.
+    //
+    // Wave 7 (2026-05-24): write BOTH env-var names so the config works
+    // with every release line — pre-Wave-7 servers only know
+    // YTB_MCP_WP_URL; Wave-7+ servers prefer YTB_MCP_SITE_URL but still
+    // honour the legacy alias. The wizard intentionally writes both so a
+    // wizard-rendered config never needs editing after an npm upgrade.
     const serverConfig: McpServerConfig = {
         command: 'npx',
         args: ['-y', SERVER_NAME],
         env: {
+            YTB_MCP_SITE_URL: answers.wpUrl,
             YTB_MCP_WP_URL: answers.wpUrl,
             YTB_MCP_BEARER_TOKEN: answers.bearer,
         },
@@ -205,6 +220,24 @@ export async function runWizard(
         }
     } else {
         log.warn('Skipping handshake because the Bearer probe failed.');
+    }
+
+    // W9 — persist the answers to the multi-site sites.json registry
+    // when the dispatcher wired a `persistSite` callback. We do this
+    // AFTER the handshake passes so the sites.json never contains a
+    // site that failed the probe. Optional hook so pre-W9 callers
+    // (and tests that drive the wizard without sites.json) skip the
+    // write transparently.
+    if (deps.persistSite !== undefined && writes.every((r) => r.ok)) {
+        try {
+            await deps.persistSite(answers);
+        } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            log.error(`Failed to persist site to sites.json: ${msg}`);
+            // Don't rollback the client configs — the env-var path
+            // still works; the sites.json file is an additive surface.
+            // Operator just sees the warning + can retry with `add-site`.
+        }
     }
 
     if (writes.every((r) => r.ok) && authOk) {

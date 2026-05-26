@@ -45,7 +45,7 @@ namespace WootsUp\BuilderMcp\Auth;
 
 use WootsUp\BuilderMcp\Util\SecurityLogger;
 
-final class KeyStore
+final class KeyStore implements KeyStoreInterface
 {
     /** wp_option key. */
     public const OPTION = 'ytb_mcp_keys';

@@ -1,0 +1,12 @@
+--
+-- yt-builder-mcp Joomla — uninstall schema (PostgreSQL)
+--
+-- INTENTIONALLY EMPTY: destructive statements are issued programmatically
+-- by InstallerScript on opt-in. See script.php::dropOwnedTables() — same
+-- contract as the MySQL twin (uninstall.mysql.sql). Default = data
+-- preserved; opt-in = programmatic removal via DatabaseInterface
+-- (driver-agnostic).
+--
+-- Do NOT add destructive statements here — Joomla's manifest-driven
+-- uninstall.sql hook would bypass the customer-data-protection gate.
+--

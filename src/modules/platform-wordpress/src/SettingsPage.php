@@ -81,6 +81,9 @@ final class SettingsPage
     /** Companion NPM package page. */
     private const NPM_URL = 'https://www.npmjs.com/package/@wootsup/yt-builder-mcp';
 
+    /** WootsUp product site — the prominent header/footer CTA (parity with Joomla HOME_URL). */
+    private const HOME_URL = 'https://wootsup.com';
+
     public function __construct(
         private readonly KeyService $keyService,
         private readonly KeyStore $keyStore,
@@ -131,12 +134,10 @@ final class SettingsPage
         $activeTab = $this->resolve_active_tab();
 
         echo '<div class="wrap">';
-        echo BrandAssets::renderInlineStyles(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static inline CSS
 
         $this->render_brand_header();
         $this->render_tabs_nav($activeTab);
 
-        echo '<div class="ytb-tab-panel">';
         switch ($activeTab) {
             case self::TAB_DIAGNOSTICS:
                 $this->render_diagnostics_tab();
@@ -149,7 +150,6 @@ final class SettingsPage
                 $this->render_keys_tab();
                 break;
         }
-        echo '</div>';
 
         $this->render_brand_footer();
         echo '</div>';
@@ -171,33 +171,54 @@ final class SettingsPage
     }
 
     /**
-     * Brand header: logo, title, version badge, tagline, CTA row.
+     * Page heading — native wp-admin `<h1>` (the WordPress convention) with
+     * the WootsUp logo SVG inline (the ONLY brand element kept) + a plain
+     * version `<span>` and a plain "unofficial" `<span>` (no custom-styled
+     * pills). A short tagline + the Documentation link sit below it.
+     *
+     * W11-T2 (2026-05-24): the former `.ytb-brand-header` card + custom badge
+     * + brand CTA colours were dropped so the page looks native to wp-admin.
+     * Mirrors the Joomla-side W11 native heading for cross-platform parity.
      */
     private function render_brand_header(): void
     {
         $version = defined('YTB_MCP_VERSION') ? (string) \YTB_MCP_VERSION : 'dev';
 
-        echo '<div class="ytb-brand-header">';
-        echo '<div class="ytb-brand-header__mark">' . BrandAssets::renderLogo(48) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG
-        echo '<div class="ytb-brand-header__body">';
-        echo '<h1 class="ytb-brand-header__title">';
+        echo '<h1 class="wp-heading-inline">';
+        echo '<span style="vertical-align:middle;margin-right:8px;">' . BrandAssets::renderLogo(28) . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG
         echo \esc_html__('YT Builder MCP for YOOtheme Pro', 'yt-builder-mcp');
-        echo ' <span class="ytb-version-badge">v' . \esc_html($version) . '</span>';
-        echo ' <span class="ytb-unofficial-badge" title="' . \esc_attr__('Independent third-party plugin. Not affiliated with or endorsed by YOOtheme GmbH.', 'yt-builder-mcp') . '">' . \esc_html__('unofficial', 'yt-builder-mcp') . '</span>';
+        echo ' <span style="font-weight:400;color:#646970;font-size:0.6em;vertical-align:middle;">v' . \esc_html($version) . '</span>';
+        echo ' <span style="font-weight:400;color:#646970;font-size:0.5em;text-transform:uppercase;letter-spacing:0.4px;vertical-align:middle;" title="' . \esc_attr__('Independent third-party plugin. Not affiliated with or endorsed by YOOtheme GmbH.', 'yt-builder-mcp') . '">' . \esc_html__('unofficial', 'yt-builder-mcp') . '</span>';
         echo '</h1>';
-        echo '<p class="ytb-brand-header__tagline">';
+        echo '<p class="description" style="margin:6px 0 0;">';
         echo \esc_html__('Let Claude, Cursor and other AI assistants edit your YOOtheme Pro pages.', 'yt-builder-mcp');
         echo '</p>';
-        echo '<div class="ytb-brand-header__ctas">';
-        echo '<a class="button ytb-brand-cta-primary" href="' . \esc_url(\add_query_arg(['page' => self::SLUG], \admin_url('admin.php'))) . '">';
-        echo \esc_html__('Generate Key', 'yt-builder-mcp');
+
+        $this->render_header_cta_row();
+    }
+
+    /**
+     * Header CTA row — native wp-admin buttons. "Generate Key" deep-links to
+     * the Keys tab + scrolls to the generate form; "Documentation" is a plain
+     * secondary `.button`; "wootsup.com" is the prominent primary CTA to the
+     * product site (the only link to the product home anywhere on the surface).
+     *
+     * W11-T6 (2026-05-24): the native redesign dropped the original brand CTA
+     * row; this restores it with native components + adds the prominent
+     * product-site link. Mirrors the Joomla-side header CTA row for parity.
+     */
+    private function render_header_cta_row(): void
+    {
+        $keysUrl = \add_query_arg(['page' => self::SLUG], \admin_url('admin.php')) . '#ytb-mcp-generate';
+
+        echo '<p style="margin:12px 0 4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">';
+        echo '<a class="button button-primary" href="' . \esc_url($keysUrl) . '">' . \esc_html__('Generate Key', 'yt-builder-mcp') . '</a>';
+        echo '<a class="button" href="' . \esc_url(self::DOCS_URL) . '" target="_blank" rel="noopener noreferrer">' . \esc_html__('Documentation', 'yt-builder-mcp') . '</a>';
+        echo '<a class="button button-primary" href="' . \esc_url(self::HOME_URL) . '" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;">';
+        echo '<span class="dashicons dashicons-external" aria-hidden="true"></span>';
+        echo \esc_html__('wootsup.com', 'yt-builder-mcp');
         echo '</a>';
-        echo '<a class="button button-secondary" href="' . \esc_url(self::DOCS_URL) . '" target="_blank" rel="noopener noreferrer">';
-        echo \esc_html__('Documentation', 'yt-builder-mcp');
-        echo '</a>';
-        echo '</div>';
-        echo '</div>';
-        echo '</div>';
+        echo '</p>';
     }
 
     /**
@@ -412,7 +433,7 @@ final class SettingsPage
 
     private function render_form(): void
     {
-        echo '<h3>' . \esc_html__('Generate New Key', 'yt-builder-mcp') . '</h3>';
+        echo '<h3 id="ytb-mcp-generate">' . \esc_html__('Generate New Key', 'yt-builder-mcp') . '</h3>';
         echo '<form method="post" action="' . \esc_url(\admin_url('admin-post.php')) . '">';
         \wp_nonce_field('ytb_mcp_generate_key');
         echo '<input type="hidden" name="action" value="ytb_mcp_generate_key" />';
@@ -437,7 +458,7 @@ final class SettingsPage
         echo '</select></td></tr>';
 
         echo '</tbody></table>';
-        \submit_button(\__('Generate Key', 'yt-builder-mcp'), 'primary ytb-brand-cta-primary');
+        \submit_button(\__('Generate Key', 'yt-builder-mcp'), 'primary');
         echo '</form>';
     }
 
@@ -575,62 +596,56 @@ final class SettingsPage
         echo '<span class="dashicons dashicons-clipboard" style="vertical-align:text-bottom;margin-right:6px;" aria-hidden="true"></span>';
         echo \esc_html__('Copy diagnostics as Markdown', 'yt-builder-mcp');
         echo '</button>';
-        echo ' <span id="ytb-mcp-copy-diagnostics-status" aria-live="polite" style="margin-left:10px;color:#46b450;font-weight:600;"></span>';
+        echo ' <span id="ytb-mcp-copy-diagnostics-status" aria-live="polite" style="margin-left:10px;font-weight:600;"></span>';
         echo '</p>';
         $this->print_copy_diagnostics_script();
 
-        echo '<div class="ytb-diag-grid">';
-
-        echo '<div class="ytb-diag-card">';
-        echo '<h3>' . \esc_html__('Versions', 'yt-builder-mcp') . '</h3>';
-        echo '<dl>';
-        echo '<dt>' . \esc_html__('Plugin', 'yt-builder-mcp') . '</dt>';
-        echo '<dd>' . \esc_html($pluginVersion) . '</dd>';
-        echo '<dt>' . \esc_html__('YOOtheme Pro', 'yt-builder-mcp') . '</dt>';
-        echo '<dd>' . \esc_html($ytVersion ?? '—') . '</dd>';
-        echo '<dt>' . \esc_html__('WordPress', 'yt-builder-mcp') . '</dt>';
-        echo '<dd>' . \esc_html($wpVersion ?? '—') . '</dd>';
-        echo '<dt>' . \esc_html__('PHP', 'yt-builder-mcp') . '</dt>';
-        echo '<dd>' . \esc_html(PHP_VERSION) . '</dd>';
-        echo '<dt>' . \esc_html__('Schema', 'yt-builder-mcp') . '</dt>';
-        echo '<dd>' . \esc_html((string) $schemaVersion) . '</dd>';
-        echo '</dl>';
+        // Native wp-admin `.card` panels, each wrapping a `.widefat striped`
+        // key/value table. No custom layout CSS — `.card` is a core wp-admin
+        // component and floats side-by-side at admin widths.
+        echo '<div class="card" style="max-width:420px;">';
+        echo '<h2 class="title">' . \esc_html__('Versions', 'yt-builder-mcp') . '</h2>';
+        echo '<table class="widefat striped"><tbody>';
+        echo '<tr><th>' . \esc_html__('Plugin', 'yt-builder-mcp') . '</th><td><code>' . \esc_html($pluginVersion) . '</code></td></tr>';
+        echo '<tr><th>' . \esc_html__('YOOtheme Pro', 'yt-builder-mcp') . '</th><td><code>' . \esc_html($ytVersion ?? '—') . '</code></td></tr>';
+        echo '<tr><th>' . \esc_html__('WordPress', 'yt-builder-mcp') . '</th><td><code>' . \esc_html($wpVersion ?? '—') . '</code></td></tr>';
+        echo '<tr><th>' . \esc_html__('PHP', 'yt-builder-mcp') . '</th><td><code>' . \esc_html(PHP_VERSION) . '</code></td></tr>';
+        echo '<tr><th>' . \esc_html__('Schema', 'yt-builder-mcp') . '</th><td><code>' . \esc_html((string) $schemaVersion) . '</code></td></tr>';
+        echo '</tbody></table>';
         echo '</div>';
 
-        echo '<div class="ytb-diag-card">';
-        echo '<h3>' . \esc_html__('Security', 'yt-builder-mcp') . '</h3>';
-        echo '<dl>';
-        echo '<dt>' . \esc_html__('Signing secret', 'yt-builder-mcp') . '</dt>';
-        echo '<dd>' . ($signingSecretPresent
+        echo '<div class="card" style="max-width:420px;">';
+        echo '<h2 class="title">' . \esc_html__('Security', 'yt-builder-mcp') . '</h2>';
+        echo '<table class="widefat striped"><tbody>';
+        echo '<tr><th>' . \esc_html__('Signing secret', 'yt-builder-mcp') . '</th><td>' . ($signingSecretPresent
             ? \esc_html__('present (encrypted at rest)', 'yt-builder-mcp')
-            : \esc_html__('missing — regenerate on next key issue', 'yt-builder-mcp')) . '</dd>';
-        echo '<dt>' . \esc_html__('Bearer keys', 'yt-builder-mcp') . '</dt>';
-        echo '<dd>' . \esc_html((string) count($this->keyStore->list())) . '</dd>';
-        echo '</dl>';
+            : \esc_html__('missing — regenerate on next key issue', 'yt-builder-mcp')) . '</td></tr>';
+        echo '<tr><th>' . \esc_html__('Bearer keys', 'yt-builder-mcp') . '</th><td>' . \esc_html((string) count($this->keyStore->list())) . '</td></tr>';
+        echo '</tbody></table>';
         echo '</div>';
 
-        echo '<div class="ytb-diag-card">';
-        echo '<h3>' . \esc_html__('REST surface', 'yt-builder-mcp') . '</h3>';
-        echo '<dl>';
-        echo '<dt>' . \esc_html__('Endpoints', 'yt-builder-mcp') . '</dt>';
-        echo '<dd>' . \esc_html((string) count($endpoints)) . '</dd>';
+        echo '<div class="card" style="max-width:420px;">';
+        echo '<h2 class="title">' . \esc_html__('REST surface', 'yt-builder-mcp') . '</h2>';
+        echo '<table class="widefat striped"><tbody>';
+        echo '<tr><th>' . \esc_html__('Endpoints', 'yt-builder-mcp') . '</th><td>' . \esc_html((string) count($endpoints)) . '</td></tr>';
         if ($endpoints !== []) {
-            echo '<dt>' . \esc_html__('Probe URL', 'yt-builder-mcp') . '</dt>';
             $healthUrl = \rest_url('yt-builder-mcp/v1/health');
-            echo '<dd><a href="' . \esc_url($healthUrl) . '" target="_blank" rel="noopener noreferrer">' . \esc_html($healthUrl) . '</a></dd>';
+            $identityUrl = \rest_url('yt-builder-mcp/v1/identity');
+            echo '<tr><th>' . \esc_html__('Probe URL', 'yt-builder-mcp') . '</th><td><a href="' . \esc_url($healthUrl) . '" target="_blank" rel="noopener noreferrer">' . \esc_html($healthUrl) . '</a></td></tr>';
+            // Parity with the Joomla Diagnostics tab, which surfaces both the
+            // health probe + the identity endpoint.
+            echo '<tr><th>' . \esc_html__('Identity URL', 'yt-builder-mcp') . '</th><td><a href="' . \esc_url($identityUrl) . '" target="_blank" rel="noopener noreferrer">' . \esc_html($identityUrl) . '</a></td></tr>';
         }
-        echo '</dl>';
-        echo '</div>';
-
+        echo '</tbody></table>';
         echo '</div>';
 
         if ($endpoints !== []) {
             echo '<h3 style="margin-top:24px;">' . \esc_html__('Registered REST endpoints', 'yt-builder-mcp') . '</h3>';
-            echo '<ul style="font-family:Menlo,Consolas,monospace;font-size:13px;">';
+            echo '<table class="widefat striped"><tbody>';
             foreach ($endpoints as $endpoint) {
-                echo '<li>' . \esc_html($endpoint) . '</li>';
+                echo '<tr><td><code>' . \esc_html($endpoint) . '</code></td></tr>';
             }
-            echo '</ul>';
+            echo '</tbody></table>';
         }
     }
 
@@ -650,11 +665,11 @@ final class SettingsPage
 
         echo '<h3>' . \esc_html__('Connect from your AI assistant', 'yt-builder-mcp') . '</h3>';
         echo '<p>' . \esc_html__('Run the setup wizard on the same machine as your AI client. It prompts for the site URL, the Bearer key you generated on the Keys tab, and the clients it should configure:', 'yt-builder-mcp') . '</p>';
-        echo '<code class="ytb-about-cmd">npx -y @wootsup/yt-builder-mcp setup</code>';
+        echo '<p><code>npx -y @wootsup/yt-builder-mcp setup</code></p>';
 
         echo '<h3>' . \esc_html__('Supported AI clients', 'yt-builder-mcp') . '</h3>';
-        echo '<p style="color:#666;font-size:13px;margin:0 0 8px;">' . \esc_html__('The setup wizard auto-configures all 9 clients below. Bearer-token + site URL are written to each client\'s native MCP-config file.', 'yt-builder-mcp') . '</p>';
-        echo '<ul class="ytb-about-clients">';
+        echo '<p class="description">' . \esc_html__('The setup wizard auto-configures all 9 clients below. Bearer-token + site URL are written to each client\'s native MCP-config file.', 'yt-builder-mcp') . '</p>';
+        echo '<ul class="ul-disc">';
         foreach ([
             'Claude Desktop',
             'Claude Code',
@@ -685,17 +700,23 @@ final class SettingsPage
     }
 
     /**
-     * I8: footer panel with brand lock-up + docs / issues / security links.
+     * Footer brand lock-up + docs / issues / security links.
+     *
+     * W11-T2: native wp-admin footer — a top divider + muted `.description`
+     * text. The only brand element is the small logo SVG. No custom colour
+     * CSS (mirrors the Joomla `border-top text-muted` footer).
      */
     private function render_brand_footer(): void
     {
-        echo '<div class="ytb-brand-footer">';
-        echo '<div class="ytb-brand-footer__mark">' . BrandAssets::renderLogo(20) . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG
-        echo '<div class="ytb-brand-footer__copy">';
+        echo '<hr style="margin-top:32px;">';
+        echo '<p class="description" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">';
+        echo '<span>' . BrandAssets::renderLogo(18) . '</span>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG
+        echo '<span>';
         echo \wp_kses(
             \sprintf(
-                /* translators: 1: docs link, 2: issues link, 3: security mailto link */
-                \__('&copy; WootsUp &mdash; A getimo productions company &middot; <a href="%1$s" target="_blank" rel="noopener noreferrer">Documentation</a> &middot; <a href="%2$s" target="_blank" rel="noopener noreferrer">Report an issue</a> &middot; <a href="%3$s">Security disclosures</a>', 'yt-builder-mcp'),
+                /* translators: 1: product-site link, 2: docs link, 3: issues link, 4: security mailto link */
+                \__('&copy; WootsUp &mdash; A getimo productions company &middot; <a href="%1$s" target="_blank" rel="noopener noreferrer">wootsup.com</a> &middot; <a href="%2$s" target="_blank" rel="noopener noreferrer">Documentation</a> &middot; <a href="%3$s" target="_blank" rel="noopener noreferrer">Report an issue</a> &middot; <a href="%4$s">Security disclosures</a>', 'yt-builder-mcp'),
+                self::HOME_URL,
                 self::DOCS_URL,
                 'https://github.com/wootsup/yt-builder-mcp/issues',
                 'mailto:security@wootsup.com',
@@ -708,8 +729,8 @@ final class SettingsPage
                 ],
             ],
         );
-        echo '</div>';
-        echo '</div>';
+        echo '</span>';
+        echo '</p>';
     }
 
     /**
@@ -738,42 +759,56 @@ final class SettingsPage
 
         $dxtUrl = \plugins_url('assets/yt-builder-mcp.dxt', \YTB_MCP_FILE);
 
-        echo '<div class="notice notice-success ytb-reveal" role="alert" aria-live="polite" style="padding:18px 20px;">';
+        // Native wp-admin `.card` (NOT a `.notice notice-success`). Parity with
+        // the Joomla reveal box, which had to drop `.alert.alert-success`
+        // because Atum recoloured contained anchors/buttons. A `.card` keeps the
+        // contained `.button-hero .button-primary` download CTA rendering
+        // natively (white-on-blue). The "ready" affirmation lives in a green
+        // dashicon + heading instead of the notice tint.
+        echo '<div class="card ytb-reveal" role="status" aria-live="polite" style="max-width:none;padding:14px 16px;">';
 
-        // Lead — one short line.
-        echo '<h3 style="margin:0 0 4px;font-size:16px;color:#111;">' . \esc_html__('Your key is ready', 'yt-builder-mcp') . '</h3>';
-        echo '<p style="margin:0 0 18px;color:#555;font-size:13px;">' . \esc_html__('Connect Claude Desktop in two clicks. Other AI clients shown below.', 'yt-builder-mcp') . '</p>';
+        // Lead — one short line (native heading + success dashicon, no custom colour).
+        echo '<h3 style="margin:0 0 4px;display:flex;align-items:center;gap:6px;">';
+        echo '<span class="dashicons dashicons-yes-alt" style="color:#46b450;" aria-hidden="true"></span>';
+        echo \esc_html__('Your key is ready', 'yt-builder-mcp');
+        echo '</h3>';
+        echo '<p class="description" style="margin:0 0 16px;">' . \esc_html__('Connect Claude Desktop in two clicks. Other AI clients shown below.', 'yt-builder-mcp') . '</p>';
 
-        // Primary CTA — big, single, obvious.
-        echo '<div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">';
-        echo '<a class="button button-hero ytb-brand-cta-primary" href="' . \esc_url($dxtUrl) . '" download style="padding:10px 22px;font-size:15px;height:auto;line-height:1.3;">';
-        echo '<span style="display:inline-block;vertical-align:middle;margin-right:6px;">↓</span>';
+        // Primary CTA — native `.button-hero .button-primary`.
+        echo '<p style="margin:0 0 16px;">';
+        echo '<a class="button button-hero button-primary" href="' . \esc_url($dxtUrl) . '" download style="display:inline-flex;align-items:center;gap:4px;">';
+        echo '<span class="dashicons dashicons-download" aria-hidden="true"></span>';
         echo \esc_html__('Download for Claude Desktop', 'yt-builder-mcp');
         echo '</a>';
-        echo '<span style="color:#666;font-size:12px;">' . \esc_html__('Double-click the file after download. Claude asks for the two values below.', 'yt-builder-mcp') . '</span>';
-        echo '</div>';
+        echo ' <span class="description">' . \esc_html__('Double-click the file after download. Claude asks for the two values below.', 'yt-builder-mcp') . '</span>';
+        echo '</p>';
 
-        // Site URL + Token — labeled fields, no code-block-walls.
-        echo '<div style="display:grid;grid-template-columns:90px 1fr auto;gap:8px 12px;align-items:center;background:#f7f7f7;padding:12px 14px;border-radius:4px;margin-bottom:14px;">';
+        // Site URL + Token — labeled native inputs in a native `.form-table`.
+        echo '<table class="form-table" role="presentation"><tbody>';
 
         // URL row
-        echo '<label style="font-weight:600;font-size:13px;color:#333;">' . \esc_html__('Site URL', 'yt-builder-mcp') . '</label>';
-        echo '<input type="text" id="ytb-mcp-site-url" readonly value="' . \esc_attr($siteUrl) . '" style="font-family:Menlo,Consolas,monospace;font-size:13px;padding:6px 8px;border:1px solid #ddd;background:#fff;border-radius:3px;width:100%;">';
+        echo '<tr><th scope="row"><label for="ytb-mcp-site-url">' . \esc_html__('Site URL', 'yt-builder-mcp') . '</label></th><td>';
+        echo '<input type="text" id="ytb-mcp-site-url" class="regular-text code" readonly value="' . \esc_attr($siteUrl) . '"> ';
         echo '<button type="button" class="button" data-ytb-copy="ytb-mcp-site-url" data-ytb-copy-status="ytb-mcp-copy-status-url">' . \esc_html__('Copy', 'yt-builder-mcp') . '</button>';
+        echo ' <span id="ytb-mcp-copy-status-url" aria-live="polite"></span>';
+        echo '</td></tr>';
 
         // Token row
-        echo '<label style="font-weight:600;font-size:13px;color:#333;">' . \esc_html__('Bearer token', 'yt-builder-mcp') . '</label>';
-        echo '<input type="text" id="ytb-mcp-revealed-token" readonly value="' . \esc_attr($token) . '" style="font-family:Menlo,Consolas,monospace;font-size:13px;padding:6px 8px;border:1px solid #ddd;background:#fff;border-radius:3px;width:100%;">';
-        echo '<button type="button" class="button button-primary" data-ytb-copy="ytb-mcp-revealed-token" data-ytb-copy-status="ytb-mcp-copy-status-token">' . \esc_html__('Copy', 'yt-builder-mcp') . '</button>';
+        echo '<tr><th scope="row"><label for="ytb-mcp-revealed-token">' . \esc_html__('Bearer token', 'yt-builder-mcp') . '</label></th><td>';
+        echo '<input type="text" id="ytb-mcp-revealed-token" class="regular-text code" readonly value="' . \esc_attr($token) . '"> ';
+        // Uniform copy-button style — both Site URL + Bearer token use the same
+        // plain `.button` (parity with the Joomla outline-secondary copy buttons).
+        echo '<button type="button" class="button" data-ytb-copy="ytb-mcp-revealed-token" data-ytb-copy-status="ytb-mcp-copy-status-token">' . \esc_html__('Copy', 'yt-builder-mcp') . '</button>';
+        echo ' <span id="ytb-mcp-copy-status-token" aria-live="polite"></span>';
+        echo '</td></tr>';
 
-        echo '</div>';
+        echo '</tbody></table>';
 
-        // Save warning + copy-status (single line, low-key).
-        echo '<p style="margin:0 0 6px;color:#7a5b00;font-size:12px;">';
-        echo '<span style="font-weight:600;">⚠ ' . \esc_html__('Save the token now', 'yt-builder-mcp') . '</span>';
+        // Save warning — native `dashicons-warning` + muted `.description`.
+        echo '<p class="description" style="margin:0 0 6px;">';
+        echo '<span class="dashicons dashicons-warning" style="vertical-align:text-bottom;" aria-hidden="true"></span> ';
+        echo '<strong>' . \esc_html__('Save the token now', 'yt-builder-mcp') . '</strong>';
         echo ' — ' . \esc_html__('it will not be shown again after you leave this page.', 'yt-builder-mcp');
-        echo ' <span id="ytb-mcp-copy-status-url" aria-live="polite" style="color:#46b450;"></span>';
-        echo ' <span id="ytb-mcp-copy-status-token" aria-live="polite" style="color:#46b450;"></span>';
         echo '</p>';
 
         // Advanced — collapsed by default. Hides AI prompt + manual npx.
@@ -792,29 +827,29 @@ final class SettingsPage
      */
     private function render_advanced_setup_section(string $pickupUrl, string $pickupNonce, string $siteUrl): void
     {
-        echo '<details style="margin-top:10px;border-top:1px solid #e0e0e0;padding-top:10px;">';
-        echo '<summary style="cursor:pointer;font-size:13px;color:#0073aa;padding:4px 0;">';
+        echo '<details style="margin-top:10px;">';
+        echo '<summary style="cursor:pointer;padding:4px 0;">';
         echo \esc_html__('Using Cursor, Zed, or another AI client?', 'yt-builder-mcp');
         echo '</summary>';
-        echo '<div style="padding:14px 0 4px;color:#444;font-size:13px;">';
+        echo '<div style="padding:12px 0 4px;">';
 
-        // Manual npx — always available.
-        echo '<p style="margin:0 0 8px;"><strong>' . \esc_html__('Manual setup (terminal):', 'yt-builder-mcp') . '</strong></p>';
-        echo '<pre style="background:#0b3534;color:#e6f7f6;padding:10px 12px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:12px;overflow-x:auto;margin:0 0 12px;">npx -y @wootsup/yt-builder-mcp setup</pre>';
-        echo '<p style="margin:0 0 14px;color:#666;font-size:12px;">' . \esc_html__('The wizard will ask for your site URL, Bearer token, and which AI client to configure. Paste the values from above.', 'yt-builder-mcp') . '</p>';
+        // Manual npx — always available. Native `<pre class="code">` block.
+        echo '<p style="margin:0 0 6px;"><strong>' . \esc_html__('Manual setup (terminal):', 'yt-builder-mcp') . '</strong></p>';
+        echo '<pre class="code" style="margin:0 0 10px;overflow-x:auto;">npx -y @wootsup/yt-builder-mcp setup</pre>';
+        echo '<p class="description" style="margin:0 0 14px;">' . \esc_html__('The wizard will ask for your site URL, Bearer token, and which AI client to configure. Paste the values from above.', 'yt-builder-mcp') . '</p>';
 
         // AI-prompt pickup — only if alive.
         if ($pickupUrl !== '' && $pickupNonce !== '') {
             $aiPrompt = $this->build_ai_prompt($pickupUrl, $pickupNonce, $siteUrl);
-            echo '<p style="margin:0 0 8px;"><strong>' . \esc_html__('Or have your AI run the setup itself:', 'yt-builder-mcp') . '</strong> ';
-            echo '<span style="color:#888;font-size:11px;">' . \esc_html__('— expires in 5 minutes, IP-bound, one-shot', 'yt-builder-mcp') . '</span></p>';
-            echo '<pre id="ytb-mcp-ai-prompt" style="background:#0b3534;color:#e6f7f6;padding:10px 12px;border-radius:4px;font-family:Menlo,Consolas,monospace;font-size:12px;overflow-x:auto;white-space:pre-wrap;margin:0 0 8px;">' . \esc_html($aiPrompt) . '</pre>';
+            echo '<p style="margin:0 0 6px;"><strong>' . \esc_html__('Or have your AI run the setup itself:', 'yt-builder-mcp') . '</strong> ';
+            echo '<span class="description">' . \esc_html__('— expires in 5 minutes, IP-bound, one-shot', 'yt-builder-mcp') . '</span></p>';
+            echo '<pre id="ytb-mcp-ai-prompt" class="code" style="white-space:pre-wrap;overflow-x:auto;margin:0 0 8px;">' . \esc_html($aiPrompt) . '</pre>';
             echo '<p style="margin:0;">';
             echo '<button type="button" class="button" data-ytb-copy="ytb-mcp-ai-prompt" data-ytb-copy-status="ytb-mcp-copy-status-prompt">';
             echo \esc_html__('Copy prompt', 'yt-builder-mcp');
             echo '</button> ';
-            echo '<span id="ytb-mcp-copy-status-prompt" aria-live="polite" style="margin-left:0.5em;color:#46b450;font-size:12px;"></span>';
-            echo ' <span style="color:#888;font-size:11px;margin-left:8px;">' . \esc_html__('Some AI clients may refuse to auto-run external scripts — that\'s expected, use manual setup then.', 'yt-builder-mcp') . '</span>';
+            echo '<span id="ytb-mcp-copy-status-prompt" aria-live="polite"></span>';
+            echo ' <span class="description">' . \esc_html__('Some AI clients may refuse to auto-run external scripts — that\'s expected, use manual setup then.', 'yt-builder-mcp') . '</span>';
             echo '</p>';
         }
 

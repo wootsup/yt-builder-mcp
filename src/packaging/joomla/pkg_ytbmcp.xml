@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension type="package" version="5.0" method="upgrade">
+    <name>YT Builder MCP for YOOtheme Pro (unofficial)</name>
+    <author>WootsUp</author>
+    <creationDate>2026-05-24</creationDate>
+    <copyright>(C) 2026 getimo productions</copyright>
+    <license>GPL-2.0-or-later</license>
+    <authorEmail>hello@wootsup.com</authorEmail>
+    <authorUrl>https://wootsup.com</authorUrl>
+    <version>1.1.0</version>
+    <description>YT_BUILDER_MCP_PACKAGE_XML_DESCRIPTION</description>
+    <packagename>ytbmcp</packagename>
+
+    <!-- Prevent customers from individually uninstalling the sub-extensions
+         (cookbook §1.2.12 / api-mapper pattern). The package owns lifecycle. -->
+    <blockChildUninstall>true</blockChildUninstall>
+
+    <scriptfile>script.php</scriptfile>
+
+    <files folder="extensions">
+        <file type="plugin" id="ytbmcp" group="system">plg_system_ytbmcp.zip</file>
+        <!-- webservices-group plugin: owns onBeforeApiRoute route registration.
+             REQUIRED — ApiApplication only imports webservices plugins before
+             dispatching onBeforeApiRoute, so a system plugin cannot register
+             REST routes (Wave 7 deploy-fix). -->
+        <file type="plugin" id="ytbmcp" group="webservices">plg_webservices_ytbmcp.zip</file>
+        <file type="component" id="com_ytbmcp">com_ytbmcp.zip</file>
+    </files>
+
+    <updateservers>
+        <server type="extension" name="YT Builder MCP Updates">
+            https://updates.wootsup.com/yt-builder-mcp/joomla/update.xml
+        </server>
+    </updateservers>
+</extension>

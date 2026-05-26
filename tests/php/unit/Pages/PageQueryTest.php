@@ -627,4 +627,108 @@ final class PageQueryTest extends TestCase
         $byId = array_column($query->list(), null, 'id');
         self::assertArrayNotHasKey('is_public_homepage', $byId['archiveId']);
     }
+
+    // -------------------------------------------------------------
+    // F-Frontend-URL (2026-05-25) — per-template public-URL hint.
+    // PageQuery delegates to FrontendUrlResolverInterface; the WP
+    // default impl is wired by the constructor. Each row must carry
+    // the three hint-keys (frontend_url, frontend_url_template,
+    // frontend_url_description) regardless of template-type so the
+    // MCP TS PAGES_LIST_OUTPUT_SCHEMA wire-shape stays stable.
+    // -------------------------------------------------------------
+
+    public function test_list_emits_frontend_url_hint_keys_for_every_row(): void
+    {
+        $GLOBALS['ytb_test_home_url'] = 'https://example.test';
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'fourOhFour' => [
+                    'name' => '404',
+                    'type' => 'error-404',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+                'searchTpl' => [
+                    'name' => 'Search',
+                    'type' => 'search',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+                'layoutTpl' => [
+                    'name' => 'Internal',
+                    'type' => 'layout',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+
+        $query = new PageQuery(new LayoutReader());
+        foreach ($query->list() as $entry) {
+            self::assertArrayHasKey('frontend_url', $entry, 'row missing frontend_url key');
+            self::assertArrayHasKey('frontend_url_template', $entry, 'row missing frontend_url_template key');
+            self::assertArrayHasKey('frontend_url_description', $entry, 'row missing frontend_url_description key');
+        }
+    }
+
+    public function test_list_emits_error_404_frontend_url_template(): void
+    {
+        $GLOBALS['ytb_test_home_url'] = 'https://example.test';
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'fourOhFour' => [
+                    'name' => '404',
+                    'type' => 'error-404',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        self::assertNull($byId['fourOhFour']['frontend_url']);
+        self::assertSame(
+            'https://example.test/<any-nonexistent-path>',
+            $byId['fourOhFour']['frontend_url_template'],
+        );
+        self::assertSame(
+            'Append any non-existent path to test.',
+            $byId['fourOhFour']['frontend_url_description'],
+        );
+    }
+
+    public function test_list_emits_search_frontend_url_template(): void
+    {
+        $GLOBALS['ytb_test_home_url'] = 'https://example.test';
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'searchTpl' => [
+                    'name' => 'Search Results',
+                    'type' => 'search',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        self::assertNull($byId['searchTpl']['frontend_url']);
+        self::assertSame('https://example.test/?s={query}', $byId['searchTpl']['frontend_url_template']);
+    }
+
+    public function test_list_emits_layout_internal_description(): void
+    {
+        $GLOBALS['ytb_test_options']['yootheme'] = [
+            'templates' => [
+                'layoutTpl' => [
+                    'name' => 'Internal',
+                    'type' => 'layout',
+                    'layout' => ['type' => 'layout', 'children' => []],
+                ],
+            ],
+        ];
+
+        $query = new PageQuery(new LayoutReader());
+        $byId = array_column($query->list(), null, 'id');
+        self::assertNull($byId['layoutTpl']['frontend_url']);
+        self::assertNull($byId['layoutTpl']['frontend_url_template']);
+        self::assertSame('Internal template — no public URL.', $byId['layoutTpl']['frontend_url_description']);
+    }
 }

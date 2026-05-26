@@ -5,28 +5,30 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it } from 'vitest';
 
-import { RestClient } from '../src/client.js';
+import type { ClientPool } from '../src/sites/client-pool.js';
 import { createServer } from '../src/server.js';
 import { buildAllTools } from '../src/tools/index.js';
+import { makeTestPool } from './helpers/test-pool.js';
 
-function makeClient(): RestClient {
-    return new RestClient({
+function makeClient(): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 'test',
+        bearer: 'test',
     });
 }
 
 describe('createServer', () => {
     it('returns an McpServer + the tool list', () => {
-        const { mcp, tools } = createServer({ client: makeClient() });
+        const { mcp, tools } = createServer({ pool: makeClient() });
         expect(mcp).toBeDefined();
         expect(tools.length).toBeGreaterThan(0);
     });
 
     it('registers at least 20 tools (design target ~28; baseline 21 in Wave 4)', () => {
-        const { tools } = createServer({ client: makeClient() });
+        const { tools } = createServer({ pool: makeClient() });
         expect(tools.length).toBeGreaterThanOrEqual(20);
     });
 

@@ -14,13 +14,20 @@ import type { DetailGroup, StatsResultOptions } from '@getimo/mcp-toolkit';
 
 export interface HealthPayload {
     plugin_version: string;
-    yootheme_version: string | null;
-    wp_version: string | null;
-    php_version: string;
-    storage_type: string;
-    storage_target: string;
     yootheme_loaded: boolean;
-    available_endpoints: string[];
+    // Platform-/tier-variable (Wave 7). The anonymous health payload omits
+    // everything but {plugin_version, status, yootheme_loaded}; the augmented
+    // payload is Bearer-gated. Joomla additionally uses `cms`/`cms_version`
+    // and emits NEITHER `wp_version` NOR `yootheme_version`. All such fields
+    // are optional so the shared formatter/schema work on WP and Joomla.
+    yootheme_version?: string | null;
+    wp_version?: string | null;
+    cms?: string;
+    cms_version?: string;
+    php_version?: string;
+    storage_type?: string;
+    storage_target?: string;
+    available_endpoints?: string[];
     // 1.0.1 — canonical WP URLs (optional in case an older PHP server
     // doesn't emit them; the response shape stays back-compatible).
     site_url?: string | null;
@@ -42,8 +49,11 @@ export function buildHealthDetail(payload: HealthPayload): {
     groups: DetailGroup[];
     title?: string;
 } {
-    const endpoints = payload.available_endpoints;
+    const endpoints = payload.available_endpoints ?? [];
     const endpointPreview = summarizeEndpoints(endpoints);
+    // Cross-platform CMS label: WP emits wp_version, Joomla emits cms/cms_version.
+    const cmsLabel = payload.cms === 'joomla' ? 'Joomla version' : 'CMS / WP version';
+    const cmsVersion = payload.wp_version ?? payload.cms_version ?? null;
 
     return {
         title: 'YT Builder MCP — Health',
@@ -66,25 +76,25 @@ export function buildHealthDetail(payload: HealthPayload): {
                     {
                         key: 'yootheme_version',
                         label: 'YOOtheme version',
-                        value: payload.yootheme_version,
+                        value: payload.yootheme_version ?? null,
                     },
                 ],
             },
             {
                 label: 'Host',
                 entries: [
-                    { key: 'wp_version', label: 'WordPress version', value: payload.wp_version },
-                    { key: 'php_version', label: 'PHP version', value: payload.php_version },
+                    { key: 'cms_version', label: cmsLabel, value: cmsVersion },
+                    { key: 'php_version', label: 'PHP version', value: payload.php_version ?? null },
                     {
                         key: 'storage_type',
                         label: 'Storage type',
-                        value: payload.storage_type,
+                        value: payload.storage_type ?? null,
                         format: 'badge',
                     },
                     {
                         key: 'storage_target',
                         label: 'Storage target',
-                        value: payload.storage_target,
+                        value: payload.storage_target ?? null,
                         format: 'code',
                         copyable: true,
                     },
@@ -138,18 +148,18 @@ export function buildHealthStats(payload: HealthPayload): StatsResultOptions {
             },
             {
                 key: 'wp_version',
-                label: 'WordPress version',
-                value: payload.wp_version ?? '—',
+                label: payload.cms === 'joomla' ? 'Joomla version' : 'WordPress version',
+                value: payload.wp_version ?? payload.cms_version ?? '—',
             },
             {
                 key: 'php_version',
                 label: 'PHP version',
-                value: payload.php_version,
+                value: payload.php_version ?? '—',
             },
             {
                 key: 'storage_type',
                 label: 'Storage type',
-                value: payload.storage_type,
+                value: payload.storage_type ?? '—',
             },
             {
                 key: 'yootheme_loaded',
@@ -159,7 +169,7 @@ export function buildHealthStats(payload: HealthPayload): StatsResultOptions {
             {
                 key: 'endpoint_count',
                 label: 'Endpoint count',
-                value: payload.available_endpoints.length,
+                value: (payload.available_endpoints ?? []).length,
                 format: 'number',
             },
         ],

@@ -19,16 +19,18 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../../src/client.js';
+import type { ClientPool } from '../../../src/sites/client-pool.js';
 import type { McpServerWithElicitation } from '../../../src/tools/elicitation.js';
 import { buildSourcesTools } from '../../../src/tools/sources.js';
+import { makeTestPool, stripSitePrefix } from '../../helpers/test-pool.js';
 
-function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): RestClient {
-    return new RestClient({
+function fakeClient(handler: (url: string, init: RequestInit) => Response | Promise<Response>): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url, init ?? {});
@@ -236,7 +238,7 @@ describe('element_bind_source — ambiguity resolution (Wave G.4.3)', () => {
         });
         expect(putCalled).toBe(false);
         expect(result.isError).toBe(true);
-        const parsed = JSON.parse(result.content[0]!.text) as { context: { code: string; candidates: Array<{ id: string }> }; hint: string };
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as { context: { code: string; candidates: Array<{ id: string }> }; hint: string };
         expect(parsed.context.code).toBe('source_ambiguous');
         expect(parsed.context.candidates).toHaveLength(2);
         expect(parsed.hint).toContain('source_id');

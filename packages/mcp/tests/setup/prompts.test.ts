@@ -110,7 +110,7 @@ describe('defaultPrompt — happy path', () => {
             expect(ans.wpUrl).toBe('https://example.com');
             expect(ans.bearer).toBe('a-bearer-key-that-is-long-enough');
             expect(ans.selectedClients).toEqual(['claude-desktop']);
-            expect(ans.profileName).toBe('default');
+            expect(ans.siteId).toBe('default');
         }
     });
 });
@@ -190,7 +190,7 @@ describe('defaultPrompt — text validate (profile-name = call 1)', () => {
         ]);
         await defaultPrompt({ detected: SAMPLE_DETECTED });
         const results = queue.textValidateResults.get(1) as Array<string | undefined>;
-        expect(results[0]).toMatch(/Profile name is required/);
+        expect(results[0]).toMatch(/Site ID is required/);
         expect(results[1]).toMatch(/letters, digits, dashes, or underscores only/);
         expect(results[2]).toMatch(/letters, digits, dashes, or underscores only/);
         expect(results[3]).toBeUndefined();

@@ -25,6 +25,12 @@ const CLI_SUBCOMMANDS = new Set([
     'setup',
     'install-skill',
     'install',
+    // W9 multi-site CLI subcommands.
+    'add-site',
+    'list-sites',
+    'remove-site',
+    'set-default',
+    'test-site',
     'help',
     '--help',
     '-h',

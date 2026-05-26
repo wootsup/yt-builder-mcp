@@ -21,11 +21,13 @@ export interface WizardAnswers {
     /** IDs of clients the user wants wired up. */
     readonly selectedClients: readonly string[];
     /**
-     * Profile name (multi-site switching). Optional for back-compat with
+     * Site ID (multi-site registry key). Optional for back-compat with
      * non-interactive flag paths that don't ask for it; the wizard
-     * defaults missing/empty values to `'default'`.
+     * defaults missing/empty values to `'default'`. Renamed from
+     * `profileName` in W9 to align with the multi-site registry's
+     * `site_id` field (see `src/sites/schema.ts`).
      */
-    readonly profileName?: string;
+    readonly siteId?: string;
 }
 
 /**
@@ -165,4 +167,18 @@ export interface WizardDeps {
     fetchPickup?: (pickupUrl: string, nonce: string) => Promise<PickupResult>;
     /** Optional sink for human-facing status lines. */
     log?: (line: string) => void;
+    /**
+     * W9 — invoked after both the health + auth probes have produced a
+     * decision (continue / aborted) so the wizard can persist the
+     * answers to the multi-site sites.json registry. Implementations
+     * MUST be idempotent: the wizard calls this exactly once on a
+     * successful run, but the dispatcher's overall retry policy may
+     * re-run the wizard.
+     *
+     * On failure the implementation should throw — the wizard treats
+     * the failure as a write-failure equivalent (rollback + exit 4).
+     * Optional for back-compat: when missing the wizard skips the
+     * sites.json write entirely (pre-W9 single-site env-var flow).
+     */
+    persistSite?: (answers: WizardAnswers) => Promise<void>;
 }

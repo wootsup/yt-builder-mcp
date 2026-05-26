@@ -3,7 +3,7 @@
  * Plugin Name: YT Builder MCP for YOOtheme Pro (unofficial)
  * Plugin URI: https://github.com/wootsup/yt-builder-mcp
  * Description: Drive your page builder programmatically from Claude, Cursor, Codex, Gemini and 6 other MCP-capable AI assistants. Built for YOOtheme Pro® 4.0+. Independent third-party project, not affiliated with YOOtheme GmbH. Free, GPL-2.0-or-later.
- * Version: 1.0.1
+ * Version: 1.1.5
  * Author: WootsUp
  * Author URI: https://wootsup.com
  * License: GPL-2.0-or-later
@@ -11,6 +11,7 @@
  * Requires PHP: 8.2
  * Requires at least: 6.0
  * Tested up to: 6.7
+ * Update URI: https://updates.wootsup.com/yt-builder-mcp/
  * Text Domain: yt-builder-mcp
  * Domain Path: /languages
  *
@@ -26,7 +27,7 @@ if (defined('YTB_MCP_VERSION')) {
     return; // Already loaded.
 }
 
-define('YTB_MCP_VERSION', '1.0.1');
+define('YTB_MCP_VERSION', '1.1.5');
 define('YTB_MCP_FILE', __FILE__);
 define('YTB_MCP_DIR', __DIR__);
 define('YTB_MCP_MIN_YT_VERSION', '4.0');

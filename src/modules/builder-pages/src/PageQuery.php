@@ -27,17 +27,52 @@ namespace WootsUp\BuilderMcp\Pages;
 use WootsUp\BuilderMcp\Elements\TreeWalker;
 use WootsUp\BuilderMcp\SourceBinding\BindingSerializer;
 use WootsUp\BuilderMcp\State\JsonPointer;
-use WootsUp\BuilderMcp\State\LayoutReader;
+use WootsUp\BuilderMcp\State\LayoutReaderInterface;
 
 final class PageQuery
 {
-    private readonly PagesMetaStore $meta;
+    // Wave-7 deploy-fix: interface-typed so the Joomla controllers can inject
+    // JoomlaPagesMetaStore. Was the concrete WP PagesMetaStore — on Joomla the
+    // null-default fell back to `new PagesMetaStore()` → WP `get_option()`
+    // fatal on every /pages list.
+    private readonly PagesMetaStoreInterface $meta;
+    /**
+     * Audit-A1 F-004 (Wave 4 fix-round F3): the public-front-page hint
+     * lookup used to call `\get_option('show_on_front')` directly here.
+     * That was the last remaining WP-leak in a "pure-PHP" module —
+     * now extracted behind {@see PublicRootResolverInterface} so the
+     * Joomla adapter can supply its own resolver (default-menu-item
+     * walk via `Factory::getApplication()->getMenu()->getDefault()`).
+     *
+     * Default impl is {@see WordPressPublicRootResolver} so WP cold-
+     * paths get zero behavioural change.
+     */
+    private readonly PublicRootResolverInterface $publicRootResolver;
+    /**
+     * F-Frontend-URL (2026-05-25 customer-flow gap): per-template public
+     * URL resolver injected via DI so PageQuery stays platform-agnostic.
+     * Default is the WordPress impl ({@see WordPressFrontendUrlResolver});
+     * the Joomla controller swaps in
+     * {@see \WootsUp\BuilderMcp\Platform\Joomla\Pages\JoomlaFrontendUrlResolver}.
+     *
+     * Emitted as three fields per pages_list row — `frontend_url` (when
+     * a canonical permalink exists), `frontend_url_template` (pattern
+     * with placeholders when only a hint is meaningful), and
+     * `frontend_url_description` (short human instruction). Keys are
+     * always present so the wire-shape stays stable; null is the honest
+     * value when a key is irrelevant.
+     */
+    private readonly FrontendUrlResolverInterface $frontendUrlResolver;
 
     public function __construct(
-        private readonly LayoutReader $reader,
-        ?PagesMetaStore $meta = null,
+        private readonly LayoutReaderInterface $reader,
+        ?PagesMetaStoreInterface $meta = null,
+        ?PublicRootResolverInterface $publicRootResolver = null,
+        ?FrontendUrlResolverInterface $frontendUrlResolver = null,
     ) {
         $this->meta = $meta ?? new PagesMetaStore();
+        $this->publicRootResolver = $publicRootResolver ?? new WordPressPublicRootResolver();
+        $this->frontendUrlResolver = $frontendUrlResolver ?? new WordPressFrontendUrlResolver();
     }
 
     /**
@@ -57,7 +92,7 @@ final class PageQuery
      * are surfaced eagerly so the LLM-facing pages_list table is filled-in on
      * first call instead of forcing a follow-up page_get_layout per row.
      *
-     * @return list<array{id: string, name?: string, label?: string, title?: string, type: string, elements_count: int, modified_at: string|null, etag: string}>
+     * @return list<array{id: string, name?: string, label?: string, title?: string, type: string, elements_count: int, modified_at: string|null, etag: string, frontend_url: string|null, frontend_url_template: string|null, frontend_url_description: string|null}>
      */
     public function list(): array
     {
@@ -68,11 +103,13 @@ final class PageQuery
         $etag = $this->reader->etag();
         // 1.0.1 Wave-1.8 F-COLD-2 / F-COLD-16: every cold-agent run had
         // to heuristically pick the public front-page template from the
-        // list — 4/4 picked the archive-post template by guessing. Look
-        // up WP's show_on_front setting once and flag the canonical
-        // public-root template (archive-post when `posts`, otherwise
-        // unknown until we wire up the page-front lookup).
-        $publicRootHint = self::computePublicRootHint();
+        // list — 4/4 picked the archive-post template by guessing. The
+        // resolver looks up the platform's "what does `/` render?"
+        // setting (WP: `show_on_front`; Joomla: default-menu-item walk)
+        // and flags the canonical public-root template. Audit-A1 F-004
+        // (Wave 4 fix-round F3): platform lookup now lives behind
+        // {@see PublicRootResolverInterface} — no more get_option leak.
+        $publicRootHint = $this->publicRootResolver->resolveSiteFront();
         $out = [];
         foreach ($ids as $id) {
             $tpl = $this->reader->readTemplate($id);
@@ -136,34 +173,20 @@ final class PageQuery
                 $entry['is_public_homepage'] = true;
                 $entry['template_purpose'] = 'public_homepage';
             }
+            // F-Frontend-URL (2026-05-25): per-template public-URL hint.
+            // Delegates to the platform resolver — WP uses get_permalink/
+            // get_term_link/get_author_posts_url; Joomla uses
+            // RouteHelper::getArticleRoute() / getCategoryRoute() / etc.
+            // Three fields ALWAYS present so the MCP TS output-schema
+            // stays stable; null is the honest value when a key is
+            // irrelevant (e.g. layout-internal templates).
+            $url = $this->frontendUrlResolver->resolveFrontendUrl($entry);
+            $entry['frontend_url']             = $url['frontend_url'];
+            $entry['frontend_url_template']    = $url['frontend_url_template'];
+            $entry['frontend_url_description'] = $url['description'];
             $out[] = $entry;
         }
         return $out;
-    }
-
-    /**
-     * 1.0.1 Wave-1.8 F-COLD-2 / F-COLD-16: which YT template renders the
-     * public `/` URL? Default WP install has `show_on_front=posts` → the
-     * archive-post YT template is rendered. When `show_on_front=page`,
-     * the YT template assigned to the page_on_front WP page is used —
-     * but the assignment lookup lives YT-side and we don't have it
-     * cleanly accessible from PageQuery yet; return null in that case
-     * (caller falls back to old guess-by-name heuristic, no regression).
-     *
-     * Returns the YT `type` string the public-root template carries
-     * (e.g. `archive-post`), or null when unknown.
-     */
-    private static function computePublicRootHint(): ?string
-    {
-        if (!\function_exists('get_option')) {
-            return null;
-        }
-        $showOnFront = \get_option('show_on_front', 'posts');
-        if ($showOnFront === 'posts') {
-            return 'archive-post';
-        }
-        // `show_on_front === 'page'` path — defer to a follow-up wave.
-        return null;
     }
 
     /**

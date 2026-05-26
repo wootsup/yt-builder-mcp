@@ -49,7 +49,7 @@ describe('runCli — install-skill routing', () => {
         const install = vi.fn(async () => ({
             copied: true,
             markerAlreadyPresent: false,
-            skillTargetDir: '/home/me/.claude/skills/yootheme-builder',
+            skillTargetDir: '/home/me/.claude/skills/yt-builder-mcp',
             agentsFile: '/home/me/AGENTS.md',
         }));
         const code = await runCli(['install-skill'], {
@@ -60,7 +60,7 @@ describe('runCli — install-skill routing', () => {
         expect(code).toBe(0);
         expect(install).toHaveBeenCalledOnce();
         expect(streams.out.join('\n')).toContain('skill installed');
-        expect(streams.out.join('\n')).toContain('yootheme-builder');
+        expect(streams.out.join('\n')).toContain('yt-builder-mcp');
     });
 
     it('reports "refreshed" message when marker is already present', async () => {

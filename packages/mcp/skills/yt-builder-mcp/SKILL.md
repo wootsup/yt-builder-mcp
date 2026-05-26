@@ -1,6 +1,6 @@
 ---
 name: yt-builder-mcp
-description: Drive the YOOtheme Pro page builder programmatically — discover pages, inspect layouts, add/move/clone/delete elements, bind dynamic sources, diagnose 401/403 auth failures. Use when the user wants to build, modify, audit, or troubleshoot a YOOtheme-powered WordPress site through the YT Builder MCP server.
+description: Drive the YOOtheme Pro Page Builder on WordPress or Joomla 5/6 — discover pages, inspect layouts, add/move/clone/delete elements, bind dynamic sources, diagnose 401/403 auth failures. Use when the user works with a YOOtheme Pro site via the YT Builder MCP server.
 ---
 
 # YT Builder MCP for YOOtheme Pro (unofficial) — Skill
@@ -8,34 +8,64 @@ description: Drive the YOOtheme Pro page builder programmatically — discover p
 > Independent third-party project. YOOtheme® is a registered trademark of YOOtheme GmbH
 > ([yootheme.com](https://yootheme.com)). YT Builder MCP is built by WootsUp (getimo
 > productions) and is not affiliated with, endorsed by, or sponsored by YOOtheme.
-> The integration uses YOOtheme Pro's public extension points.
+> The integration uses YOOtheme Pro's public extension points and works on both
+> WordPress and Joomla 5/6.
 
-This skill helps AI assistants drive the YOOtheme Pro page builder through the
-`@wootsup/yt-builder-mcp` server. The server exposes 24 typed,
-scoped, idempotent tools behind a 11-entry Gateway-Hub (so it stays
-inside the 80-tool Cursor cap even when the catalogue grows).
+This skill helps AI assistants drive the YOOtheme Pro Page Builder through the
+`@wootsup/yt-builder-mcp` server. The server exposes 27 typed, scoped, idempotent
+callable tools. 20 of them advertised as first-class entries in `tools/list`
+(17 essential L1 forwards + 2 direct L3 entries + 1 gateway), and 7 advanced
+tools reachable through the single `yootheme_builder_advanced` gateway. This
+3-lane split keeps `tools/list` well below the ~40-tool Cursor cap while every
+catalogued tool stays fully reachable.
 
 ## How to use this MCP server
 
-The user invokes you through Claude Desktop, Cursor, Zed, Continue, or
-any other MCP-aware AI client. Setup looks like this:
+The user invokes you through Claude Desktop, Cursor, Zed, Continue, Cline,
+Roo Code, Claude Code, Codex CLI or any other MCP-aware AI client. Setup is
+**cross-platform** — the same MCP server speaks to the same WordPress *or*
+Joomla 5/6 host plugin:
 
-1. The user installs the WordPress plugin
-   (`https://wootsup.com/products/yt-builder-mcp`) and generates
-   a Bearer key in **wp-admin → Tools → "YT Builder MCP" → Bearer Keys**.
-2. The user runs `npx -y @wootsup/yt-builder-mcp setup` once;
-   the wizard probes the plugin, validates the key, and writes the
-   MCP server entry into every selected AI client's config file.
+1. The user installs the host plugin for their CMS:
+   - **WordPress** — install the `yt-builder-mcp` plugin (downloadable from the
+     [GitHub repository](https://github.com/wootsup/yt-builder-mcp)) and generate
+     a Bearer key in **wp-admin → Tools → "YT Builder MCP" → Bearer Keys**.
+   - **Joomla 5/6** — install the `yt-builder-mcp` package (downloadable from the
+     [GitHub repository](https://github.com/wootsup/yt-builder-mcp)) and generate
+     a Bearer key in **Components → YT Builder MCP → Bearer Keys**. The package
+     installs three sub-extensions (system plugin, webservices plugin, component).
+2. The user runs `npx -y @wootsup/yt-builder-mcp setup` once; the wizard probes
+   the host plugin, validates the key, and writes the MCP server entry into every
+   selected AI client's config file. (Wizard prompts include a platform hint —
+   `auto` works for most cases; set it to `joomla` explicitly when the site URL
+   has no `/joomla` segment.)
 3. The user restarts their AI client. The server is now visible.
 4. The user asks for a YOOtheme task (build, audit, change, diagnose).
 
-When the user asks a YOOtheme-related question, **always start with
-`yootheme_builder_health`** — it confirms the plugin is reachable and
-returns the plugin/YOOtheme/WordPress/PHP versions you need to know
-about before reading or writing layout state.
+### Two picker entries — activate both
 
-If a tool returns `401 Unauthorized` or `403 Forbidden`, jump straight
-to **Workflow 4: Diagnose 401/auth failure**. Do not retry blindly.
+Some clients (notably Claude Desktop with the `.dxt` bundle) expose **two**
+entries when the user types "YT Builder MCP" into the picker:
+
+- **`YT Builder MCP for YOOtheme Pro (unofficial)`** — the MCP **server**.
+  Provides the 20 first-class tools (17 essential, 2 direct, 1 gateway).
+  The `yootheme_builder_advanced` gateway routes 7 additional tools.
+- **`Von YT Builder MCP for YOOtheme Pro`** — the bundled **skill** (this
+  document). Gives the agent the workflow knowledge needed to drive those
+  tools correctly on first try.
+
+**Activate both for the full experience.** The MCP server alone gives the agent
+typed tools but no narrative guidance; the skill alone has no tools to call.
+
+When the user asks a YOOtheme-related question, **always start with
+`yootheme_builder_health`** — it confirms the host plugin is reachable and (when
+the Bearer key is valid) returns the **plugin version, YOOtheme version, WordPress
+or Joomla version, PHP version, and the site_url + home_url of the connected
+site**. The site URL is how you know *which* site the agent is currently driving;
+surface it back to the user when relevant ("Working on `https://example.com`...").
+
+If a tool returns `401 Unauthorized` or `403 Forbidden`, jump straight to
+**Workflow 4: Diagnose 401/auth failure**. Do not retry blindly.
 
 ## Gateway routing (so you know what you can call)
 
@@ -44,19 +74,43 @@ The server exposes:
 - **2 direct top-level tools** — always callable, always in `tools/list`:
   `yootheme_builder_health` and `yootheme_builder_diagnose`. These are
   the "the gateway itself might be broken" escape hatch.
-- **8 essential forwarded tools** — common reads + the most-used writes
-  (page list, get_etag, element list / add / update, sources_list,
-  element_types_list, inspect_multi_items_binding). Always in
-  `tools/list` so AI clients see them first-class.
-- **13 advanced captured tools** — everything else (move, clone, delete,
-  schema introspection, source binding, clean_implode_directives).
-  Reachable through one gateway tool:
-  `yootheme_builder_advanced({ tool: "<name>", input: { ... } })`.
+- **17 essential forwarded tools** — common reads + the most-used writes
+  (pages_list, get_etag, element_list / add / update_settings / get / move /
+  clone / delete, page_get_layout, sources_list, element_types_list,
+  element_type_get_schema, template_summary, inspect_multi_items_binding,
+  sites_list, sites_test). Always advertised in `tools/list` so AI clients
+  see them first-class.
+- **7 advanced captured tools** — everything else (page_save, page_publish,
+  page_get_schema, element_get_binding, element_bind_source,
+  element_unbind_source, clean_implode_directives). Reachable through one
+  gateway tool: `yootheme_builder_advanced({ tool: "<name>", input: { ... } })`.
 - **1 gateway tool** — `yootheme_builder_advanced`.
 
-If the AI client reports "tool not found", you are almost certainly
-calling an advanced tool by its raw name. Wrap it in
+`tools/list` therefore advertises 20 names (17 + 2 + 1) — that's 17 L1
+essentials + 2 L3 direct + 1 gateway. The total callable surface is 27
+(20 advertised + 7 advanced reachable through the gateway). If the AI
+client reports "tool not found", you are almost certainly calling an
+advanced tool by its raw name. Wrap it in
 `yootheme_builder_advanced({ tool, input })` instead.
+
+## Site and frontend URLs (for deep-linking and verification)
+
+The server surfaces the connected site's URLs in two places so you never have to
+guess where the agent is pointing:
+
+- **`yootheme_builder_health` (Bearer-authenticated) and
+  `yootheme_builder_diagnose`** return `site_url` and `home_url` for the
+  connected install. Call one of them when the user asks "which site are you
+  on?" or before deep-linking the user back into wp-admin / Joomla administrator.
+- **`yootheme_builder_pages_list`** returns per-template `frontend_url`,
+  `frontend_url_template`, and `frontend_url_description` columns when the
+  host plugin can resolve them. Use these when the user asks for a verification
+  URL ("show me the 404 page", "give me the front-end URL of the homepage
+  template"): find the matching row, return `frontend_url` (resolved) or
+  `frontend_url_template` (with placeholders the user fills in).
+
+Treat `frontend_url: null` as "host plugin could not resolve a public URL for
+this template" — surface that honestly rather than fabricating one.
 
 ## Scopes (Bearer key permissions)
 
@@ -69,8 +123,173 @@ Every Bearer key has a scope, set at key creation time:
 | `admin`  | ✓     | ✓      | ✓           |
 
 When a tool returns `{ error: 'insufficient_scope', context: { required: 'write', actual: 'read' } }`,
-ask the user to regenerate the key with a higher scope **before**
-retrying. Do not loop on auth errors.
+ask the user to regenerate the key with a higher scope **before** retrying.
+Do not loop on auth errors.
+
+> **Joomla note.** On the Joomla API surface (`com_api`), the Bearer token's
+> scope is the **sole** authority — the L2 article-write `core.edit` ACL gate
+> was intentionally removed (see ADR at https://github.com/wootsup/yt-builder-mcp/blob/main/docs/adr/2026-05-24-l2-bearer-as-authority.md).
+> Joomla ACL still governs the admin component (`com_ytbmcp`). On WordPress,
+> capabilities like `manage_options` gate the admin settings page only; the
+> REST API surface is Bearer-gated.
+
+> **Joomla L2 articles surface.** The Joomla plugin ships `/v1/articles*`
+> REST endpoints for per-article custom layouts, but they are NOT exposed
+> via MCP tools in v1.x. To use that surface, call the REST endpoints
+> directly with the Bearer key. MCP tool coverage for L2 articles is
+> planned for v1.2.0.
+
+---
+
+## Working with multiple sites
+
+One MCP install can drive many YOOtheme Pro sites. You configure each site
+once (URL + Bearer key + platform). The agent then targets a specific site
+per tool-call via a `site_id` parameter, or falls back to the default site
+when `site_id` is omitted.
+
+### When and why
+
+The typical case is an agency or freelancer running 5, 20, or 100+ YOOtheme
+sites (WordPress and Joomla mixed). Without multi-site support you would need
+one MCP install per site, one set of env vars per site, and one AI-client
+restart per site you want to talk to. With multi-site:
+
+- One DXT install in Claude Desktop, one entry in your AI client config.
+- One conversation can edit elements on `acme.com` and `beta.io` back-to-back.
+- Each site keeps its own Bearer key, platform, label, and 1Password reference.
+- Adding a new client site does not require a new MCP install.
+
+### How `site_id` works
+
+Every tool accepts an optional `site_id` parameter.
+
+- **Omit `site_id`**: the tool runs against the **default site**. This is the
+  common case for single-site users (the registry has one site and it is the
+  default) and for agency users who picked a "main" site for the session.
+- **Pass `site_id: "wp-acme"`**: the tool runs against that specific site,
+  overriding the default for that one call.
+
+When the agent does not know which sites are available, it calls
+`yootheme_builder_sites_list` first. The response lists every configured site
+with its `site_id`, URL, platform, default flag, and bearer source (so the
+agent can choose by label and the user can verify by URL).
+
+To verify a specific site before doing work on it, call
+`yootheme_builder_sites_test({ site_id: "wp-acme" })`. This probes `/health`
+and `/etag` in parallel and returns `plugin_reachable` + `bearer_valid`
+without mutating anything.
+
+### Default-site mechanics
+
+The default site is set automatically on first add:
+
+- **First site you add**: becomes the default automatically. No flag needed.
+- **Every subsequent site**: NOT default by default. Use `--default` on
+  `add-site` to make it the new default (the old default is demoted).
+- **You remove the current default**: the next site in the registry order
+  is promoted to default. The registry is never left without a default
+  while ≥1 site exists.
+
+### Plain bearer vs 1Password reference
+
+You can store the Bearer key two ways per site:
+
+- **Plain field**: `bearer: "ytb_live_..."` in `sites.json`. Easy for dev or
+  onboarding, but the secret lives on disk in plaintext.
+- **1Password reference**: `bearer_ref: "op://Vault/Item/credential"` in
+  `sites.json`. The plaintext token never touches disk. The MCP server shells
+  out to the `op` CLI at first use per site to fetch the live token, then
+  caches it in memory for that process lifetime.
+
+**Recommendation for production sites**: use `bearer_ref`. You get rotation
+without editing `sites.json`, and your 1Password audit log captures every
+fetch. The `op` CLI must be installed and signed in on the machine running
+the MCP server. If `op` is missing, the resolver returns a structured error
+(`op CLI not found in PATH`) pointing at the install docs.
+
+### `sites.json` location
+
+The registry lives at `~/.config/yt-builder-mcp/sites.json` (XDG-conform).
+If `XDG_CONFIG_HOME` is set, the file lives at
+`$XDG_CONFIG_HOME/yt-builder-mcp/sites.json` instead. The file is created
+with mode `0600` so only the current user can read it.
+
+The CLI subcommands below are the supported way to edit `sites.json`. Direct
+edits work but skip the schema-validation and atomic-write paths.
+
+### CLI subcommands
+
+Run these via `npx -y @wootsup/yt-builder-mcp <subcommand>`:
+
+- **`setup`**: interactive wizard for the first site. Probes the host
+  plugin, validates the Bearer key, picks the platform, writes `sites.json`,
+  and writes the MCP server entry into every selected AI-client config.
+- **`add-site [--url <url>] [--token <bearer> | --token-ref op://...] [--platform auto|wordpress|joomla] [--label "..."] [--default] [--site-id <slug>] [--yes]`**:
+  add a new site. Flags can be passed for non-interactive use; missing flags
+  trigger prompts. `--default` makes the new site the default (demoting the
+  old one). `--yes` skips the confirmation prompt.
+- **`list-sites`**: print every configured site as a table (site_id, URL,
+  platform, default flag, bearer source).
+- **`remove-site <site_id> [--yes]`**: delete a site from the registry. If
+  the removed site was the default, the next site in registry order is
+  auto-promoted. `--yes` skips the confirmation prompt.
+- **`set-default <site_id>`**: switch the default site to `<site_id>`. The
+  previous default is demoted.
+- **`test-site <site_id>`**: pre-flight probe (`/health` + `/etag`) for one
+  site. Returns `plugin_reachable` + `bearer_valid` and exits non-zero on
+  failure. Mutates nothing.
+
+### Restart your AI client after registry changes
+
+After `add-site`, `remove-site`, `set-default`, or any direct edit to
+`sites.json`, **restart Claude Desktop** (or your AI client). The MCP
+protocol sends the `instructions` block (which carries the "Currently
+configured sites" appendix) once at `initialize`. The agent will not see new
+sites in its instructions until the next `initialize` cycle.
+
+`sites_list` and the per-call `site_id` parameter both keep working
+without a restart (they read the live registry on every call), but the
+agent's narrative awareness of which sites exist lags by one restart.
+
+The CLI prints a reminder line after every mutation so you do not forget.
+
+### Site-awareness in every response
+
+Every tool reply carries the connected site in two places:
+
+- **Text prefix**: every text response starts with `[<label> @ <host>]` so
+  the customer can see at a glance which site produced the answer
+  (`[ACME Production @ acme.com] 12 templates ...`).
+- **Structured metadata**: `structuredContent._meta.site_id`,
+  `structuredContent._meta.site_url`, and `structuredContent._meta.platform`
+  carry the same info in a machine-readable shape. Agents can use this for
+  routing, logging, or follow-up calls.
+
+If the AI-client UI hides `_meta`, the text prefix still tells the user
+which site they are looking at.
+
+### End-to-end example: bulk element update across 5 agency sites
+
+Goal: change a hero headline on the `home` template of 5 client sites in
+one conversation.
+
+1. The agent calls `yootheme_builder_sites_list()`. It learns the 5
+   site_ids: `wp-acme`, `wp-beta`, `joomla-gamma`, `wp-delta`,
+   `joomla-epsilon`.
+2. For each site, the agent runs the same sequence with `site_id` set:
+   - `yootheme_builder_pages_list({ site_id: "wp-acme", fields: ["id", "label"] })`
+   - `yootheme_builder_get_etag({ site_id: "wp-acme" })`
+   - `yootheme_builder_element_update_settings({ site_id: "wp-acme", template_id: "home", element_path: "/0/children/0/children/0/children/0", props: { content: "New headline" }, merge: true, etag: "<etag>" })`
+   - `yootheme_builder_advanced({ tool: "yootheme_builder_page_save", input: { site_id: "wp-acme", template_id: "home", etag: "<fresh>" } })`
+   - `yootheme_builder_advanced({ tool: "yootheme_builder_page_publish", input: { site_id: "wp-acme", template_id: "home", etag: "<fresh>" } })`
+3. The customer sees a stream of replies, each prefixed with the matching
+   `[label @ host]`, so it is obvious which site is at which step.
+
+If one site fails (auth error, plugin not active, network blip), the agent
+isolates the failure to that one `site_id` and continues with the rest.
+Run `yootheme_builder_sites_test({ site_id: "<id>" })` on the failing site
+for a focused diagnosis without touching the others.
 
 ---
 
@@ -81,8 +300,9 @@ to an existing page.
 
 **Canonical tool-call sequence (real parameter names — snake_case):**
 
-1. `yootheme_builder_health` — confirm plugin reachable; note plugin
-   version (some element types are version-gated).
+1. `yootheme_builder_health` — confirm host plugin reachable; note plugin
+   version and `site_url` (some element types are version-gated; surface
+   the site URL back to the user).
 2. `yootheme_builder_pages_list({ fields: ["id", "label"] })` — find
    the target template. Returns `[{ id, label, ... }]`. If the user
    named a specific page, match on `label` (exact then fuzzy).
@@ -100,10 +320,11 @@ to an existing page.
    — add a text element.
 8. `yootheme_builder_element_add({ template_id, parent_path: "<row-path>", element_type: "button", props: { content: "<cta>", link: "<url>" }, etag })`
    — add the CTA button.
-9. `yootheme_builder_page_save({ template_id, etag })` — persist the
-   working copy (visible in YOOtheme Customizer preview).
-10. `yootheme_builder_page_publish({ template_id, etag })` — make the
-    changes live on the front-end.
+9. `yootheme_builder_advanced({ tool: "yootheme_builder_page_save", input: { template_id, etag } })`
+   — persist the working copy (visible in YOOtheme Customizer preview).
+   `page_save` is an advanced tool; call it through the gateway.
+10. `yootheme_builder_advanced({ tool: "yootheme_builder_page_publish", input: { template_id, etag } })`
+    — make the changes live on the front-end. Also an advanced tool.
 
 **Common pitfalls:**
 
@@ -124,6 +345,9 @@ to an existing page.
 - **Reusing a stale etag across many writes.** Every write returns a
   fresh etag in the response. Pass THAT etag into the next write —
   don't hold the one from the original `get_etag` call.
+- **Calling page_save / page_publish by name.** Both are advanced
+  (L2) tools — call them through `yootheme_builder_advanced({ tool, input })`,
+  not directly. The first sign you forgot is "tool not found".
 
 **Worked example (tool-call snippet):**
 
@@ -138,6 +362,12 @@ yootheme_builder_element_add({
 })
 // Response: { path: "/0/children/3", etag: "def456" }
 // → next call uses etag "def456"
+
+// Step 9 — page_save is L2; call via the gateway.
+yootheme_builder_advanced({
+  tool: "yootheme_builder_page_save",
+  input: { template_id: "home", etag: "<latest>" }
+})
 ```
 
 **Edge case:** YOOtheme allows nested sections (rare) — if the user
@@ -161,7 +391,7 @@ renders dynamic items.
 
 **Canonical tool-call sequence (real parameter names — snake_case):**
 
-1. `yootheme_builder_health` — confirm plugin reachable.
+1. `yootheme_builder_health` — confirm host plugin reachable.
 2. `yootheme_builder_pages_list({ fields: ["id", "label"] })` and
    `yootheme_builder_page_get_layout({ template_id: "<id>", flat: false })`
    — locate the target Grid. Note its JSON-Pointer `path` (e.g.
@@ -172,20 +402,21 @@ renders dynamic items.
 4. `yootheme_builder_sources_list()` — enumerate available Sources.
    Each returns `{ name, label, origin, kind }`. Pick the one the
    user asked for.
-5. `yootheme_builder_element_get_binding({ template_id, element_path })`
+5. `yootheme_builder_advanced({ tool: "yootheme_builder_element_get_binding", input: { template_id, element_path } })`
    — check whether the Grid is already bound (idempotency: skip step
    7 if `source_name` already matches the user's intent).
+   `element_get_binding` is an advanced (L2) tool — call via the gateway.
 6. `yootheme_builder_get_etag()` — fetch the optimistic-lock etag for
    the upcoming mutation.
-7. `yootheme_builder_element_bind_source({ template_id, element_path, source_name: "<name>", etag: "<etag>" })`
+7. `yootheme_builder_advanced({ tool: "yootheme_builder_element_bind_source", input: { template_id, element_path, source_name: "<name>", etag: "<etag>" } })`
    — apply the binding. Returns `{ path, etag, has_binding: true }`.
    Pass `source_id: "<origin>:<name>"` as well **only** when two
    plugins register a source with the same `source_name` (the server
    surfaces the ambiguity as an elicitation prompt; if the host
    doesn't support elicitation you'll see a structured error listing
-   the candidates).
-8. `yootheme_builder_page_save({ template_id, etag: "<fresh>" })`
-   then `yootheme_builder_page_publish({ template_id, etag: "<fresh>" })`.
+   the candidates). Also an advanced tool.
+8. `yootheme_builder_advanced({ tool: "yootheme_builder_page_save", input: { template_id, etag: "<fresh>" } })`
+   then `yootheme_builder_advanced({ tool: "yootheme_builder_page_publish", input: { template_id, etag: "<fresh>" } })`.
 
 **Common pitfalls:**
 
@@ -207,23 +438,29 @@ renders dynamic items.
 - **Forgetting `etag`.** Every write requires the optimistic-lock
   etag. On `412 Precondition Failed` re-fetch via
   `yootheme_builder_get_etag` and retry.
+- **Calling bind/unbind directly.** Both `element_bind_source` and
+  `element_get_binding` are L2 advanced — wrap in
+  `yootheme_builder_advanced({ tool, input })`.
 
 **Worked example (tool-call snippet):**
 
 ```jsonc
-// Step 7 — bind a Posts source onto a Grid element.
-yootheme_builder_element_bind_source({
-  template_id: "home",
-  element_path: "/0/children/2/children/0",
-  source_name: "wp_posts",
-  etag: "abc123"
-  // source_id: "wordpress:wp_posts"   // pass ONLY when name collides
+// Step 7 — bind a Posts source onto a Grid element via the gateway.
+yootheme_builder_advanced({
+  tool: "yootheme_builder_element_bind_source",
+  input: {
+    template_id: "home",
+    element_path: "/0/children/2/children/0",
+    source_name: "wp_posts",
+    etag: "abc123"
+    // source_id: "wordpress:wp_posts"   // pass ONLY when name collides
+  }
 })
 // Response: { path: "/0/children/2/children/0", etag: "def456", has_binding: true }
-// Verify:
-yootheme_builder_element_get_binding({
-  template_id: "home",
-  element_path: "/0/children/2/children/0"
+// Verify (via gateway):
+yootheme_builder_advanced({
+  tool: "yootheme_builder_element_get_binding",
+  input: { template_id: "home", element_path: "/0/children/2/children/0" }
 })
 // → { source_name: "wp_posts", source_config: { ... }, ... }
 ```
@@ -232,12 +469,12 @@ yootheme_builder_element_get_binding({
 search filter). The bind call still succeeds; the front-end Grid just
 shows the YOOtheme "no items" placeholder. Don't treat empty render
 as a binding failure — verify by re-reading
-`yootheme_builder_element_get_binding`.
+`yootheme_builder_element_get_binding` through the gateway.
 
 **Success criterion:** After publish, the Grid on the front-end shows
 items from the Source (verify by item count and at least one
 field-value spot-check). `yootheme_builder_element_get_binding`
-returns the new `source_name`.
+(via gateway) returns the new `source_name`.
 
 ---
 
@@ -256,16 +493,17 @@ right after the source. To move the clone elsewhere in the SAME
 template, call `yootheme_builder_element_move` afterwards. To
 duplicate into a DIFFERENT template, flag to the user that
 cross-template clone is not currently supported and suggest a
-WordPress-level template duplication.
+CMS-level template duplication (in wp-admin or Joomla administrator).
 
 **Canonical tool-call sequence (real parameter names — snake_case):**
 
-1. `yootheme_builder_health` — confirm plugin reachable.
+1. `yootheme_builder_health` — confirm host plugin reachable.
 2. `yootheme_builder_pages_list({ fields: ["id", "label"] })` —
    locate the template by `label`. Note its `id`.
-3. `yootheme_builder_page_get_schema({ template_id })` — flat schema
-   view (lighter than `page_get_layout`) showing every element path
-   + type. Pick the JSON-Pointer path of the section to clone.
+3. `yootheme_builder_advanced({ tool: "yootheme_builder_page_get_schema", input: { template_id } })`
+   — flat schema view (lighter than `page_get_layout`) showing every
+   element path + type. Pick the JSON-Pointer path of the section
+   to clone. `page_get_schema` is L2; call via the gateway.
 4. `yootheme_builder_get_etag()` — fetch the optimistic-lock etag.
 5. `yootheme_builder_element_clone({ template_id, element_path: "<src-path>", etag: "<etag>" })`
    — clone as sibling. Returns `{ path: "<new-path>", etag: "<fresh>" }`.
@@ -274,30 +512,31 @@ WordPress-level template duplication.
    — re-parent the clone within the same template if needed.
 7. `yootheme_builder_element_update_settings({ template_id, element_path: "<final-path>", props: { ... }, etag: "<fresh>" })`
    — replace the `props` on the clone. **Existing props NOT in the
-   request are removed** (update_settings is a full replace, not a
-   merge). Read the current props first via
-   `yootheme_builder_element_get` if you only want to tweak a subset.
-8. `yootheme_builder_page_save({ template_id, etag })` then
-   `yootheme_builder_page_publish({ template_id, etag })`.
+   request are removed** (update_settings is a full replace by default;
+   pass `merge: true` to apply a server-side deep-merge instead).
+   Read the current props first via `yootheme_builder_element_get`
+   if you only want to tweak a subset.
+8. `yootheme_builder_advanced({ tool: "yootheme_builder_page_save", input: { template_id, etag } })`
+   then `yootheme_builder_advanced({ tool: "yootheme_builder_page_publish", input: { template_id, etag } })`.
 
 **Common pitfalls:**
 
 - **Inventing destination parameters.** `element_clone` does NOT
   accept `destPageId`, `destParentPath`, or any cross-template
   argument. It's sibling-only within ONE template.
-- **Treating `element_update_settings` as a merge.** The handler
-  REPLACES the entire `props` object on the element; any key you
-  don't include is removed. Use `element_get` first if you need to
-  preserve siblings of the field you're changing.
+- **Treating `element_update_settings` as a merge by default.** The handler
+  REPLACES the entire `props` object on the element unless you pass
+  `merge: true`. Read the existing shape via `yootheme_builder_element_get`
+  first if you only want to tweak a subset and prefer not to use merge.
 - **Clone-then-update path drift.** The clone returns a path that's
   correct at the moment of the call. If you fire off many ops in
   parallel, a concurrent edit may shift indices — refresh via
-  `get_etag` + `page_get_schema` between independent batches.
+  `get_etag` + `page_get_schema` (via gateway) between independent batches.
 - **Cloning a bound element keeps the binding.** `element_clone`
   copies the entire element including `props.source`. If the user
   wanted a "data-free" copy, call
-  `yootheme_builder_element_unbind_source` on the new path
-  afterwards.
+  `yootheme_builder_advanced({ tool: "yootheme_builder_element_unbind_source", input: { ... } })`
+  on the new path afterwards.
 - **Wrong parameter names.** Use `template_id`, `element_path`,
   `etag` (NOT `pageId`, `srcPath`, `ifMatch`).
 
@@ -312,8 +551,7 @@ yootheme_builder_element_clone({
 })
 // Response: { path: "/0/children/3", etag: "def456" }
 
-// Step 7 — tweak the clone (replace props entirely).
-// First read the current shape so you can preserve siblings:
+// Step 7 — tweak the clone (replace props entirely, or pass merge: true).
 const current = yootheme_builder_element_get({
   template_id: "home",
   element_path: "/0/children/3",
@@ -328,12 +566,13 @@ yootheme_builder_element_update_settings({
 
 **Edge case:** When cloning a Grid with a source binding, the binding
 is preserved (same `source_name`). If the user wants a "data-free"
-copy, follow up with `yootheme_builder_element_unbind_source` on the
-new path. Verify with `yootheme_builder_element_get_binding`.
+copy, follow up with
+`yootheme_builder_advanced({ tool: "yootheme_builder_element_unbind_source", input: { ... } })`
+on the new path. Verify with the gateway `element_get_binding` call.
 
 **Success criterion:** After publish,
-`yootheme_builder_page_get_schema({ template_id })` shows the new
-section at the cloned path with the user's tweaks reflected in
+`yootheme_builder_advanced({ tool: "yootheme_builder_page_get_schema", input: { template_id } })`
+shows the new section at the cloned path with the user's tweaks reflected in
 `element_get` on that path.
 
 ---
@@ -348,32 +587,39 @@ guessing — and without rotating the user's key unnecessarily.
 1. `yootheme_builder_diagnose` — single probe that hits `/health` (no
    auth) and then `/etag` (Bearer auth). Returns
    `{ plugin_reachable, plugin_version, yootheme_loaded, yootheme_version,
-   endpoint_count, bearer_valid, bearer_error?, summary? }`. Call this
-   **before** any other tool when you see auth errors. (Takes no
-   arguments — the schema is `{}`.)
+   endpoint_count, bearer_valid, bearer_error?, site_url?, home_url?,
+   summary? }`. Call this **before** any other tool when you see
+   auth errors. (Takes no arguments — the schema is `{}`.)
 2. **Interpret the result:**
-   - `plugin_reachable: false` → the WordPress install is down OR the
-     plugin is deactivated. Send the user to wp-admin → Plugins →
-     activate "YT Builder MCP". Do not retry until they confirm.
+   - `plugin_reachable: false` → the WordPress / Joomla install is down
+     OR the host plugin is deactivated. Send the user to **wp-admin →
+     Plugins → activate "YT Builder MCP"** (WordPress) or **Joomla
+     administrator → Extensions → Plugins → enable "System - YT Builder
+     MCP" and the matching webservices + component entries** (Joomla).
+     Do not retry until they confirm.
    - `plugin_reachable: true, bearer_valid: false` → the Bearer key is
      wrong (typo, revoked, or wrong key for this install). The
      `bearer_error` field carries the upstream HTTP status. Send the
-     user to wp-admin → Tools → "YT Builder MCP" → Bearer Keys → either
-     copy the existing key into their MCP client config, or generate
-     a new one. Then they must restart the AI client.
+     user to:
+     - **WordPress:** wp-admin → Tools → "YT Builder MCP" → Bearer Keys
+       → copy the existing key into their MCP client config, or
+       generate a new one.
+     - **Joomla:** Components → YT Builder MCP → Bearer Keys → same.
    - `plugin_reachable: true, bearer_valid: true` but the original
      tool returned a 403 → the key works but the scope is too low for
      the tool's required scope (`write` for mutations, `admin` for
      destructive operations). Ask the user to regenerate the key with
      a higher scope and restart the AI client.
 3. **Walk the user through key rotation if needed:**
-   - "Go to wp-admin → Tools → YT Builder MCP → Bearer Keys."
+   - WordPress: "wp-admin → Tools → YT Builder MCP → Bearer Keys."
+     Joomla: "Components → YT Builder MCP → Bearer Keys."
    - "Click 'Generate New Key', pick the scope (admin for full access)."
    - "Copy the key — it's shown ONCE; you cannot recover it later."
    - "Update your AI client config: replace `YTB_MCP_BEARER_TOKEN`
      with the new key. The fastest way is to re-run
      `npx -y @wootsup/yt-builder-mcp setup`."
-   - "Restart Claude / Cursor / Zed / Continue / Cline / Roo Code."
+   - "Restart Claude / Cursor / Zed / Continue / Cline / Roo Code /
+     Claude Code / Codex CLI."
    - "Confirm with `yootheme_builder_diagnose` that
      `bearer_valid: true` before retrying the original task."
 
@@ -403,22 +649,25 @@ yootheme_builder_diagnose({})
 // Response shape:
 // {
 //   plugin_reachable: true,
-//   plugin_version: "0.1.0-alpha.1",
+//   plugin_version: "1.1.0",
 //   yootheme_loaded: true,
 //   yootheme_version: "5.0.22",
 //   endpoint_count: 16,
 //   bearer_valid: false,           // ← key is bad
-//   bearer_error: "HTTP 401: invalid_token"
+//   bearer_error: "HTTP 401: invalid_token",
+//   site_url: "https://example.com",
+//   home_url: "https://example.com"
 // }
-// → diagnosis: rotate the key. Send user to wp-admin → Settings.
+// → diagnosis: rotate the key. Send user to Tools/Components → YT Builder MCP.
 ```
 
 **Edge case:** `plugin_reachable: true` but `yootheme_loaded: false`
-— the user installed the MCP plugin but YOOtheme itself isn't
-active. The MCP server still answers, but every tool that touches
-the YOOtheme layout returns an empty/error response. Surface the
-mismatch ("YOOtheme is not active on this install") instead of
-retrying.
+— the user installed the MCP host plugin but YOOtheme Pro itself
+isn't active. The MCP server still answers, but every tool that
+touches the YOOtheme layout returns an empty/error response. Surface
+the mismatch ("YOOtheme Pro is not active on this install") instead
+of retrying. On Joomla this can also surface as a "YOOtheme Pro
+required" admin notice in the component dashboard.
 
 **Success criterion:** A subsequent `yootheme_builder_diagnose`
 returns `plugin_reachable: true` AND `bearer_valid: true`. The
@@ -454,10 +703,11 @@ an instance with a sensible default props payload.
    returns a structured `validation` error with a per-field issue
    list if anything is missing or malformed.
 7. (Optional) `yootheme_builder_element_update_settings({ template_id, element_path: "<new-path>", props: { ... }, etag })`
-   — iterate on the props. **Note: this REPLACES `props` entirely**
-   — include every key you want to keep.
-8. `yootheme_builder_page_save({ template_id, etag })` then
-   `yootheme_builder_page_publish({ template_id, etag })`.
+   — iterate on the props. **Note: this REPLACES `props` entirely by
+   default; pass `merge: true` for a server-side deep-merge.** When
+   replacing, include every key you want to keep.
+8. `yootheme_builder_advanced({ tool: "yootheme_builder_page_save", input: { template_id, etag } })`
+   then `yootheme_builder_advanced({ tool: "yootheme_builder_page_publish", input: { template_id, etag } })`.
 
 **Common pitfalls:**
 
@@ -468,10 +718,11 @@ an instance with a sensible default props payload.
   (not `pageId`), `parent_path` (not `parentPath`), `element_type`
   (not `type` / `name`), `props` (not `settings`), `etag` (not
   `ifMatch`).
-- **`element_update_settings` is a full replace, not a merge.** Any
-  key NOT in the request is REMOVED from `props`. Read the existing
-  shape via `yootheme_builder_element_get` first if you only want
-  to tweak a subset.
+- **`element_update_settings` is a full replace by default.** Any
+  key NOT in the request is REMOVED from `props` unless you set
+  `merge: true`. Read the existing shape via
+  `yootheme_builder_element_get` first if you only want to tweak a
+  subset.
 - **Custom elements without a schema.** A poorly-built third-party
   element may not register a prop schema. In that case
   `yootheme_builder_element_type_get_schema` returns an empty/sparse
@@ -535,53 +786,69 @@ and the props payload you passed.
   destroying state when `confirm` is omitted. On hosts without
   elicitation, it returns a preview-with-confirm-required response;
   call again with `confirm: true`.
-- **Unbind a source**: use `yootheme_builder_element_unbind_source({
-  template_id, element_path, etag, confirm: true })`. Same
-  elicitation flow as delete.
+- **Unbind a source**: call through the gateway:
+  `yootheme_builder_advanced({ tool: "yootheme_builder_element_unbind_source", input: { template_id, element_path, etag, confirm: true } })`.
+  Same elicitation flow as delete.
 - **Flat schema inspection** (e.g. enumerate every element path +
-  type without fetching the whole nested tree): use
-  `yootheme_builder_page_get_schema({ template_id })`.
+  type without fetching the whole nested tree): call through the
+  gateway: `yootheme_builder_advanced({ tool: "yootheme_builder_page_get_schema", input: { template_id } })`.
 - **Etag-only fetch** (e.g. polling for concurrent edits): use
   `yootheme_builder_get_etag()` (takes no arguments) — cheaper than
   fetching the full layout.
+- **Find a public/front-end URL for a template** (404 test page,
+  homepage URL, etc.): call
+  `yootheme_builder_pages_list({ fields: ["id", "label", "frontend_url", "frontend_url_template", "frontend_url_description"] })`,
+  match by label, and read `frontend_url` (resolved) or
+  `frontend_url_template` (with placeholders the user fills in).
+- **Find out which site / install you are connected to**: call
+  `yootheme_builder_health` (Bearer-authenticated payload includes
+  `site_url` + `home_url`) or `yootheme_builder_diagnose`.
+- **Strip legacy `implode` directives** from an element binding (audit-clean
+  source props that pre-date the wrapper-source refactor): call through the
+  gateway:
+  `yootheme_builder_advanced({ tool: "yootheme_builder_clean_implode_directives", input: { template_id, element_path, etag } })`.
+  Returns the audit log + a fresh ETag; idempotent (`cleaned_count: 0` when
+  there is nothing to remove).
 
 If the user asks for something none of the above covers (e.g. global
 theme settings, menu management, media library), tell them clearly:
 "This MCP server only covers the YOOtheme Page Builder surface. For
-<X> you'll need <YOOtheme MCP / WP REST / direct wp-admin>." Don't
-fabricate tool calls.
+<X> you'll need the relevant CMS REST API or direct wp-admin /
+Joomla administrator access." Don't fabricate tool calls.
 
 ## Appendix: Tool Catalog (auto-generated)
 
 <!-- TOOL-CATALOG:BEGIN -->
 
-**24 tools** — generated by `scripts/extract-tools.mjs` from the compiled `buildAllTools()` registry. Do not hand-edit this section; re-run `npm run build && node scripts/extract-tools.mjs` after changing tool definitions.
+**26 catalogued tools** plus the `yootheme_builder_advanced` gateway = **27 reachable via `tools/list`** (17 L1 + 2 L3 + 1 gateway = 20 advertised; the gateway routes to 7 additional advanced tools, bringing the total to 27 callable). Generated by `scripts/extract-tools.mjs` from the compiled `buildAllTools()` registry. Do not hand-edit this section; re-run `npm run build && node scripts/extract-tools.mjs` after changing tool definitions.
 
 | Tool | Kind | Input keys | Description |
 | --- | --- | --- | --- |
-| `yootheme_builder_clean_implode_directives` | idempotent | `element_path`, `etag`, `template_id` | Strips `props.source.props.*.implode` directives from an element binding. Returns audit log + new ETag. Idempotent (cleaned_count: 0 when nothing to remove). Requires ETag. |
-| `yootheme_builder_diagnose` | read+idempotent | _(none)_ | Run a full diagnostic: hit /health (no auth), then attempt an authenticated call (/etag) to confirm the Bearer key is valid. Use when health passes but tools return 401/403. |
-| `yootheme_builder_element_add` | mutating | `children`, `element_type`, `etag`, `parent_path`, `props`, `template_id` | Add a new element to a template. Provide `parent_path` (or "" for root), `element_type` (e.g. "headline", "text", "grid"), and optional `props` / `children`. Returns the new element's JSON-Pointer path. Requires ETag. |
-| `yootheme_builder_element_bind_source` | idempotent | `bindingLevel`, `element_path`, `etag`, `field_mappings`, `source_id`, `source_name`, `template_id` | Binds a Builder source to an element (sets `props.source`). Use bindingLevel "item" on Multi-Items containers (grid/slideshow/switcher/…) to bind on the first *_item child instead of the container itself. Requires ETag. |
-| `yootheme_builder_element_clone` | mutating | `element_path`, `etag`, `template_id` | Clone an element as a sibling (same parent, immediately after the source). Returns the new element's path. Requires ETag. |
-| `yootheme_builder_element_delete` | destructive | `confirm`, `element_path`, `etag`, `template_id` | PERMANENTLY delete an element and all its children. Cannot be undone. Always ask the user to confirm first, then call again with `confirm: true`. Requires ETag. |
-| `yootheme_builder_element_get` | read+idempotent | `element_path`, `template_id` | Get the full element object at a specific JSON-Pointer path, including props and children. Use yootheme_builder_element_list to discover paths. |
-| `yootheme_builder_element_get_binding` | read+idempotent | `element_path`, `template_id` | Read the source binding (and source_config/source_args/etc.) attached to an element. Returns the empty object if the element is not bound. |
-| `yootheme_builder_element_list` | read+idempotent | `fields`, `template_id` | List all elements in a template as a flat array with JSON-Pointer paths + element types. Best starting-point for "find the element I want to edit". Pass `fields:["path","element_type"]` to narrow each row. |
-| `yootheme_builder_element_move` | idempotent | `element_path`, `etag`, `template_id`, `to_index`, `to_parent_path` | Move an element to a new parent + index in the tree. Useful for reordering or reparenting (e.g. moving a card from one grid column to another). Requires ETag. |
-| `yootheme_builder_element_type_get_schema` | read+idempotent | `type_name` | Get the prop/field schema for a single element type. Use the result to discover valid keys for `props` when calling yootheme_builder_element_add or _update_settings. |
-| `yootheme_builder_element_types_list` | read+idempotent | `fields` | List element types registered on this site (built-ins + YOOessentials/uEssentials extras). Names feed `element_type` of element_add. Pass `fields[]` to narrow each row. |
-| `yootheme_builder_element_unbind_source` | destructive | `confirm`, `element_path`, `etag`, `template_id` | Remove the source binding from an element. Clears `props.source`. Destructive in the sense that it may break dynamic-content rendering — always ask the user to confirm. Requires ETag. |
-| `yootheme_builder_element_update_settings` | idempotent | `element_path`, `etag`, `merge`, `props`, `template_id` | Update `props` on an element. Default replaces all props; pass `merge:true` for server-side deep-merge (only request keys overwritten, others survive — avoids read-modify-write races). Requires ETag. |
-| `yootheme_builder_get_etag` | read+idempotent | _(none)_ | Get the current top-level state ETag. Pass this back via the `etag` parameter on any write tool to prevent overwriting concurrent edits. |
-| `yootheme_builder_health` | read+idempotent | _(none)_ | Check that the YT Builder MCP plugin is installed and reachable. Returns plugin version, YOOtheme Pro version (if loaded), and the list of available REST endpoints. Unauthenticated probe — call this first when troubleshooting connectivity. |
-| `yootheme_builder_inspect_multi_items_binding` | read+idempotent | `element_path`, `template_id` | Reports Multi-Items binding state: container/item pair (grid↔grid_item, slideshow↔slideshow_item, …), current binding level (none\|container\|item), and a recommended_fix when the binding sits on the container instead of the child. |
-| `yootheme_builder_page_get_layout` | read+idempotent | `fields`, `flat`, `template_id` | Get full layout tree for one template. Default nested `{layout, etag}`. Set `flat:true` for depth-first array `{elements:[...], etag}`; combine with `fields[]` to project per-element. |
-| `yootheme_builder_page_get_schema` | read+idempotent | `template_id` | Get the flat schema for a template — a list of nodes with their JSON-Pointer paths and element types. Best entry-point for navigation: lighter than page_get_layout, sufficient to locate elements before editing. |
-| `yootheme_builder_page_publish` | idempotent | `etag`, `template_id` | Publish a template — persist state, flush YT + WP caches, snapshot the published-state ETag. ETag optional — when provided, 412 on conflict; when omitted, last-write-wins. Recommended for collaborative edits. |
-| `yootheme_builder_page_save` | idempotent | `etag`, `template_id` | Re-run save-transforms and persist. ETag optional — when provided, 412 on conflict; when omitted, last-write-wins. Recommended for collaborative edits. No-op when state is byte-identical (returns `no_changes:true`, ETag unchanged). |
-| `yootheme_builder_pages_list` | read+idempotent | `fields` | List all YOOtheme templates ("pages") on the site. Returns id, label and usage metadata for each. Use this first to discover template IDs. Pass `fields:["id","label"]` to project per-item to a smaller shape. |
-| `yootheme_builder_sources_list` | read+idempotent | `fields` | List Builder sources grouped by origin (apimapper/wordpress/essentials). Returns name+label per source — pick one for `element_bind_source`. Pass `fields[]` to narrow each row. |
-| `yootheme_builder_template_summary` | read+idempotent | `template_id` | Token-efficient template overview: element counts by type, binding count, max nesting depth, and named landmark sections — computed server-side in one call. Use this to grasp a large template before pulling element_list or page_get_layout. |
+| `yootheme_builder_clean_implode_directives` | idempotent | `element_path`, `etag`, `site_id`, `template_id` | Strips `props.source.props.*.implode` directives from an element binding. Returns audit log + new ETag. Idempotent (cleaned_count: 0 when nothing to remove). Requires ETag. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_diagnose` | read+idempotent | `site_id` | Full diagnostic: /health + authenticated /etag probe. Returns site_url, home_url, plugin reachability, Bearer validity in one call. First call when you need to know where the site lives. For per-template URLs see pages_list. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_add` | mutating | `children`, `element_type`, `etag`, `parent_path`, `props`, `site_id`, `template_id` | Add a new element to a template. Provide `parent_path` (or "" for root), `element_type` (e.g. "headline", "text", "grid"), and optional `props` / `children`. Returns the new element's JSON-Pointer path. Requires ETag. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_bind_source` | idempotent | `bindingLevel`, `element_path`, `etag`, `field_mappings`, `site_id`, `source_id`, `source_name`, `template_id` | Binds a Builder source to an element (sets `props.source`). Use bindingLevel "item" on Multi-Items containers (grid/slideshow/switcher/…) to bind on the first *_item child instead of the container itself. Requires ETag. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_clone` | mutating | `element_path`, `etag`, `site_id`, `template_id` | Clone an element as a sibling (same parent, immediately after the source). Returns the new element's path. Requires ETag. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_delete` | destructive | `confirm`, `element_path`, `etag`, `site_id`, `template_id` | PERMANENTLY delete an element and all its children. Cannot be undone. Always ask the user to confirm first, then call again with `confirm: true`. Requires ETag. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_get` | read+idempotent | `element_path`, `site_id`, `template_id` | Get the full element object at a specific JSON-Pointer path, including props and children. Use yootheme_builder_element_list to discover paths. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_get_binding` | read+idempotent | `element_path`, `site_id`, `template_id` | Read the source binding attached to an element — the bound source name, the field-mappings (which source field feeds which element prop) and the query arguments/directives. Returns the empty object if the element is not bound. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_list` | read+idempotent | `cursor`, `depth`, `fields`, `limit`, `root_path`, `site_id`, `template_id` | List elements in a template as a flat array with JSON-Pointer paths + types. Scope with `root_path`/`depth` for a subtree, paginate with `limit`/`cursor` for large templates. `fields[]` narrows each row. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_move` | idempotent | `element_path`, `etag`, `site_id`, `template_id`, `to_index`, `to_parent_path` | Move an element to a new parent + index in the tree. Useful for reordering or reparenting (e.g. moving a card from one grid column to another). Requires ETag. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_type_get_schema` | read+idempotent | `element_type`, `site_id`, `type_name` | **Call before every `element_add` / `_update_settings`** — unknown prop keys are silently dropped server-side, so guessing fails quietly. Returns `{name,type,label?}` field descriptors. Use `element_type`; `type_name` is DEPRECATED. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_types_list` | read+idempotent | `fields`, `site_id` | List element types registered on this site (built-ins + YOOessentials/uEssentials extras). Names feed `element_type` of element_add. Pass `fields[]` to narrow each row. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_unbind_source` | destructive | `confirm`, `element_path`, `etag`, `site_id`, `template_id` | Remove the source binding from an element. Clears `props.source`. Destructive in the sense that it may break dynamic-content rendering — always ask the user to confirm. Requires ETag. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_element_update_settings` | idempotent | `element_path`, `etag`, `merge`, `props`, `site_id`, `template_id` | Update `props` on an element. Default replaces all props; pass `merge:true` for server-side deep-merge (only request keys overwritten, others survive — avoids read-modify-write races). Requires ETag. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_get_etag` | read+idempotent | `site_id` | Get the current ETag (state revision) for the YOOtheme builder. Returns sha256+revision string used for optimistic locking on writes. Pass the returned value back as `etag` on any write tool (page_save, page_publish, element_add, element_update_settings, element_clone, element_move, element_delete). The server returns HTTP 412 if the ETag has changed since you read it. Keywords: get etag, current etag, state revision, optimistic lock, version stamp. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_health` | read+idempotent | `site_id` | Check plugin installed/reachable. Returns plugin version, YT Pro version, REST endpoints. Authenticated payload adds site_url + home_url for deep-linking. See yootheme_builder_diagnose for Bearer-validity + connectivity summary. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_inspect_multi_items_binding` | read+idempotent | `element_path`, `site_id`, `template_id` | Reports Multi-Items binding state: container/item pair (grid↔grid_item, slideshow↔slideshow_item, …), current binding level (none\|container\|item), and a recommended_fix when the binding sits on the container instead of the child. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_page_get_layout` | read+idempotent | `fields`, `flat`, `site_id`, `template_id` | Get full layout tree for one template. Default nested `{layout, etag}`. Set `flat:true` for depth-first array `{elements:[...], etag}`; combine with `fields[]` to project per-element. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_page_get_schema` | read+idempotent | `site_id`, `template_id` | Get the flat schema for a template — a list of nodes with their JSON-Pointer paths and element types. Best entry-point for navigation: lighter than page_get_layout, sufficient to locate elements before editing. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_page_publish` | idempotent | `etag`, `site_id`, `template_id` | Publish a template — persist state, flush YT + WP caches, snapshot the published-state ETag. ETag optional — when provided, 412 on conflict; when omitted, last-write-wins. Recommended for collaborative edits. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_page_save` | idempotent | `etag`, `site_id`, `template_id` | Re-run save-transforms and persist. ETag optional — when provided, 412 on conflict; when omitted, last-write-wins. Recommended for collaborative edits. No-op when state is byte-identical (returns `no_changes:true`, ETag unchanged). Operates on the default site unless site_id is provided. |
+| `yootheme_builder_pages_list` | read+idempotent | `fields`, `site_id` | List all pages, templates, and layouts in the YOOtheme Pro builder. Returns template_id, label, type, element count, and frontend_url per row. CALL THIS FIRST to discover available template IDs before any tool that needs a template_id (page_get_layout, element_list, page_get_schema, etc.). Keywords: list pages, list templates, list layouts, discover template_id, index, available templates, what pages exist. Pass `fields:["id","label"]` to slim. Returns ALL pages in one call (no pagination, typically <50 templates per site). Operates on the default site unless site_id is provided. |
+| `yootheme_builder_sites_list` | read+idempotent | `site_id` | List all sites configured in this multi-site MCP installation. Returns site_id + URL + platform (wordpress\|joomla) + default flag per row. CALL THIS FIRST when working with a fresh MCP connection to discover available site_ids before targeting one with any other tool. Read-only, no REST calls. Keywords: list sites, list connections, list installations, discover site_id, available sites, configured sites, what sites exist, multi-site index. (site_id is accepted for schema-uniformity but ignored by this tool.) |
+| `yootheme_builder_sites_test` | read+idempotent | `site_id` | Verify connectivity to ONE site: probes /health (no auth) + /etag (auth) in parallel; returns plugin_reachable + bearer_valid. `site_id` is REQUIRED. Use sites_list to find IDs. |
+| `yootheme_builder_sources_list` | read+idempotent | `fields`, `site_id` | List all data sources, feeds, and dynamic content sources available in the YOOtheme Pro builder. Returns name + label + origin (apimapper / wordpress / joomla / essentials) per source. CALL THIS BEFORE binding any element to a data source. Pick a source name from the list and pass it to `element_bind_source`. Keywords: list sources, list data sources, list feeds, list bindings, dynamic content, available data, what sources exist. Pass `fields[]` to narrow each row. Operates on the default site unless site_id is provided. |
+| `yootheme_builder_template_summary` | read+idempotent | `site_id`, `template_id` | Token-efficient template overview: element counts by type, binding count, max nesting depth, and named landmark sections — computed server-side in one call. Use this to grasp a large template before pulling element_list or page_get_layout. Operates on the default site unless site_id is provided. |
 
 <!-- TOOL-CATALOG:END -->

@@ -42,5 +42,6 @@ export {
     errorResult,
     jsonResult,
     structuredResult,
+    withSiteMeta,
 } from './results.js';
 export { createProgressReporter, defineTool } from './define.js';

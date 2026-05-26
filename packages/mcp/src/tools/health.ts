@@ -19,20 +19,23 @@
 
 import { detailResult, statsResult } from '@getimo/mcp-toolkit';
 import { z } from 'zod';
-import type { RestClient } from '../client.js';
 import { RestError } from '../errors.js';
+import type { ClientPool } from '../sites/client-pool.js';
 import {
     buildDiagnoseDetail,
     buildHealthStats,
     type DiagnoseChecks,
     type HealthPayload,
 } from './format/health-format.js';
+import { SITE_ID_SCHEMA } from './shared-schemas.js';
+import { resolveSiteOrError } from './pool-resolve-helper.js';
 import {
     defineTool,
     errorResult,
     jsonResult,
     readOnly,
     structuredResult,
+    withSiteMeta,
     type AnyToolDefinition,
 } from './tool-builder.js';
 
@@ -40,13 +43,22 @@ import {
 
 const HEALTH_OUTPUT_SCHEMA = z.object({
     plugin_version: z.string(),
-    yootheme_version: z.string().nullable(),
-    wp_version: z.string().nullable(),
-    php_version: z.string(),
-    storage_type: z.string(),
-    storage_target: z.string(),
+    // Cross-platform note (Wave 7): the anonymous health payload only carries
+    // {plugin_version, status, yootheme_loaded}; the rest is disclosed ONLY
+    // with a valid Bearer (server-side fingerprint-reduction). On Joomla the
+    // augmented payload uses `cms`/`cms_version` and emits NEITHER `wp_version`
+    // NOR `yootheme_version`. All platform-/tier-variable fields are therefore
+    // optional so the same MCP tool validates against WP and Joomla, anon and
+    // authenticated.
+    yootheme_version: z.string().nullable().optional(),
+    wp_version: z.string().nullable().optional(),
+    cms: z.string().optional(),
+    cms_version: z.string().optional(),
+    php_version: z.string().optional(),
+    storage_type: z.string().optional(),
+    storage_target: z.string().optional(),
     yootheme_loaded: z.boolean(),
-    available_endpoints: z.array(z.string()),
+    available_endpoints: z.array(z.string()).optional(),
     // 1.0.1 — surface canonical WP URLs so an agent can deep-link the
     // customer to the live site without a separate REST round-trip.
     // Both fields are optional in the schema for back-compat with older
@@ -101,48 +113,60 @@ const DIAGNOSE_OUTPUT_SCHEMA = z.object({
         ),
 });
 
-export function buildHealthTools(client: RestClient): readonly AnyToolDefinition[] {
+export function buildHealthTools(pool: ClientPool): readonly AnyToolDefinition[] {
     return [
         defineTool({
             name: 'yootheme_builder_health',
             description:
-                'Check that the YT Builder MCP plugin is installed and reachable. ' +
-                'Returns plugin version, YOOtheme Pro version (if loaded), and the list of ' +
-                'available REST endpoints. Unauthenticated probe — call this first when ' +
-                'troubleshooting connectivity.',
-            inputSchema: {},
+                'Check plugin installed/reachable. Returns plugin version, YT Pro version, REST ' +
+                'endpoints. Authenticated payload adds site_url + home_url for deep-linking. ' +
+                'See yootheme_builder_diagnose for Bearer-validity + connectivity summary. ' +
+                'Operates on the default site unless site_id is provided.',
+            inputSchema: {
+                site_id: SITE_ID_SCHEMA,
+            },
             outputSchema: HEALTH_OUTPUT_SCHEMA,
             annotations: readOnly('Health Check'),
-            handler: async () => {
+            handler: async ({ site_id }) => {
+                const r = await resolveSiteOrError(pool, site_id);
+                if (!r.ok) return r.error;
+                const { client: siteClient, site } = r;
                 try {
-                    const data = await client.get<HealthPayload>('/health');
+                    const data = await siteClient.get<HealthPayload>('/health');
                     // Round-1 audit I1 fix: spec §3.2 row 1 calls for
                     // `statsResult` (flat metrics). Earlier shipped
                     // `detailResult` — that's a Detail-Card variant, not
                     // the stats-display the spec asked for. The flat
                     // shape is built by `buildHealthStats`.
                     const toolkitResult = statsResult(buildHealthStats(data));
-                    return structuredResult(toolkitResult, {
+                    // Only surface fields the server actually returned — the
+                    // anonymous tier and Joomla omit different subsets, and the
+                    // output schema now marks all platform-/tier-variable fields
+                    // optional (Wave 7 cross-platform parity).
+                    return withSiteMeta(structuredResult(toolkitResult, {
                         plugin_version: data.plugin_version,
-                        yootheme_version: data.yootheme_version,
-                        wp_version: data.wp_version,
-                        php_version: data.php_version,
-                        storage_type: data.storage_type,
-                        storage_target: data.storage_target,
                         yootheme_loaded: data.yootheme_loaded,
-                        available_endpoints: data.available_endpoints,
+                        ...(data.yootheme_version !== undefined ? { yootheme_version: data.yootheme_version } : {}),
+                        ...(data.wp_version !== undefined ? { wp_version: data.wp_version } : {}),
+                        ...(data.cms !== undefined ? { cms: data.cms } : {}),
+                        ...(data.cms_version !== undefined ? { cms_version: data.cms_version } : {}),
+                        ...(data.php_version !== undefined ? { php_version: data.php_version } : {}),
+                        ...(data.storage_type !== undefined ? { storage_type: data.storage_type } : {}),
+                        ...(data.storage_target !== undefined ? { storage_target: data.storage_target } : {}),
+                        ...(data.available_endpoints !== undefined ? { available_endpoints: data.available_endpoints } : {}),
                         ...(data.site_url !== undefined ? { site_url: data.site_url } : {}),
                         ...(data.home_url !== undefined ? { home_url: data.home_url } : {}),
-                    });
+                    }), site);
                 } catch (e) {
-                    return errorResult({
+                    return withSiteMeta(errorResult({
                         error: e,
-                        context: {},
+                        context: { site_id: site.id },
                         hint:
-                            'Verify YTB_MCP_WP_URL points at a WordPress site with the ' +
+                            'Verify YTB_MCP_SITE_URL points at a WordPress or Joomla site with the ' +
                             'yt-builder-mcp plugin active. Try opening ' +
-                            '<wp_url>/wp-json/yt-builder-mcp/v1/health in a browser.',
-                    });
+                            '<site_url>/wp-json/yt-builder-mcp/v1/health (WP) or ' +
+                            '<site_url>/api/index.php/v1/yt-builder-mcp/health (Joomla) in a browser.',
+                    }), site);
                 }
             },
         }),
@@ -150,22 +174,28 @@ export function buildHealthTools(client: RestClient): readonly AnyToolDefinition
         defineTool({
             name: 'yootheme_builder_diagnose',
             description:
-                'Run a full diagnostic: hit /health (no auth), then attempt an authenticated ' +
-                'call (/etag) to confirm the Bearer key is valid. Use when health passes but ' +
-                'tools return 401/403.',
-            inputSchema: {},
+                'Full diagnostic: /health + authenticated /etag probe. Returns site_url, ' +
+                'home_url, plugin reachability, Bearer validity in one call. First call when ' +
+                'you need to know where the site lives. For per-template URLs see pages_list. ' +
+                'Operates on the default site unless site_id is provided.',
+            inputSchema: {
+                site_id: SITE_ID_SCHEMA,
+            },
             outputSchema: DIAGNOSE_OUTPUT_SCHEMA,
             annotations: readOnly('Diagnose Connection'),
-            handler: async () => {
+            handler: async ({ site_id }) => {
+                const r = await resolveSiteOrError(pool, site_id);
+                if (!r.ok) return r.error;
+                const { client: siteClient, site } = r;
                 const checks: DiagnoseChecks = { plugin_reachable: false };
 
                 try {
-                    const health = await client.get<HealthPayload>('/health');
+                    const health = await siteClient.get<HealthPayload>('/health');
                     checks.plugin_reachable = true;
                     checks.plugin_version = health.plugin_version;
                     checks.yootheme_loaded = health.yootheme_loaded;
                     checks.yootheme_version = health.yootheme_version;
-                    checks.endpoint_count = health.available_endpoints.length;
+                    checks.endpoint_count = (health.available_endpoints ?? []).length;
                     // 1.0.1 — mirror health URLs into diagnose output so an
                     // agent gets URL info AND bearer-status in one call.
                     if (health.site_url !== undefined) {
@@ -179,18 +209,18 @@ export function buildHealthTools(client: RestClient): readonly AnyToolDefinition
                     checks.plugin_error = e instanceof Error ? e.message : String(e);
                     // Plugin-unreachable path stays on jsonResult so the LLM
                     // sees the structured error hint inline (detailResult would
-                    // hide the actionable "verify YTB_MCP_WP_URL" hint inside
+                    // hide the actionable "verify YTB_MCP_SITE_URL" hint inside
                     // a sub-group). isError=true preserves SDK semantics.
-                    return jsonResult({
+                    return withSiteMeta(jsonResult({
                         ...checks,
                         hint:
-                            'Plugin not reachable. Verify YTB_MCP_WP_URL and that the ' +
-                            'yt-builder-mcp WordPress plugin is active.',
-                    }, { isError: true });
+                            'Plugin not reachable. Verify YTB_MCP_SITE_URL and that the ' +
+                            'yt-builder-mcp plugin is active on this site.',
+                    }, { isError: true }), site);
                 }
 
                 try {
-                    await client.get('/etag');
+                    await siteClient.get('/etag');
                     checks.bearer_valid = true;
                 } catch (e) {
                     checks.bearer_valid = false;
@@ -199,20 +229,20 @@ export function buildHealthTools(client: RestClient): readonly AnyToolDefinition
                     } else {
                         checks.bearer_error = e instanceof Error ? e.message : String(e);
                     }
-                    return jsonResult({
+                    return withSiteMeta(jsonResult({
                         ...checks,
                         hint:
                             'Bearer key rejected. Regenerate the key in wp-admin → Tools → ' +
-                            '"YT Builder MCP" → Bearer Keys and re-run ' +
-                            '`yt-builder-mcp setup`.',
-                    }, { isError: true });
+                            '"YT Builder MCP" → Bearer Keys (or Joomla Components → YT Builder MCP) ' +
+                            'and re-run `yt-builder-mcp setup`.',
+                    }, { isError: true }), site);
                 }
 
                 const toolkitResult = detailResult(buildDiagnoseDetail(checks));
-                return structuredResult(toolkitResult, {
+                return withSiteMeta(structuredResult(toolkitResult, {
                     ...checks,
                     summary: 'OK — plugin reachable and Bearer key accepted.',
-                });
+                }), site);
             },
         }),
     ];

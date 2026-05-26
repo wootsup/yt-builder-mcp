@@ -1,0 +1,19 @@
+--
+-- yt-builder-mcp Joomla — uninstall schema (MySQL / MariaDB)
+--
+-- INTENTIONALLY EMPTY: destructive statements are issued programmatically
+-- by InstallerScript on opt-in. See script.php::dropOwnedTables() — the
+-- `delete_data_on_uninstall` plugin param decides at uninstall-time
+-- whether to remove the three yt-builder-mcp tables or leave them
+-- in place so a reinstall recovers the customer's signing key and
+-- registered API clients (cookbook §1.3 + Audit-A5 P1-1/P1-2/NEW-P1).
+--
+-- Default behaviour (gate OFF) → no destructive SQL whatsoever.
+-- Opt-in behaviour (gate ON)   → script.php::dropOwnedTables() removes:
+--                                   `#__ytb_mcp_options`
+--                                   `#__ytb_mcp_transients`
+--                                   `#__ytb_mcp_lock`
+--
+-- Do NOT add destructive statements here — they would run unconditionally
+-- via Joomla's manifest-driven uninstall.sql hook and bypass the gate.
+--

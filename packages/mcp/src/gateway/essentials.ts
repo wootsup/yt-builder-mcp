@@ -16,9 +16,10 @@
  *                                 SDK never sees a duplicate registration.
  *
  * Why this split: Cursor caps MCP servers at ~40 tools. This adapter
- * declares 22 tools (21 domain + 1 gateway). The 3-lane shape keeps
- * `tools/list` at 7 (L1) + 2 (L3) + 1 (gateway) = 10 entries, well under
- * the cap, while every tool stays fully reachable.
+ * declares 27 callable tools (19 domain L1/L3 + 7 advanced L2 + 1 gateway).
+ * The 3-lane shape keeps `tools/list` at 17 (L1) + 2 (L3) + 1 (gateway) =
+ * 20 entries, well under the cap, while every tool stays fully reachable
+ * (advanced tools through `yootheme_builder_advanced`).
  *
  * Health + diagnose live in L3 because they MUST be the first thing an
  * LLM-host calls when something is broken; routing them through a gateway
@@ -47,8 +48,9 @@ export const ESSENTIAL_TOOLS = [
     'yootheme_builder_inspect_multi_items_binding',
     // F-16 hot-path promotions (Maria-Audit v2 re-confirmed) — the 5
     // most-used read/mutate operations skip the advanced-router
-    // discovery roundtrip. Cursor cap is ~40; we sit at 15 L1 + 2 L3 +
-    // 1 gateway = 18, comfortable below the limit.
+    // discovery roundtrip. Cursor cap is ~40; with the W7 sites_list +
+    // sites_test additions we sit at 17 L1 + 2 L3 + 1 gateway = 20,
+    // comfortable below the limit.
     'yootheme_builder_element_get',
     'yootheme_builder_element_delete',
     'yootheme_builder_element_clone',
@@ -63,6 +65,13 @@ export const ESSENTIAL_TOOLS = [
     // discovery tool an agent needs BEFORE every element_add or
     // element_update_settings. Hot-path for any write workflow.
     'yootheme_builder_element_type_get_schema',
+    // W7 (Multi-Site) — sites_list + sites_test must be L1 so an agent
+    // that just connected to a fresh MCP server can answer "which sites
+    // am I configured against?" without first discovering the gateway.
+    // Both are platform-agnostic (sites_list reads the registry only,
+    // sites_test probes /health + /etag for ONE site). L1 surface 15 → 17.
+    'yootheme_builder_sites_list',
+    'yootheme_builder_sites_test',
 ] as const;
 
 /**

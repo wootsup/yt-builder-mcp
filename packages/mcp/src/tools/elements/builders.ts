@@ -14,8 +14,9 @@
 
 import { z } from 'zod';
 
-import type { RestClient } from '../../client.js';
-import { ELEMENT_PATH, ETAG, PROPS, TEMPLATE_ID } from '../shared-schemas.js';
+import type { ClientPool } from '../../sites/client-pool.js';
+import { withSiteRetry } from '../pool-resolve-helper.js';
+import { ELEMENT_PATH, ETAG, PROPS, SITE_ID_SCHEMA, TEMPLATE_ID } from '../shared-schemas.js';
 import { FIELDS } from '../sparse-fields.js';
 import {
     creating,
@@ -23,6 +24,7 @@ import {
     destructive,
     mutating,
     readOnly,
+    withSiteMeta,
     type AnyToolDefinition,
 } from '../tool-builder.js';
 import {
@@ -45,13 +47,17 @@ import {
  * `confirm: true` parameter.
  */
 export function buildElementsTools(
-    client: RestClient,
+    pool: ClientPool,
     deps?: Partial<ElementsHandlerDeps>,
 ): readonly AnyToolDefinition[] {
-    const handlerDeps: ElementsHandlerDeps = {
-        client,
-        elicitation: deps?.elicitation,
-    };
+    // W6.3 — each handler resolves the pool inline (per `site_id`) so
+    // the per-handler `siteClient` reaches the right CMS install. The
+    // elicitation capability is the only non-client dep we propagate.
+    const elicitation = deps?.elicitation;
+    const makeDeps = (siteClient: ElementsHandlerDeps['client']): ElementsHandlerDeps =>
+        (elicitation !== undefined
+            ? { client: siteClient, elicitation }
+            : { client: siteClient });
 
     return [
         defineTool({
@@ -59,8 +65,10 @@ export function buildElementsTools(
             description:
                 'List elements in a template as a flat array with JSON-Pointer paths + ' +
                 'types. Scope with `root_path`/`depth` for a subtree, paginate with ' +
-                '`limit`/`cursor` for large templates. `fields[]` narrows each row.',
+                '`limit`/`cursor` for large templates. `fields[]` narrows each row. ' +
+                'Operates on the default site unless site_id is provided.',
             inputSchema: {
+                site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 fields: FIELDS,
                 root_path: z
@@ -92,21 +100,27 @@ export function buildElementsTools(
             },
             outputSchema: ELEMENT_LIST_OUTPUT_SCHEMA,
             annotations: readOnly('List Elements'),
-            handler: (input) => handleElementList(handlerDeps, input),
+            handler: async ({ site_id, ...rest }) =>
+                withSiteRetry(pool, site_id, async (client, site) =>
+                    withSiteMeta(await handleElementList(makeDeps(client), rest), site)),
         }),
 
         defineTool({
             name: 'yootheme_builder_element_get',
             description:
                 'Get the full element object at a specific JSON-Pointer path, including props ' +
-                'and children. Use yootheme_builder_element_list to discover paths.',
+                'and children. Use yootheme_builder_element_list to discover paths. ' +
+                'Operates on the default site unless site_id is provided.',
             inputSchema: {
+                site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
             },
             outputSchema: ELEMENT_GET_OUTPUT_SCHEMA,
             annotations: readOnly('Get Element'),
-            handler: (input) => handleElementGet(handlerDeps, input),
+            handler: async ({ site_id, ...rest }) =>
+                withSiteRetry(pool, site_id, async (client, site) =>
+                    withSiteMeta(await handleElementGet(makeDeps(client), rest), site)),
         }),
 
         defineTool({
@@ -114,8 +128,10 @@ export function buildElementsTools(
             description:
                 'Add a new element to a template. Provide `parent_path` (or "" for root), ' +
                 '`element_type` (e.g. "headline", "text", "grid"), and optional `props` / ' +
-                '`children`. Returns the new element\'s JSON-Pointer path. Requires ETag.',
+                '`children`. Returns the new element\'s JSON-Pointer path. Requires ETag. ' +
+                'Operates on the default site unless site_id is provided.',
             inputSchema: {
+                site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 parent_path: z
                     .string()
@@ -144,7 +160,9 @@ export function buildElementsTools(
                 etag: ETAG,
             },
             annotations: creating('Add Element'),
-            handler: (input, extra) => handleElementAdd(handlerDeps, input, extra),
+            handler: async ({ site_id, ...rest }, extra) =>
+                withSiteRetry(pool, site_id, async (client, site) =>
+                    withSiteMeta(await handleElementAdd(makeDeps(client), rest, extra), site)),
         }),
 
         defineTool({
@@ -152,8 +170,10 @@ export function buildElementsTools(
             description:
                 'Update `props` on an element. Default replaces all props; pass ' +
                 '`merge:true` for server-side deep-merge (only request keys overwritten, ' +
-                'others survive — avoids read-modify-write races). Requires ETag.',
+                'others survive — avoids read-modify-write races). Requires ETag. ' +
+                'Operates on the default site unless site_id is provided.',
             inputSchema: {
+                site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
                 props: PROPS,
@@ -167,15 +187,19 @@ export function buildElementsTools(
                 etag: ETAG,
             },
             annotations: mutating('Update Element Settings'),
-            handler: (input, extra) => handleElementUpdateSettings(handlerDeps, input, extra),
+            handler: async ({ site_id, ...rest }, extra) =>
+                withSiteRetry(pool, site_id, async (client, site) =>
+                    withSiteMeta(await handleElementUpdateSettings(makeDeps(client), rest, extra), site)),
         }),
 
         defineTool({
             name: 'yootheme_builder_element_move',
             description:
                 'Move an element to a new parent + index in the tree. Useful for reordering or ' +
-                'reparenting (e.g. moving a card from one grid column to another). Requires ETag.',
+                'reparenting (e.g. moving a card from one grid column to another). Requires ETag. ' +
+                'Operates on the default site unless site_id is provided.',
             inputSchema: {
+                site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
                 to_parent_path: z
@@ -189,21 +213,27 @@ export function buildElementsTools(
                 etag: ETAG,
             },
             annotations: mutating('Move Element'),
-            handler: (input, extra) => handleElementMove(handlerDeps, input, extra),
+            handler: async ({ site_id, ...rest }, extra) =>
+                withSiteRetry(pool, site_id, async (client, site) =>
+                    withSiteMeta(await handleElementMove(makeDeps(client), rest, extra), site)),
         }),
 
         defineTool({
             name: 'yootheme_builder_element_clone',
             description:
                 'Clone an element as a sibling (same parent, immediately after the source). ' +
-                'Returns the new element\'s path. Requires ETag.',
+                'Returns the new element\'s path. Requires ETag. ' +
+                'Operates on the default site unless site_id is provided.',
             inputSchema: {
+                site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
                 etag: ETAG,
             },
             annotations: creating('Clone Element'),
-            handler: (input, extra) => handleElementClone(handlerDeps, input, extra),
+            handler: async ({ site_id, ...rest }, extra) =>
+                withSiteRetry(pool, site_id, async (client, site) =>
+                    withSiteMeta(await handleElementClone(makeDeps(client), rest, extra), site)),
         }),
 
         defineTool({
@@ -211,8 +241,9 @@ export function buildElementsTools(
             description:
                 'PERMANENTLY delete an element and all its children. Cannot be undone. Always ' +
                 'ask the user to confirm first, then call again with `confirm: true`. Requires ' +
-                'ETag.',
+                'ETag. Operates on the default site unless site_id is provided.',
             inputSchema: {
+                site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
                 etag: ETAG,
@@ -226,7 +257,9 @@ export function buildElementsTools(
                     ),
             },
             annotations: destructive('Delete Element'),
-            handler: (input, extra) => handleElementDelete(handlerDeps, input, extra),
+            handler: async ({ site_id, ...rest }, extra) =>
+                withSiteRetry(pool, site_id, async (client, site) =>
+                    withSiteMeta(await handleElementDelete(makeDeps(client), rest, extra), site)),
         }),
     ];
 }

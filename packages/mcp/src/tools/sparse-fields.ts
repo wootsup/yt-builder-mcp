@@ -169,3 +169,52 @@ export function projectedFieldsEcho(
     if (defaults !== undefined) return defaults;
     return undefined;
 }
+
+/**
+ * Per-item projection feedback for the LLM/agent.
+ *
+ * F-004/F-005 fix (2026-05-25 exhaustive audit): when the caller passes
+ * `fields: ["template_id", "name"]` against `pages_list` (whose actual
+ * item shape uses `id` + `label`), the previous projection returned
+ * `items: [{}, {}, …]` with zero indication that NOTHING matched. The
+ * silence cost an entire follow-up debug round in cold-agent flows. We
+ * now surface the field vocabulary every call so the agent can self-
+ * correct on the next request:
+ *
+ *  - `available_fields`: union of top-level keys observed across items
+ *    (best-effort vocabulary discovery without needing per-tool enums).
+ *  - `unknown_fields`: caller-requested fields that did NOT appear in
+ *    any item — explicit "you asked for these but they aren't a thing".
+ *
+ * Both are only emitted when the caller supplied `fields[]`; default-
+ * compact callers don't need the audit overhead.
+ */
+export interface ProjectionFeedback {
+    /** Union of top-level keys observed across items. */
+    readonly available_fields: readonly string[];
+    /** Caller-requested fields that did NOT appear in any item. */
+    readonly unknown_fields: readonly string[];
+}
+
+export function projectionFeedback(
+    items: readonly Record<string, unknown>[],
+    requested: readonly string[] | undefined,
+): ProjectionFeedback | undefined {
+    if (requested === undefined || requested.length === 0) return undefined;
+    const seen = new Set<string>();
+    for (const item of items) {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+            for (const k of Object.keys(item)) seen.add(k);
+        }
+    }
+    const available = [...seen].sort();
+    // A leaf-path counts as "known" if its TOP level matches a key on any
+    // item (the toolkit `pickFields` walks dotted paths — `props.title`
+    // is reachable as long as `props` exists; per-item depth would be
+    // overkill here).
+    const unknown = requested.filter((f) => {
+        const top = f.split('.')[0];
+        return top !== undefined && !seen.has(top);
+    });
+    return { available_fields: available, unknown_fields: unknown };
+}

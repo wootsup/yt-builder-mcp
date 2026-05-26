@@ -203,7 +203,7 @@ final class RecordingStateLock extends StateLock
     /** @var list<string> */
     public array $released = [];
 
-    public function withTemplateLock(string $templateId, callable $callback, int $timeoutMs = self::DEFAULT_TIMEOUT_MS)
+    public function withTemplateLock(string $templateId, callable $callback, int $timeoutMs = self::DEFAULT_TIMEOUT_MS): mixed
     {
         $this->acquired[] = $templateId;
         try {
@@ -221,7 +221,7 @@ final class RecordingStateLock extends StateLock
  */
 final class BlockingStateLock extends StateLock
 {
-    public function withTemplateLock(string $templateId, callable $callback, int $timeoutMs = self::DEFAULT_TIMEOUT_MS)
+    public function withTemplateLock(string $templateId, callable $callback, int $timeoutMs = self::DEFAULT_TIMEOUT_MS): mixed
     {
         throw new \RuntimeException(
             sprintf('BlockingStateLock: refused to acquire for "%s" (simulated race loss).', $templateId),

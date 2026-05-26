@@ -33,24 +33,26 @@
  * @license MIT
  */
 
+// W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
 import { createServer } from '../../src/server.js';
 import { ESSENTIAL_TOOLS } from '../../src/gateway/essentials.js';
 import { collectAllRegisteredTools } from '../../src/gateway/test-support.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
+import { makeTestPool } from '../helpers/test-pool.js';
 
-function makeClient(): RestClient {
-    return new RestClient({
+function makeClient(): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async () => new Response('{}', { status: 200 })) as unknown as typeof fetch,
     });
 }
 
 describe('Gateway L1-promotion contract', () => {
     it('every L1 essential is reachable as a direct tools/list entry', () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         for (const name of ESSENTIAL_TOOLS) {
             expect(all[name], `${name} missing from unified surface`).toBeDefined();
@@ -58,7 +60,7 @@ describe('Gateway L1-promotion contract', () => {
     });
 
     it('gateway returns unknown_tool when called with an L1-promoted name', async () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         const gateway = all.yootheme_builder_advanced!;
 
@@ -74,7 +76,7 @@ describe('Gateway L1-promotion contract', () => {
     });
 
     it('the unknown_tool error suggestion still lists the advanced surface for orientation', async () => {
-        const { mcp, capturing } = createServer({ client: makeClient() });
+        const { mcp, capturing } = createServer({ pool: makeClient() });
         const all = collectAllRegisteredTools(mcp, capturing);
         const gateway = all.yootheme_builder_advanced!;
 

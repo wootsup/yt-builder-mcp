@@ -1,18 +1,21 @@
 /**
  * Tests for health + diagnose tools.
  *
+ * W6: migrated from RestClient to ClientPool (see tests/helpers/test-pool.ts).
+ *
  * @license MIT
  */
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { RestClient } from '../../src/client.js';
+import type { ClientPool } from '../../src/sites/client-pool.js';
 import { buildHealthTools } from '../../src/tools/health.js';
+import { makeTestPool, stripSitePrefix } from '../helpers/test-pool.js';
 
-function fakeClient(handler: (url: string) => Response | Promise<Response>): RestClient {
-    return new RestClient({
+function fakeClient(handler: (url: string) => Response | Promise<Response>): ClientPool {
+    return makeTestPool({
         baseUrl: 'https://example.com',
-        bearerToken: 't',
+        bearer: 't',
         fetch: vi.fn(async (input: RequestInfo | URL) => {
             const url = typeof input === 'string' ? input : input.toString();
             return handler(url);
@@ -112,7 +115,7 @@ describe('buildHealthTools', () => {
         );
         const result = await findTool(tools, 'yootheme_builder_diagnose').handler({});
         expect(result.isError).toBe(true);
-        const parsed = JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+        const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as Record<string, unknown>;
         expect(parsed.plugin_reachable).toBe(true);
         expect(parsed.bearer_valid).toBe(false);
     });
@@ -209,6 +212,72 @@ describe('buildHealthTools', () => {
         // Sanity: not undefined.
         expect(healthSc.site_url).toBe('https://example.test/sub/path');
         expect(healthSc.home_url).toBe('https://example.test');
+    });
+
+    // R8-A3 #6b — cross-platform health schema. The Joomla server emits a
+    // DIFFERENT shape than WP: `cms`/`cms_version` (e.g. "Joomla" / "6.0.2")
+    // and NEITHER `wp_version` NOR `yootheme_version`. Wave-7 made every
+    // platform-/tier-variable field optional so the SAME outputSchema
+    // validates both platforms. Pre-fix the schema required `wp_version`
+    // (string, non-optional) → the Joomla payload failed host-side schema
+    // validation and the tool result was rejected. These tests pin both the
+    // surfaced fields and a direct schema-validation of the Joomla shape.
+    it('health surfaces cms/cms_version for the Joomla payload (no wp_version)', async () => {
+        const tools = buildHealthTools(
+            fakeClient(() =>
+                jsonResponse({
+                    plugin_version: '1.0.1',
+                    cms: 'Joomla',
+                    cms_version: '6.0.2',
+                    php_version: '8.3',
+                    storage_type: 'joomla_extensions',
+                    storage_target: 'yootheme',
+                    yootheme_loaded: true,
+                    available_endpoints: ['/health', '/pages'],
+                }),
+            ),
+        );
+        const result = await findTool(tools, 'yootheme_builder_health').handler({});
+        const sc = result.structuredContent as Record<string, unknown>;
+        expect(sc).toMatchObject({
+            plugin_version: '1.0.1',
+            cms: 'Joomla',
+            cms_version: '6.0.2',
+            yootheme_loaded: true,
+        });
+        // Joomla omits these WP-only fields — they must NOT appear.
+        expect(sc.wp_version).toBeUndefined();
+        expect(sc.yootheme_version).toBeUndefined();
+    });
+
+    it('the health outputSchema validates the Joomla-shaped payload (cms/cms_version, no wp_version)', () => {
+        const tools = buildHealthTools(fakeClient(() => jsonResponse({})));
+        const healthTool = findTool(tools, 'yootheme_builder_health');
+        const schema = healthTool.outputSchema;
+        expect(schema, 'health tool must declare an outputSchema').toBeDefined();
+
+        // The Joomla authenticated payload — cms/cms_version present, the
+        // WP-only fields absent. This MUST pass the (now-optional) schema.
+        const joomlaPayload = {
+            plugin_version: '1.0.1',
+            cms: 'Joomla',
+            cms_version: '6.0.2',
+            php_version: '8.3',
+            storage_type: 'joomla_extensions',
+            storage_target: 'yootheme',
+            yootheme_loaded: true,
+            available_endpoints: ['/health'],
+        };
+        const parsed = schema!.safeParse(joomlaPayload);
+        expect(parsed.success, JSON.stringify('error' in parsed ? parsed.error.issues : [])).toBe(true);
+
+        // The anonymous Joomla tier (only the three always-present fields)
+        // must also validate — every other field is optional.
+        const anonPayload = {
+            plugin_version: '1.0.1',
+            yootheme_loaded: false,
+        };
+        expect(schema!.safeParse(anonPayload).success).toBe(true);
     });
 
     // Back-compat: when an older PHP server doesn't yet emit the URL
