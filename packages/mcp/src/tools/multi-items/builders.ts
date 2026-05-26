@@ -18,12 +18,14 @@
  * @license MIT
  */
 
+import { z } from 'zod';
+
 import type { ClientPool } from '../../sites/client-pool.js';
 import { withSiteRetry } from '../pool-resolve-helper.js';
 import { ELEMENT_PATH, ETAG, SITE_ID_SCHEMA, TEMPLATE_ID } from '../shared-schemas.js';
 import {
     defineTool,
-    mutating,
+    destructive,
     readOnly,
     withSiteMeta,
     type AnyToolDefinition,
@@ -68,17 +70,27 @@ export function buildMultiItemsTools(pool: ClientPool): readonly AnyToolDefiniti
             name: 'yootheme_builder_clean_implode_directives',
             description:
                 'Strips `props.source.props.*.implode` directives from an element binding. ' +
-                'Returns audit log + new ETag. Idempotent (cleaned_count: 0 when nothing to ' +
-                'remove). Requires ETag. ' +
+                'Returns audit log + new ETag. Idempotent at the server (cleaned_count: 0 ' +
+                'when nothing to remove) but classed as destructive because the affected ' +
+                'binding cannot be restored without re-mapping. Always ask the user to ' +
+                'confirm first, then call again with `confirm: true`. Requires ETag. ' +
                 'Operates on the default site unless site_id is provided.',
             inputSchema: {
                 site_id: SITE_ID_SCHEMA,
                 template_id: TEMPLATE_ID,
                 element_path: ELEMENT_PATH,
                 etag: ETAG,
+                confirm: z
+                    .boolean()
+                    .optional()
+                    .describe(
+                        'Must be true to execute. Without it the call returns a preview ' +
+                            'and makes NO server-side change; the agent must ask the user ' +
+                            'to confirm and retry with `confirm: true`.',
+                    ),
             },
             outputSchema: CLEAN_IMPLODE_OUTPUT_SCHEMA,
-            annotations: mutating('Clean Implode Directives'),
+            annotations: destructive('Clean Implode Directives'),
             handler: async ({ site_id, ...rest }) =>
                 withSiteRetry(pool, site_id, async (client, site) => {
                     const deps: MultiItemsHandlerDeps = { client };

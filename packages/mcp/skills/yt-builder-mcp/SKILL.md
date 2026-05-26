@@ -431,10 +431,11 @@ renders dynamic items.
   they're PUBLISHED in API Mapper (not just saved). If
   `yootheme_builder_sources_list` returns no match for the name the
   user typed, send the user to API Mapper to publish it.
-- **Binding non-list elements.** Only multi-item element types (Grid,
-  List, Switcher, Slider, Slideshow, Carousel, Map) accept a source
-  binding. Binding a single-item element like Headline returns a
-  structured `validation` error.
+- **Binding non-list elements.** Only multi-item element types
+  (Accordion, Button, Description List, Gallery, Grid, List, Map, Nav,
+  Overlay-Slider, Panel-Slider, Popover, Slideshow, Social, Subnav,
+  Switcher, Table) accept a source binding. Binding a single-item
+  element like Headline returns a structured `validation` error.
 - **Forgetting `etag`.** Every write requires the optimistic-lock
   etag. On `412 Precondition Failed` re-fetch via
   `yootheme_builder_get_etag` and retry.

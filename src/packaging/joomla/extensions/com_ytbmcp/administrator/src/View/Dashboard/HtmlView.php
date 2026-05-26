@@ -45,7 +45,7 @@ use WootsUp\BuilderMcp\Platform\Joomla\Yootheme\JoomlaYoothemeProbe;
 class HtmlView extends BaseHtmlView
 {
     /** Plugin version — single source of truth mirrored from packaging manifest. */
-    public const PLUGIN_VERSION = '1.1.5';
+    public const PLUGIN_VERSION = '1.1.6';
 
     /** Minimum YOOtheme Pro version (parity with WP YTB_MCP_MIN_YT_VERSION). */
     public const MIN_YT_VERSION = '4.0';

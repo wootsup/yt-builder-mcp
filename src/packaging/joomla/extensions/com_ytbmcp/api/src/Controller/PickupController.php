@@ -63,7 +63,7 @@ use WootsUp\BuilderMcp\Util\SecurityLogger;
 class PickupController extends BaseController
 {
     /** Plugin-version emitted on the happy-path response (parity with WP-side). */
-    private const PLUGIN_VERSION = '1.1.5';
+    private const PLUGIN_VERSION = '1.1.6';
 
     /** Maximum pickup attempts per IP within the rate-limit window. */
     private const RATE_LIMIT_MAX_ATTEMPTS = 10;

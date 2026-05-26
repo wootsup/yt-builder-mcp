@@ -194,7 +194,16 @@ const CASES: readonly ShapePinCase[] = [
     },
     {
         toolName: 'yootheme_builder_clean_implode_directives',
-        args: { template_id: 'home', element_path: '/0', etag: '"e0"' },
+        // Wave H5 (v1.1.6): the tool is now destructive and requires
+        // `confirm: true`; without it the call returns a preview envelope
+        // (no structuredContent). The shape-pin verifies the post-confirm
+        // POST path, so we pass `confirm: true` here.
+        args: {
+            template_id: 'home',
+            element_path: '/0',
+            etag: '"e0"',
+            confirm: true,
+        },
         responseBody: {
             template_id: 'home',
             element_path: '/0',

@@ -5,7 +5,20 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows [Semantic Versioning](https://semver.org/).
 
-## [1.1.5] `Latest` - 2026-05-26
+## [1.1.6] `Latest` - 2026-05-26
+
+### Changed
+
+- **Documentation polish across every customer-facing surface (README, getting-started, REST + MCP tool references, cross-platform parity, in-product agent skill). Internal development jargon stripped (wave-status tables, finding IDs, internal branch refs). Stale test counts and tool-catalogue numbers refreshed. The agent skill bundled with the npm package + DXT now reads in a consistent voice.** `docs`
+- **Getting Started guide is now platform-aware. Step-by-step install + bearer-key + setup-wizard walkthrough covers both WordPress and Joomla 5/6 in parallel, with per-platform admin paths and the Web Services API enablement note Joomla needs.** `docs` `joomla`
+- **REST API reference: corrected the /sources example shape (returns a grouped object keyed by origin, not a flat array) and refreshed the bearer-augmented /health example with verified live field values.** `docs` `rest-api`
+- **Documentation corrected for the 16 Multi-Items container types. The v1.1.0 CHANGELOG and the in-product agent skill incorrectly listed `Slider` (does not exist on YOOtheme Pro) and `Buttons` (singular is `Button`), and omitted `Popover`. The pretty-list now matches the registered types one-to-one.** `docs`
+
+### Fixed
+
+- **`clean_implode_directives` MCP tool now requires explicit `confirm: true` before stripping implode directives. Matches the destructive-guard pattern of `element_delete` and `element_unbind_source`; an auto-acting agent can no longer strip bindings on the first call. Annotation now correctly classes the tool as destructive.** `mcp` `safety`
+
+## [1.1.5] - 2026-05-26
 
 ### Changed
 
@@ -196,7 +209,7 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - **Per-prop field mapping: define exactly which source field feeds which element prop, so dynamic content lands in the right place.**
 - **Binding introspection: read an element's current binding: source name, the full field-mapping table, query arguments and directives, so the assistant sees precisely what is wired where.**
 - **Source unbinding, remove a binding behind the same two-step confirmation guard used for deletes.**
-- **Multi-Items binding for all 16 container types, first-class support for the YOOtheme Pro Multi-Items pattern across every container/item pair (Grid, List, Slider, Slideshow, Switcher, Gallery, Accordion, Map, Nav, Subnav, Table, Social, Buttons, Description-List, Overlay-Slider, Panel-Slider): bind one source so a single container renders N children, never N stacked containers.**
+- **Multi-Items binding for all 16 container types, first-class support for the YOOtheme Pro Multi-Items pattern across every container/item pair (Accordion, Button, Description List, Gallery, Grid, List, Map, Nav, Overlay-Slider, Panel-Slider, Popover, Slideshow, Social, Subnav, Switcher, Table): bind one source so a single container renders N children, never N stacked containers.**
 - **Multi-Items inspector: report the current binding level (none / container / item), the matching container-to-item pair, and a recommended fix when a binding sits on the wrong level.**
 - **Implode-directive cleanup, a one-click tool that strips stale implode directives left behind by older container-level bindings (the cause of comma-joined values rendering in a single field).**
 - **Comprehensive tool surface: 24 tools covering health and diagnostics, pages and templates, element CRUD, sources and binding, element types, and Multi-Items.**
@@ -253,7 +266,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - **Fixed** - Bug fixes
 - **Security** - Security updates
 
-[1.1.5]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.4...HEAD
+[1.1.6]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.5...HEAD
+[1.1.5]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.2...v1.1.3
 [1.1.2]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.1...v1.1.2

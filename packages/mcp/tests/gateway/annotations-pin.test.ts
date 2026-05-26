@@ -171,11 +171,15 @@ describe('annotation pin tests (all lanes)', () => {
         yootheme_builder_element_move: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         yootheme_builder_page_save: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
         yootheme_builder_page_publish: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-        yootheme_builder_clean_implode_directives: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 
         // destructive writes
         yootheme_builder_element_delete: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
         yootheme_builder_element_unbind_source: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+        // Wave H5 (v1.1.6): re-classified from mutating to destructive — the
+        // operation strips implode directives from a binding, which cannot be
+        // restored without re-mapping. Carries the same confirm-guard pattern
+        // as element_delete / element_unbind_source.
+        yootheme_builder_clean_implode_directives: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
 
         // gateway — open-world router, dispatches into destructive handlers
         yootheme_builder_advanced: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },

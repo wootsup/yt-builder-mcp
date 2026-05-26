@@ -47,7 +47,7 @@ class Pkg_YtbmcpInstallerScript extends InstallerScript
     private const MIN_YT_VERSION = '4.0';
 
     /** Product version (kept in sync with pkg_ytbmcp.xml <version>). */
-    private const PLUGIN_VERSION = '1.1.5';
+    private const PLUGIN_VERSION = '1.1.6';
 
     /**
      * W9-T7 (#23): media files shipped by an EARLIER version that the current

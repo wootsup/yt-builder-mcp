@@ -125,10 +125,13 @@ describe('clean_implode_directives', () => {
             }),
         );
 
+        // Wave H5: confirm-guard now gates the destructive call. Pass
+        // `confirm: true` to exercise the actual POST path.
         await findTool(tools, 'yootheme_builder_clean_implode_directives').handler({
             template_id: 'tpl',
             element_path: '/templates/tpl/layout/children/1',
             etag: '"e2"',
+            confirm: true,
         });
         expect(seenMethod).toBe('POST');
         // RestClient sends If-Match header for write methods.
@@ -155,6 +158,7 @@ describe('clean_implode_directives', () => {
             template_id: 'tpl',
             element_path: '/0',
             etag: '"e2"',
+            confirm: true,
         });
         const parsed = JSON.parse(stripSitePrefix(result.content[0]!.text as string)) as {
             cleaned_count: number;
