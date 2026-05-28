@@ -59,7 +59,7 @@ class HealthController extends BaseController
      * defined by the WP entry-file; on Joomla we mirror via constant
      * to avoid hardcoding it in two places.
      */
-    private const PLUGIN_VERSION = '1.1.6';
+    private const PLUGIN_VERSION = '1.1.7';
 
     /**
      * Round-3 audit A2 P2-202: class-level memoized verifier. The

@@ -144,7 +144,9 @@ abstract class AbstractApiController extends BaseController
             $limiter = new JoomlaRateLimiter();
             $err = $limiter->checkWrite($kid);
             if ($err !== null) {
-                JoomlaJsonResponse::send($app, $err['payload'], $err['status']);
+                // Wave-1 Fix C-4 — HTTP/1.1 §7.1.3 Retry-After header on 429.
+                $retryAfterHeaders = ['Retry-After' => (string) JoomlaRateLimiter::WINDOW_SECONDS];
+                JoomlaJsonResponse::send($app, $err['payload'], $err['status'], $retryAfterHeaders);
                 return;
             }
         }

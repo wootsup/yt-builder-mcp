@@ -76,7 +76,7 @@ final class Ytbmcp extends CMSPlugin implements SubscriberInterface
      * stored `plugin_version` option detects the silent upgrade on the next
      * request and triggers a reseed + stale-media prune.
      */
-    public const YTBMCP_VERSION = '1.1.0';
+    public const YTBMCP_VERSION = '1.1.7';
 
     /**
      * URI substring tested against the request to decide whether the

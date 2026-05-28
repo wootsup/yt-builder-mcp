@@ -48,8 +48,11 @@ final class RateLimiter
         $count++;
 
         if ($count > self::WRITE_LIMIT) {
+            // Wave-1 Fix C-4: dedicated event-name lets SIEM/forensics
+            // filter the "compromised bearer / runaway client" signal
+            // without the per-IP pickup-limiter noise.
             \WootsUp\BuilderMcp\Util\SecurityLogger::log(
-                \WootsUp\BuilderMcp\Util\SecurityLogger::EVENT_RATE_LIMIT,
+                \WootsUp\BuilderMcp\Util\SecurityLogger::EVENT_MCP_WRITE_RATE_LIMITED,
                 [
                     'kid' => $kid,
                     'limit' => self::WRITE_LIMIT,
@@ -65,6 +68,14 @@ final class RateLimiter
                 ),
                 [
                     'status' => 429,
+                    // Wave-1 Fix C-4 — well-known token + scope dimension so
+                    // MCP clients can render a "retry in N seconds" toast
+                    // without parsing the human-readable message.
+                    'error' => 'rate_limit_exceeded',
+                    'retry_after_seconds' => self::WINDOW_SECONDS,
+                    'scope' => 'kid',
+                    // Back-compat: pre-Wave-1 fields kept for clients that
+                    // already parse them.
                     'limit' => self::WRITE_LIMIT,
                     'window_seconds' => self::WINDOW_SECONDS,
                     'retry_after' => self::WINDOW_SECONDS,

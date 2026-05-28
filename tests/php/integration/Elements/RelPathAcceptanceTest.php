@@ -175,7 +175,8 @@ final class RelPathAcceptanceTest extends TestCase
     public function test_add_element_accepts_rel_path_parent(): void
     {
         $controller = $this->controller();
-        $req = new \WP_REST_Request('POST', '/');
+        // Wave-1 C-2 contract: POST add requires If-Match.
+        $req = $this->writeRequest('POST');
         $req['template_id'] = 'tpl';
         $req->set_param('parent_path', '/children/0'); // append into section
         $req->set_param('element_type', 'divider');
@@ -211,6 +212,8 @@ final class RelPathAcceptanceTest extends TestCase
         $req = $this->writeRequest('DELETE');
         $req['template_id'] = 'tpl';
         $req['element_path'] = '/children/1'; // image
+        // Wave-1 C-3 contract: DELETE requires `confirm:true` to actually mutate.
+        $req->set_param('confirm', true);
 
         $resp = $controller->delete_element($req);
         self::assertInstanceOf(\WP_REST_Response::class, $resp);

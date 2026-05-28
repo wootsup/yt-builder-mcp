@@ -304,10 +304,168 @@ if (!function_exists('esc_js')) {
 }
 
 if (!function_exists('wp_kses')) {
+    /**
+     * Test stub for wp_kses — hardened to mimic the REAL WordPress
+     * implementation along four divergence classes the previous stub
+     * silently ignored (R8-A4 audit 2026-05-27 findings A4-2/A4-3):
+     *
+     *   (a) PER-TAG attribute allow-list — real wp_kses strips any
+     *       attribute NOT in `wp_kses_allowed_html` for THAT tag. The
+     *       previous stub only scrubbed on*= + javascript: globally,
+     *       so a malicious `<a onclick="…">` got the on* stripped but
+     *       a `<a style="…">` (not on the customer-friendly allow-list
+     *       for `<a>`) survived even though real wp_kses would strip it.
+     *
+     *   (b) RECURSIVE ENTITY-DECODE on URI attributes — real wp_kses
+     *       runs `wp_kses_bad_protocol` which decodes entities (numeric
+     *       like `&#x6a;` and named like `&colon;`) before testing the
+     *       protocol. The previous stub's lowercase + strncmp on the
+     *       RAW value let `&#x6a;avascript:` through, defeating the
+     *       defence.
+     *
+     *   (c) HTML-COMMENT stripping — real wp_kses removes `<!-- … -->`
+     *       comment blocks entirely. The previous stub passed them
+     *       through, which could carry IE-style conditional payloads
+     *       (`<!--[if IE]><script>…</script><![endif]-->`).
+     *
+     *   (d) MALFORMED-TAG state-machine reconstitution — real wp_kses
+     *       parses character-by-character so a payload like
+     *       `<scr<script>ipt>alert(1)</script>` reduces to nothing
+     *       after the inner `<script>` is stripped (the outer `<scr` is
+     *       not a valid tag and gets dropped). The previous stub used
+     *       a single-pass regex on `<script>` which left the OUTER
+     *       fragment intact.
+     *
+     * The stub is intentionally NOT a copy of PropSanitizer's
+     * fallbackSanitize() — that path is what runs when wp_kses is
+     * absent, and a tautological stub would mean tests on the WP path
+     * are validating the SAME logic the Joomla fallback validates,
+     * which the audit flagged as `live-green != tested-green`. The
+     * divergence-class tests in tests/php/unit/Util/PropSanitizerWpKsesDivergenceTest.php
+     * prove the WP-vs-fallback contract differs along (a)-(d).
+     *
+     * @param array<string, array<string, bool>> $allowed_html
+     * @param array<string>                      $allowed_protocols
+     */
     function wp_kses(string $content, array $allowed_html = [], array $allowed_protocols = []): string
     {
-        // Test stub: strip_tags is a safe approximation for the assertion surface
-        return strip_tags($content, array_keys($allowed_html));
+        // (c) Strip HTML comments — real wp_kses removes <!-- ... --> blocks
+        // before tag-parsing. Drop both balanced and trailing comments.
+        $content = (string) preg_replace('/<!--.*?-->/s', '', $content);
+        // Also drop any unclosed trailing comment (defence-in-depth).
+        $content = (string) preg_replace('/<!--.*$/s', '', $content);
+
+        // (d) Malformed-tag state-machine pre-pass: iteratively eliminate
+        // forbidden block tags (script/iframe/object/embed/style/svg/...)
+        // INCLUDING their content. Repeat until stable so payloads like
+        // `<scr<script>ipt>X</script>` collapse fully (the outer `<scr`
+        // becomes orphaned and the next-pass strip_tags drops it).
+        $forbidden = [
+            'script', 'iframe', 'object', 'embed', 'style', 'svg',
+            'link', 'meta', 'form', 'input', 'button', 'textarea',
+            'select', 'option', 'applet', 'frame', 'frameset',
+            'audio', 'video', 'source',
+        ];
+        do {
+            $previous = $content;
+            foreach ($forbidden as $tag) {
+                $content = (string) preg_replace(
+                    '#<' . $tag . '\b[^>]*>.*?(</' . $tag . '\s*>|$)#is',
+                    '',
+                    $content,
+                );
+                $content = (string) preg_replace(
+                    '#<' . $tag . '\b[^>]*/?>#i',
+                    '',
+                    $content,
+                );
+            }
+        } while ($content !== $previous);
+
+        // Allow-list pass — drops every tag not on the allow-list.
+        $allowedTags = '';
+        foreach (array_keys($allowed_html) as $tag) {
+            $allowedTags .= '<' . $tag . '>';
+        }
+        $content = strip_tags($content, $allowedTags);
+
+        // (a) Per-tag attribute allow-list + (b) recursive entity-decode on
+        // URI-bearing attributes. Walk every surviving tag and:
+        //   - drop attributes not in the per-tag allow-list
+        //     ($allowed_html[$tag] map)
+        //   - drop attributes whose decoded value uses javascript:/vbscript:/
+        //     data:text/html — entities decoded recursively per wp_kses_bad_protocol.
+        $scrubbed = preg_replace_callback(
+            '#<([a-z][a-z0-9]*)([^>]*)>#i',
+            static function (array $m) use ($allowed_html): string {
+                $tag = strtolower($m[1]);
+                $allowedAttrs = isset($allowed_html[$tag]) && is_array($allowed_html[$tag])
+                    ? $allowed_html[$tag]
+                    : [];
+
+                $attrs = preg_replace_callback(
+                    '#\s+([a-z][a-z0-9_-]*)\s*=\s*("([^"]*)"|\'([^\']*)\'|([^\s>]+))#i',
+                    static function (array $am) use ($allowedAttrs): string {
+                        $attrName = strtolower($am[1]);
+                        $rawVal = $am[3] ?? ($am[4] ?? ($am[5] ?? ''));
+                        $quote = isset($am[3]) ? '"' : (isset($am[4]) ? '\'' : '"');
+
+                        // (a) per-tag allow-list: only keep attrs whose key
+                        // is on the allow-list for this tag. event-handlers
+                        // (on*) are never on the customer-friendly map.
+                        if (!array_key_exists($attrName, $allowedAttrs)) {
+                            return '';
+                        }
+
+                        // (b) recursive entity-decode on the value, then
+                        // test for dangerous URI schemes. wp_kses_bad_protocol
+                        // calls _bad_protocol_once iteratively until stable.
+                        $decoded = $rawVal;
+                        $prev = '';
+                        $rounds = 0;
+                        while ($decoded !== $prev && $rounds < 6) {
+                            $prev = $decoded;
+                            $decoded = html_entity_decode($decoded, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+                            // Also handle bare numeric-decimal / hex entities
+                            // that survive html_entity_decode (e.g. without
+                            // the trailing semicolon).
+                            $decoded = (string) preg_replace_callback(
+                                '/&#(x[0-9a-f]+|[0-9]+);?/i',
+                                static function (array $em): string {
+                                    $code = $em[1];
+                                    if (stripos($code, 'x') === 0) {
+                                        $n = hexdec(substr($code, 1));
+                                    } else {
+                                        $n = (int) $code;
+                                    }
+                                    return $n > 0 && $n < 0x110000
+                                        ? mb_chr($n, 'UTF-8')
+                                        : '';
+                                },
+                                $decoded,
+                            );
+                            $rounds++;
+                        }
+                        $lower = ltrim(strtolower(trim($decoded)));
+                        // Strip whitespace inside the protocol (real
+                        // wp_kses normalises before the strncmp).
+                        $lowerNoWs = (string) preg_replace('/\s+/', '', $lower);
+                        if (
+                            strncmp($lowerNoWs, 'javascript:', 11) === 0
+                            || strncmp($lowerNoWs, 'vbscript:', 9) === 0
+                            || strncmp($lowerNoWs, 'data:text/html', 14) === 0
+                        ) {
+                            return '';
+                        }
+                        return ' ' . $attrName . '=' . $quote . $rawVal . $quote;
+                    },
+                    $m[2],
+                );
+                return '<' . $tag . (string) $attrs . '>';
+            },
+            $content,
+        );
+        return is_string($scrubbed) ? $scrubbed : $content;
     }
 }
 

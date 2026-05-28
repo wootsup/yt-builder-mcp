@@ -39,7 +39,11 @@ final class JoomlaRateLimiter
             self::KEY_PREFIX . $this->sanitise($kid, 64),
             self::WRITE_LIMIT,
             self::WINDOW_SECONDS,
-            'yootheme_builder_mcp.rate_limited'
+            'yootheme_builder_mcp.rate_limited',
+            // Wave-1 Fix C-4: write-quota bucket emits the dedicated
+            // `mcp_write_rate_limited` SecurityLogger event and carries the
+            // canonical 429 payload keys (error / retry_after_seconds / scope).
+            isWriteBucket: true,
         );
     }
 
@@ -58,30 +62,45 @@ final class JoomlaRateLimiter
     /**
      * @return array{error_code:string, status:int, payload:array<string,mixed>}|null
      */
-    private function checkBucket(string $transientKey, int $maxAttempts, int $windowSeconds, string $errorCode): ?array
+    private function checkBucket(string $transientKey, int $maxAttempts, int $windowSeconds, string $errorCode, bool $isWriteBucket = false): ?array
     {
         $current = $this->store->get($transientKey);
         $count = \is_numeric($current) ? (int) $current : 0;
         $next = $count + 1;
         if ($next > $maxAttempts) {
-            SecurityLogger::log(SecurityLogger::EVENT_RATE_LIMIT, [
+            // Wave-1 Fix C-4: write-quota gets its own canonical event-name
+            // so SIEM forensics filter compromised-bearer signals without
+            // the per-IP pickup-noise. Other buckets keep the generic
+            // EVENT_RATE_LIMIT token.
+            $eventName = $isWriteBucket
+                ? SecurityLogger::EVENT_MCP_WRITE_RATE_LIMITED
+                : SecurityLogger::EVENT_RATE_LIMIT;
+            SecurityLogger::log($eventName, [
                 'platform' => 'joomla',
                 'bucket' => $transientKey,
                 'limit' => $maxAttempts,
                 'window_seconds' => $windowSeconds,
             ]);
+            $data = [
+                'status' => 429,
+                'limit' => $maxAttempts,
+                'window_seconds' => $windowSeconds,
+                'retry_after' => $windowSeconds,
+            ];
+            if ($isWriteBucket) {
+                // Wave-1 Fix C-4: well-known token + scope dimension so
+                // MCP clients can render a "retry in N seconds" toast.
+                $data['error'] = 'rate_limit_exceeded';
+                $data['retry_after_seconds'] = $windowSeconds;
+                $data['scope'] = 'kid';
+            }
             return [
                 'error_code' => $errorCode,
                 'status' => 429,
                 'payload' => [
                     'code' => $errorCode,
                     'message' => \sprintf('Rate limit exceeded: %d attempts per %d seconds.', $maxAttempts, $windowSeconds),
-                    'data' => [
-                        'status' => 429,
-                        'limit' => $maxAttempts,
-                        'window_seconds' => $windowSeconds,
-                        'retry_after' => $windowSeconds,
-                    ],
+                    'data' => $data,
                 ],
             ];
         }

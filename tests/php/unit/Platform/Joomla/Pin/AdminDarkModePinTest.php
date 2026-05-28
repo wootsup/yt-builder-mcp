@@ -242,12 +242,14 @@ final class AdminDarkModePinTest extends TestCase
 
     // ── (d) W11-T6: header CTAs + prominent wootsup.com + reveal card ─────
 
-    public function test_header_renders_generate_documentation_and_wootsup_ctas(): void
+    public function test_header_renders_documentation_and_wootsup_ctas(): void
     {
         $tmpl = self::read(self::DEFAULT_TMPL_REL);
-        // Generate Key CTA deep-links to the Keys tab generate-form anchor.
-        self::assertStringContainsString('#ytb-mcp-generate', $tmpl, 'Header must carry a Generate Key CTA anchored to the generate form.');
-        self::assertStringContainsString('COM_YTBMCP_GENERATE_KEY', $tmpl, 'Header CTA must use the Generate Key label.');
+        // Task #37 (2026-05-28): the redundant "Generate Key" header CTA was
+        // removed for parity with the WP SettingsPage. The Bearer Keys tab is
+        // reachable via the primary uitab nav-bar; the form-submit button on
+        // the Keys tab carries the "Generate Key" label exclusively.
+        //
         // Documentation secondary CTA.
         self::assertStringContainsString('COM_YTBMCP_DOCUMENTATION', $tmpl, 'Header must carry a Documentation CTA.');
         self::assertStringContainsString('HtmlView::DOCS_URL', $tmpl, 'Documentation CTA must link to DOCS_URL.');

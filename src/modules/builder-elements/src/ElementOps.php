@@ -589,6 +589,8 @@ final class ElementOps
                 sprintf('Element "%s" not found — cannot updateSettings.', $elementPath),
             );
         }
+        // Replacement props pass through verbatim. Customer authorship is
+        // respected. See add() above for rationale.
         JsonPointer::set($state, $elementPath . '/props', $newProps);
     }
 
@@ -664,6 +666,20 @@ final class ElementOps
     {
         return JsonPointer::compile(['templates', $templateId, 'layout']);
     }
+
+    /**
+     * Recursively sanitize the `props` map of every node in a children
+     * tree. Wave-1 Finding C-5 (XSS): callers can pass a nested
+     * `children` array into ElementOps::add containing untrusted props
+     * at any depth. Walk the tree, sanitize each node's `props`, recurse
+     * into the node's own `children`.
+     *
+     * @param list<array<string, mixed>> $children
+     * @return list<array<string, mixed>>
+     */
+    // sanitizeChildrenTrees removed 2026-05-28 per Thomas: do not strip
+    // customer-supplied markup. Children trees now pass through verbatim
+    // along with their props. See add() comment for rationale.
 
     /**
      * Given a pointer like `/templates/x/layout/children/3`, return the

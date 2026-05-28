@@ -30,6 +30,14 @@ final class SecurityLogger
     public const EVENT_BEARER_FAIL = 'bearer_fail';
     public const EVENT_SCOPE_DENY = 'scope_deny';
     public const EVENT_RATE_LIMIT = 'rate_limit';
+    /**
+     * Wave-1 Fix C-4. Emitted whenever a write-scope bearer trips the
+     * per-kid write quota (60 writes / 60 s). Distinct from
+     * `EVENT_PICKUP_RATE_LIMITED` (per-IP pickup-claim limiter) so SIEM /
+     * forensic queries can filter the "compromised bearer / runaway client"
+     * signal without the per-IP wizard noise.
+     */
+    public const EVENT_MCP_WRITE_RATE_LIMITED = 'mcp_write_rate_limited';
     public const EVENT_WRITE_FAILED = 'write_failed';
     public const EVENT_CROSS_TEMPLATE_DENY = 'cross_template_deny';
     public const EVENT_CACHE_FLUSH_FAILED = 'cache_flush_failed';

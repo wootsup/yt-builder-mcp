@@ -26,6 +26,7 @@ use WootsUp\BuilderMcp\Auth\KeyStore;
 use WootsUp\BuilderMcp\Auth\SigningSecret;
 use WootsUp\BuilderMcp\Rest\HealthController;
 use WootsUp\BuilderMcp\Rest\PickupController;
+use WootsUp\BuilderMcp\Rest\RateLimitHeadersFilter;
 use WootsUp\BuilderMcp\Rest\WwwAuthenticateFilter;
 use WootsUp\BuilderMcp\Util\Container;
 
@@ -64,5 +65,8 @@ use WootsUp\BuilderMcp\Util\Container;
 
 // R2.12 — RFC-6750 WWW-Authenticate header injection on 401/403.
 WwwAuthenticateFilter::install();
+
+// Wave-1 Fix C-4 — HTTP/1.1 §7.1.3 Retry-After header injection on 429.
+RateLimitHeadersFilter::install();
 
 return [];

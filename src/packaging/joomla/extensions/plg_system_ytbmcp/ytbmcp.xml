@@ -7,7 +7,7 @@
     <license>GPL-2.0-or-later</license>
     <authorEmail>hello@wootsup.com</authorEmail>
     <authorUrl>https://wootsup.com</authorUrl>
-    <version>1.1.0</version>
+    <version>1.1.7</version>
     <description>PLG_SYSTEM_YTBMCP_XML_DESCRIPTION</description>
 
     <scriptfile>script.php</scriptfile>

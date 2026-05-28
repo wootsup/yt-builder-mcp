@@ -2,15 +2,15 @@
     "product": "yt-builder-mcp",
     "name": "YT Builder MCP for YOOtheme Pro (unofficial)",
     "slug": "yt-builder-mcp",
-    "current_version": "1.1.0",
+    "current_version": "1.1.7",
     "tested": "6.7",
     "requires": "6.0",
     "requires_php": "8.2",
     "homepage": "https://github.com/wootsup/yt-builder-mcp#readme",
     "changelog_url": "https://wootsup.com/yt-builder-mcp/changelog",
-    "download_url": "https://github.com/wootsup/yt-builder-mcp/releases/download/v1.1.0/yt-builder-mcp_v1.1.0.zip",
+    "download_url": "https://github.com/wootsup/yt-builder-mcp/releases/download/v1.1.7/yt-builder-mcp_v1.1.7.zip",
     "sections": {
-        "description": "Drive the YOOtheme Pro\u00ae page builder programmatically from Claude, Cursor, Codex, Gemini and other MCP-capable AI assistants. Independent third-party project, not affiliated with YOOtheme GmbH. Free, GPL-2.0-or-later.",
+        "description": "Drive the YOOtheme Pro® page builder programmatically from Claude, Cursor, Codex, Gemini and other MCP-capable AI assistants. Independent third-party project, not affiliated with YOOtheme GmbH. Free, GPL-2.0-or-later.",
         "changelog": "See the full changelog at https://wootsup.com/yt-builder-mcp/changelog"
     }
 }

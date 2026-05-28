@@ -41,6 +41,7 @@ namespace WootsUp\Component\Ytbmcp\Api\Controller;
 defined('_JEXEC') or die;
 
 use WootsUp\BuilderMcp\Elements\ElementOps;
+use WootsUp\BuilderMcp\Elements\ItemContainerMap;
 use WootsUp\BuilderMcp\Inspection\Inspector;
 use WootsUp\BuilderMcp\Platform\Joomla\Rest\AbstractApiController;
 use WootsUp\BuilderMcp\Platform\Joomla\Rest\JoomlaEtagMiddleware;
@@ -243,10 +244,14 @@ final class ElementsController extends AbstractApiController
             $ops    = new ElementOps($reader);
 
             $current   = $reader->etag();
+            // C-2 (Wave-1 write-path safety): POST add now requires
+            // If-Match (mirrors WP-side ElementsController). The previous
+            // `false` allowed concurrent adds to land in non-deterministic
+            // insertion order.
             $lockError = JoomlaEtagMiddleware::enforce(
                 JoomlaEtagMiddleware::readIfMatchHeader(),
                 $current,
-                false,
+                true,
             );
             if ($lockError !== null) {
                 $this->emitLockError($lockError);
@@ -292,6 +297,16 @@ final class ElementsController extends AbstractApiController
 
             if ($parentPath !== '' && ($err = $this->assertPointerWithinTemplate($templateId, $parentPath)) !== null) {
                 $this->emitLockError($err);
+                return;
+            }
+
+            // H-11 (Wave-1 write-path safety): enforce the container/item
+            // pairing invariant. When parent is a known multi-item
+            // container (grid, slideshow, ...), child MUST be the matching
+            // `*_item`. See ItemContainerMap.
+            $compatErr = $this->assertParentChildCompatible($reader, $parentPath, $elementType);
+            if ($compatErr !== null) {
+                $this->emitLockError($compatErr);
                 return;
             }
 
@@ -437,6 +452,44 @@ final class ElementsController extends AbstractApiController
 
             if (($err = $this->assertPointerWithinTemplate($templateId, $pointer)) !== null) {
                 $this->emitLockError($err);
+                return;
+            }
+
+            // C-3 (Wave-1 write-path safety): two-call preview/confirm
+            // protocol. Without `confirm:true` return a non-mutating
+            // preview of the target. With it, perform the actual delete.
+            $params  = $this->requestBody();
+            $confirm = self::resolveConfirmFlag($params);
+            if (!$confirm) {
+                $node = $ops->get($pointer);
+                if ($node === null) {
+                    JoomlaJsonResponse::error(
+                        $this->app(),
+                        'yootheme_builder_mcp.elements.not_found',
+                        \sprintf('Element at "%s" not found.', $pointer),
+                        404,
+                        ['hint' => self::pathHintFor($pointer, $templateId)],
+                    );
+                    return;
+                }
+                $childCount = 0;
+                if (isset($node['children']) && \is_array($node['children'])) {
+                    $childCount = \count(\array_filter($node['children'], 'is_array'));
+                }
+                $elementType = isset($node['type']) && \is_string($node['type'])
+                    ? $node['type']
+                    : 'unknown';
+                JoomlaJsonResponse::send($this->app(), [
+                    'template_id'     => $templateId,
+                    'etag'            => $current,
+                    'requires_confirm' => true,
+                    'preview'         => [
+                        'element_path' => $pointer,
+                        'element_type' => $elementType,
+                        'child_count'  => $childCount,
+                    ],
+                    'hint' => 'Re-send the same request with `confirm: true` to actually delete.',
+                ], 200);
                 return;
             }
 
@@ -633,6 +686,26 @@ final class ElementsController extends AbstractApiController
         try {
             $writer->writeTemplate($templateId, $tplTree);
         } catch (\RuntimeException $e) {
+            // H-12 (Wave-1 write-path safety): StateLock acquire-timeout
+            // surfaces as a RuntimeException with a deterministic prefix.
+            // Map that to 409 Conflict with a structured retry hint so
+            // callers can back off instead of the misleading 500.
+            if (self::isLockTimeoutException($e)) {
+                JoomlaJsonResponse::error(
+                    $this->app(),
+                    'yootheme_builder_mcp.concurrent_write_in_progress',
+                    \sprintf(
+                        'Another write to template "%s" is in progress. Retry shortly.',
+                        $templateId,
+                    ),
+                    409,
+                    [
+                        'retry_after_ms' => 250,
+                        'hint' => 'Back off briefly (e.g. 250ms) and retry the same request — the in-flight write will release the lock.',
+                    ],
+                );
+                return;
+            }
             JoomlaJsonResponse::error(
                 $this->app(),
                 'yootheme_builder_mcp.write_failed',
@@ -708,6 +781,104 @@ final class ElementsController extends AbstractApiController
             return '/templates/' . $templateId . '/layout';
         }
         return $relPath;
+    }
+
+    /**
+     * H-12 helper (Wave-1 write-path safety): detect StateLock
+     * acquire-timeout via its deterministic exception message prefix.
+     * The shared StateLock::withTemplateLock throws RuntimeException
+     * with message "Could not acquire lock for template ..." — the
+     * prefix-match keeps the detection robust against configurable
+     * timeout suffixes.
+     */
+    private static function isLockTimeoutException(\RuntimeException $e): bool
+    {
+        return \str_starts_with($e->getMessage(), 'Could not acquire lock for template');
+    }
+
+    /**
+     * C-3 helper (Wave-1 write-path safety): detect the `confirm` flag
+     * from the request body. Accepts true, 1, "true", "1" — anything
+     * else (including absent) is treated as false.
+     *
+     * @param array<string, mixed> $params
+     */
+    private static function resolveConfirmFlag(array $params): bool
+    {
+        if (!\array_key_exists('confirm', $params)) {
+            return false;
+        }
+        $value = $params['confirm'];
+        if ($value === true || $value === 1) {
+            return true;
+        }
+        if (\is_string($value)) {
+            $normalised = \strtolower(\trim($value));
+            return $normalised === 'true' || $normalised === '1';
+        }
+        return false;
+    }
+
+    /**
+     * H-11 (Wave-1 write-path safety): when $parentPath addresses a
+     * known multi-item container element, the only valid child
+     * element_type is the canonical `*_item`. Returns null when the
+     * combination is acceptable, or the lock-error-descriptor shape
+     * the dispatch helpers consume.
+     *
+     * Empty parentPath addresses the template root (`layout`) which is
+     * not a multi-item container — its children are unrestricted.
+     *
+     * @return array{status: int, code: string, message: string, data: array<string, mixed>}|null
+     */
+    private function assertParentChildCompatible(
+        JoomlaLayoutReader $reader,
+        string $parentPath,
+        string $elementType,
+    ): ?array {
+        if ($parentPath === '') {
+            return null; // template root — unrestricted.
+        }
+        $parentNode = $reader->readByPointer($parentPath);
+        if (!\is_array($parentNode)) {
+            return null; // unresolved — downstream mutate handles 404/400.
+        }
+        $parentType = isset($parentNode['type']) && \is_string($parentNode['type'])
+            ? $parentNode['type']
+            : '';
+        if ($parentType === '' || !ItemContainerMap::isContainer($parentType)) {
+            return null;
+        }
+        $expectedChildType = ItemContainerMap::itemOf($parentType);
+        if ($expectedChildType === null || $elementType === $expectedChildType) {
+            return null;
+        }
+        return [
+            'status'  => 400,
+            'code'    => 'yootheme_builder_mcp.elements.invalid_parent_child',
+            'message' => \sprintf(
+                'Parent type "%s" requires child type "%s" (got "%s"). ' .
+                'Multi-item containers bind via their `*_item` children — ' .
+                'see ItemContainerMap for the canonical pairing.',
+                $parentType,
+                $expectedChildType,
+                $elementType,
+            ),
+            'data'    => [
+                'parent_type'         => $parentType,
+                'parent_path'         => $parentPath,
+                'expected_child_type' => $expectedChildType,
+                'actual_child_type'   => $elementType,
+                'hint'                => \sprintf(
+                    'Set element_type to "%s". Bare "%s" inside "%s" would not render — ' .
+                    'YT-Pro\'s SourceTransform clones the source-bearing element by ' .
+                    'type, and only the canonical `*_item` carries the binding shape.',
+                    $expectedChildType,
+                    $elementType,
+                    $parentType,
+                ),
+            ],
+        ];
     }
 
     /**

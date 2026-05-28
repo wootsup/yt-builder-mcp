@@ -39,6 +39,7 @@ declare(strict_types=1);
 namespace WootsUp\BuilderMcp\Elements;
 
 use WootsUp\BuilderMcp\Cache\CacheFlusher;
+use WootsUp\BuilderMcp\Elements\ItemContainerMap;
 use WootsUp\BuilderMcp\Inspection\Inspector;
 use WootsUp\BuilderMcp\Rest\EtagMiddleware;
 use WootsUp\BuilderMcp\Rest\PointerControllerTrait;
@@ -361,7 +362,12 @@ final class ElementsController extends RestController
         $templateId = (string) $request['template_id'];
 
         $current = $this->reader->etag();
-        $lockError = EtagMiddleware::enforce($request, $current);
+        // C-2 (Wave-1 write-path safety): POST add now requires If-Match
+        // because the mutation lands inside an existing parent.children
+        // array — without the precondition two concurrent adds can both
+        // succeed and produce an interleaved insertion order the caller
+        // never agreed to. RFC-7232 §3.1 precondition_required.
+        $lockError = EtagMiddleware::enforce($request, $current, requireIfMatch: true);
         if ($lockError !== null) {
             return $lockError;
         }
@@ -409,6 +415,18 @@ final class ElementsController extends RestController
             if ($err !== null) {
                 return $err;
             }
+        }
+
+        // H-11 (Wave-1 write-path safety): when the parent is a known
+        // multi-item container (grid, slideshow, accordion, ...), the
+        // child MUST be the matching `*_item`. Anything else corrupts
+        // the layout — YT-Pro's SourceTransform::repeatSource clones
+        // the source-bearing element, and a non-`_item` child carries
+        // no source mapping so the binding silently fails. See
+        // ItemContainerMap for the canonical 16-pair invariant.
+        $parentTypeErr = $this->assertParentChildCompatible($templateId, $parentPath, $elementType);
+        if ($parentTypeErr !== null) {
+            return $parentTypeErr;
         }
 
         return $this->mutate($templateId, $request, function (array &$state) use ($templateId, $parentPath, $elementType, $props, $children): array {
@@ -518,10 +536,85 @@ final class ElementsController extends RestController
             return $err;
         }
 
+        // C-3 (Wave-1 write-path safety): two-call protocol. The first
+        // call (no `confirm:true`) returns a non-mutating preview of the
+        // target node so the caller can verify scope before the actual
+        // delete. The second call with `confirm:true` performs the
+        // mutation. This mirrors the MCP-tool-wrapper invariant the
+        // server-side surface was previously NOT enforcing — REST callers
+        // could DELETE on the first call without any safety net.
+        $confirm = self::resolveConfirmFlag($request);
+        if (!$confirm) {
+            // Resolve the target node so the preview surfaces real data;
+            // a 404 here still short-circuits with the canonical error.
+            $node = $this->ops->get($pointer);
+            if ($node === null) {
+                return new \WP_Error(
+                    'yootheme_builder_mcp.elements.not_found',
+                    sprintf('Element at "%s" not found.', $pointer),
+                    [
+                        'status' => 404,
+                        'hint' => self::pathHintFor($pointer, $templateId),
+                    ],
+                );
+            }
+            $childCount = 0;
+            if (isset($node['children']) && is_array($node['children'])) {
+                $childCount = count(array_filter($node['children'], 'is_array'));
+            }
+            $elementType = isset($node['type']) && is_string($node['type'])
+                ? $node['type']
+                : 'unknown';
+            return new \WP_REST_Response([
+                'template_id' => $templateId,
+                'etag' => $current,
+                'requires_confirm' => true,
+                'preview' => [
+                    'element_path' => $pointer,
+                    'element_type' => $elementType,
+                    'child_count' => $childCount,
+                ],
+                'hint' => 'Re-send the same request with `confirm: true` to actually delete.',
+            ], 200);
+        }
+
         return $this->mutate($templateId, $request, function (array &$state) use ($templateId, $pointer): array {
             $this->ops->delete($state, $templateId, $pointer);
             return ['element_path' => $pointer];
         });
+    }
+
+    /**
+     * C-3 helper: detect the `confirm` flag from either the JSON body or
+     * the query string. Accepts boolean true, the string "true", or the
+     * integer 1 — anything else (including absent) is treated as false.
+     */
+    private static function resolveConfirmFlag(\WP_REST_Request $request): bool
+    {
+        // JSON body first (canonical for REST clients that already POST a body).
+        $json = $request->get_json_params();
+        if (is_array($json) && array_key_exists('confirm', $json)) {
+            return self::truthy($json['confirm']);
+        }
+        // Then query / set_param paths.
+        $param = $request->get_param('confirm');
+        return self::truthy($param);
+    }
+
+    /**
+     * Tight truthy-coercion — explicit allow-list so a stray `confirm=false`
+     * string doesn't accidentally satisfy a weak `(bool)` cast.
+     */
+    private static function truthy(mixed $value): bool
+    {
+        if ($value === true || $value === 1) {
+            return true;
+        }
+        if (is_string($value)) {
+            $normalised = strtolower(trim($value));
+            return $normalised === 'true' || $normalised === '1';
+        }
+        return false;
     }
 
     /**
@@ -594,6 +687,81 @@ final class ElementsController extends RestController
     }
 
     /**
+     * H-12 (Wave-1 write-path safety): detect StateLock::withTemplateLock
+     * acquire-timeout via its deterministic exception message shape.
+     * StateLock throws `RuntimeException("Could not acquire lock for
+     * template \"<id>\" within <N>ms.")` — we match the prefix so message
+     * suffixes (the configurable timeout) don't break the detection.
+     */
+    private static function isLockTimeoutException(\RuntimeException $e): bool
+    {
+        return str_starts_with($e->getMessage(), 'Could not acquire lock for template');
+    }
+
+    /**
+     * H-11 (Wave-1): when $parentPath addresses a known multi-item
+     * container element, the only valid child element_type is the
+     * canonical `*_item` for that container. Returns null when the
+     * combination is acceptable (parent is not a container, OR the
+     * child matches), or a WP_Error 400 otherwise.
+     *
+     * Empty parentPath addresses the top-level layout container, which
+     * is not a multi-item container — its children are unrestricted.
+     */
+    private function assertParentChildCompatible(
+        string $templateId,
+        string $parentPath,
+        string $elementType,
+    ): ?\WP_Error {
+        if ($parentPath === '') {
+            return null; // template root — unrestricted.
+        }
+        $parentNode = $this->reader->readByPointer($parentPath);
+        if (!is_array($parentNode)) {
+            return null; // unresolved — leave it to the in-mutate path to 400/404.
+        }
+        $parentType = isset($parentNode['type']) && is_string($parentNode['type'])
+            ? $parentNode['type']
+            : '';
+        if ($parentType === '' || !ItemContainerMap::isContainer($parentType)) {
+            return null; // not a multi-item container — no restriction.
+        }
+        $expectedChildType = ItemContainerMap::itemOf($parentType);
+        if ($expectedChildType === null) {
+            return null; // defensive: never expected because isContainer is true.
+        }
+        if ($elementType === $expectedChildType) {
+            return null; // canonical pairing — proceed.
+        }
+        return new \WP_Error(
+            'yootheme_builder_mcp.elements.invalid_parent_child',
+            sprintf(
+                'Parent type "%s" requires child type "%s" (got "%s"). ' .
+                'Multi-item containers bind via their `*_item` children — ' .
+                'see ItemContainerMap for the canonical pairing.',
+                $parentType,
+                $expectedChildType,
+                $elementType,
+            ),
+            [
+                'status' => 400,
+                'parent_type' => $parentType,
+                'parent_path' => $parentPath,
+                'expected_child_type' => $expectedChildType,
+                'actual_child_type' => $elementType,
+                'hint' => sprintf(
+                    'Set element_type to "%s". Bare "%s" inside "%s" would not render — ' .
+                    'YT-Pro\'s SourceTransform clones the source-bearing element by ' .
+                    'type, and only the canonical `*_item` carries the binding shape.',
+                    $expectedChildType,
+                    $elementType,
+                    $parentType,
+                ),
+            ],
+        );
+    }
+
+    /**
      * Common mutate-then-persist flow used by every write endpoint.
      *
      * Wave-6 Fix 5 (TOCTOU close): the read↔mutate↔persist sequence used to
@@ -656,6 +824,27 @@ final class ElementsController extends RestController
         try {
             $this->writer->writeTemplate($templateId, $tplTree);
         } catch (\RuntimeException $e) {
+            // H-12 (Wave-1 write-path safety): distinguish lock-timeout
+            // contention from a genuine write failure. StateLock throws
+            // a RuntimeException with a deterministic message shape on
+            // acquire-timeout (see StateLock::withTemplateLock); detect
+            // that and return 409 Conflict with a structured retry hint
+            // instead of a misleading 500 write_failed. The retry_after_ms
+            // is a small upper bound; the client can back off + retry.
+            if (self::isLockTimeoutException($e)) {
+                return new \WP_Error(
+                    'yootheme_builder_mcp.concurrent_write_in_progress',
+                    sprintf(
+                        'Another write to template "%s" is in progress. Retry shortly.',
+                        $templateId,
+                    ),
+                    [
+                        'status' => 409,
+                        'retry_after_ms' => 250,
+                        'hint' => 'Back off briefly (e.g. 250ms) and retry the same request — the in-flight write will release the lock.',
+                    ],
+                );
+            }
             return new \WP_Error(
                 'yootheme_builder_mcp.write_failed',
                 $e->getMessage(),

@@ -244,28 +244,103 @@ final class SettingsPageTabsTest extends TestCase
     }
 
     /**
-     * W11-T6: the native redesign dropped the header CTA row; it must be
-     * restored with native `.button`s — Generate Key (deep-link to the Keys
-     * tab generate anchor), Documentation, and a PROMINENT wootsup.com link
-     * (the only link to the product site anywhere on the surface).
+     * Task #37 (2026-05-28): the header CTA row contains Documentation +
+     * wootsup.com only. The previous "Generate Key" header CTA was removed —
+     * it duplicated the form-submit button inside the Bearer Keys tab with
+     * identical label but different semantics (navigation deep-link vs form
+     * submit), which was a UX-collision. The Keys-tab is still reachable via
+     * the primary nav-tab-wrapper.
+     *
+     * W11-T6 (2026-05-24): the native redesign dropped the original header
+     * CTA row; this restores it with native components.
      */
-    public function test_header_renders_generate_documentation_and_wootsup_ctas(): void
+    public function test_header_renders_documentation_and_wootsup_ctas(): void
     {
         foreach ([SettingsPage::TAB_KEYS, SettingsPage::TAB_DIAGNOSTICS, SettingsPage::TAB_ABOUT] as $tab) {
             $_GET['tab'] = $tab;
             $output = $this->renderOutput($this->page());
-            // Generate Key — native primary button deep-linking to the anchor.
-            self::assertMatchesRegularExpression(
-                '/<a class="button button-primary" href="[^"]*#ytb-mcp-generate">Generate Key<\/a>/',
-                $output,
-                "tab {$tab}: Generate Key header CTA missing",
-            );
             // Documentation — plain secondary button.
             self::assertStringContainsString('>Documentation</a>', $output, "tab {$tab}: Documentation CTA missing");
             // wootsup.com — prominent product-site CTA.
             self::assertStringContainsString('https://wootsup.com', $output, "tab {$tab}: wootsup.com CTA missing");
             self::assertStringContainsString('>wootsup.com</a>', $output, "tab {$tab}: wootsup.com label missing");
         }
+    }
+
+    /**
+     * Task #37 (2026-05-28): pin-test — the header CTA row must NOT contain
+     * a "Generate Key" button. The form-submit button inside the Bearer Keys
+     * tab carries that label exclusively. This prevents the two-buttons-same-
+     * label regression from coming back.
+     */
+    public function test_header_does_not_contain_redundant_generate_key_button(): void
+    {
+        foreach ([SettingsPage::TAB_KEYS, SettingsPage::TAB_DIAGNOSTICS, SettingsPage::TAB_ABOUT] as $tab) {
+            $_GET['tab'] = $tab;
+            $output = $this->renderOutput($this->page());
+            // The form-submit Generate Key button on the Keys tab uses
+            // `<button class="primary">` (test-bootstrap submit_button stub).
+            // The forbidden header CTA was an `<a class="button button-primary"
+            // href="...#ytb-mcp-generate">Generate Key</a>`. Pin: no anchor
+            // with the deep-link href + Generate Key text in the header.
+            self::assertDoesNotMatchRegularExpression(
+                '/<a class="button button-primary" href="[^"]*#ytb-mcp-generate">Generate Key<\/a>/',
+                $output,
+                "tab {$tab}: redundant header Generate Key button must be removed",
+            );
+        }
+    }
+
+    /**
+     * Task #37 (2026-05-28): pin-test — the icon inside the wootsup.com
+     * header CTA must carry `vertical-align:middle` so it does not hang
+     * below the text baseline inside the flex container. The previous
+     * default-aligned dashicon sat too low; the explicit middle-align +
+     * line-height:1 fixes the baseline.
+     */
+    public function test_wootsup_cta_icon_is_vertically_aligned(): void
+    {
+        $output = $this->renderOutput($this->page());
+        self::assertMatchesRegularExpression(
+            '/<span class="dashicons dashicons-external"[^>]*style="[^"]*vertical-align:middle[^"]*"[^>]*><\/span>/',
+            $output,
+            'wootsup.com header CTA icon missing vertical-align:middle',
+        );
+    }
+
+    /**
+     * Task #37 (2026-05-28): pin-test — the Bearer Keys tab content must NOT
+     * repeat the tab name in an inner `<h2>` directly under the tab-bar. The
+     * nav-tab-wrapper above already identifies the active section; the inner
+     * title was redundant + visually cramped against the tab-bar.
+     */
+    public function test_keys_tab_does_not_repeat_tab_name_as_inner_title(): void
+    {
+        $_GET['tab'] = SettingsPage::TAB_KEYS;
+        $output = $this->renderOutput($this->page());
+        // The redundant inner h2 had the form `<h2 ...>Bearer Keys</h2>`.
+        // The nav-tab-wrapper anchor uses `<a ...>Bearer Keys</a>` — the
+        // text "Bearer Keys" therefore still appears, but not inside an h2.
+        self::assertDoesNotMatchRegularExpression(
+            '/<h2[^>]*>Bearer Keys<\/h2>/',
+            $output,
+            'Keys tab still has redundant inner Bearer Keys title',
+        );
+    }
+
+    /**
+     * Task #37 (2026-05-28): pin-test — the Diagnostics tab content must NOT
+     * repeat the tab name in an inner `<h2>` directly under the tab-bar.
+     */
+    public function test_diagnostics_tab_does_not_repeat_tab_name_as_inner_title(): void
+    {
+        $_GET['tab'] = SettingsPage::TAB_DIAGNOSTICS;
+        $output = $this->renderOutput($this->page());
+        self::assertDoesNotMatchRegularExpression(
+            '/<h2[^>]*>Diagnostics<\/h2>/',
+            $output,
+            'Diagnostics tab still has redundant inner Diagnostics title',
+        );
     }
 
     /** W11-T6: the generate form heading carries the deep-link anchor. */

@@ -91,7 +91,8 @@ final class WriteOpsTest extends TestCase
     public function test_add_element_appends_and_returns_new_path_and_etag(): void
     {
         $controller = $this->controller();
-        $req = new \WP_REST_Request('POST', '/');
+        // Wave-1 C-2 contract: POST add requires If-Match.
+        $req = $this->writeRequest('POST');
         $req['template_id'] = 'tpl';
         $req->set_param('parent_path', '');
         $req->set_param('element_type', 'divider');
@@ -115,7 +116,10 @@ final class WriteOpsTest extends TestCase
     public function test_add_element_returns_400_when_element_type_missing(): void
     {
         $controller = $this->controller();
-        $req = new \WP_REST_Request('POST', '/');
+        // Wave-1 C-2 contract: POST add requires If-Match. Pre-fill it so
+        // the test still surfaces the 400 (missing element_type), not the
+        // 428 (missing If-Match) which is a separate path.
+        $req = $this->writeRequest('POST');
         $req['template_id'] = 'tpl';
         // no element_type supplied.
 
@@ -131,6 +135,10 @@ final class WriteOpsTest extends TestCase
         $controller = $this->controller();
         $req = new \WP_REST_Request('POST', '/');
         $req['template_id'] = 'does-not-exist';
+        // The 404 lives downstream of the If-Match check. With Wave-1 C-2
+        // the If-Match precondition fires first — supply a wildcard so the
+        // test still exercises the 404 path it was originally pinning.
+        $req->set_header('If-Match', '*');
         $req->set_param('element_type', 'divider');
 
         $resp = $controller->add_element($req);
@@ -350,6 +358,8 @@ final class WriteOpsTest extends TestCase
         $req = $this->writeRequest('DELETE');
         $req['template_id'] = 'tpl';
         $req['element_path'] = 'templates/tpl/layout/children/1'; // image
+        // Wave-1 C-3 contract: DELETE requires `confirm:true` to actually mutate.
+        $req->set_param('confirm', true);
 
         $resp = $controller->delete_element($req);
         self::assertInstanceOf(\WP_REST_Response::class, $resp);
@@ -411,6 +421,137 @@ final class WriteOpsTest extends TestCase
         self::assertSame('image', $stored['layout']['children'][2]['type']);
     }
 
+    // ------------------------------------------------------------------
+    // Wave-1 Finding C-5 — XSS input sanitization.
+    //
+    // The audit submitted `<script>alert("XSS-A5")</script>` as a
+    // `grid_item.props.content` value. The controller accepted it
+    // verbatim and persisted into wp_option('yootheme'). YOOtheme Pro
+    // renders rich-text props as raw HTML on the public frontend → the
+    // payload fires for every visitor.
+    //
+    // PropSanitizer is the single funnel that runs on every write path
+    // (add / update_settings / clone) before the state hits storage.
+    // The integration tests below pin the contract end-to-end through
+    // the controller, asserting on the bytes that actually land in
+    // wp_option('yootheme') — the only surface the renderer reads.
+    // ------------------------------------------------------------------
+
+    public function test_add_element_strips_script_tag_from_content_prop(): void
+    {
+        // Wave-1 C-5: the canonical attack payload. After add_element the
+        // stored bytes must NOT contain a `<script>` tag — that is the
+        // load-bearing invariant. Visible text inside the payload may
+        // survive (wp_kses preserves text content) but the executable
+        // wrapper is gone.
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('POST', '/');
+        $req['template_id'] = 'tpl';
+        $req->set_header('If-Match', '*');
+        $req->set_param('parent_path', '');
+        $req->set_param('element_type', 'grid_item');
+        $req->set_param('props', [
+            'content' => '<script>alert("XSS-A5")</script>',
+        ]);
+
+        $resp = $controller->add_element($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        // The newly added element is appended at children/2.
+        $persisted = $stored['layout']['children'][2]['props']['content'] ?? '';
+        self::assertIsString($persisted);
+        self::assertStringNotContainsString('<script', $persisted);
+        self::assertStringNotContainsString('</script', $persisted);
+    }
+
+    public function test_add_element_preserves_safe_formatting_tags(): void
+    {
+        // The customer-friendly allow-list must keep legitimate rich-text
+        // working — otherwise the sanitizer is unusable in practice.
+        $controller = $this->controller();
+        $req = new \WP_REST_Request('POST', '/');
+        $req['template_id'] = 'tpl';
+        $req->set_header('If-Match', '*');
+        $req->set_param('parent_path', '');
+        $req->set_param('element_type', 'headline');
+        $req->set_param('props', [
+            'content' => '<p>Hello <strong>world</strong>.</p>',
+        ]);
+
+        $resp = $controller->add_element($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        $persisted = $stored['layout']['children'][2]['props']['content'] ?? '';
+        self::assertStringContainsString('<strong>world</strong>', $persisted);
+        self::assertStringContainsString('<p>', $persisted);
+    }
+
+    public function test_update_settings_replace_strips_script_tag(): void
+    {
+        // Same invariant on the PUT/update path. Caller replaces props
+        // on an existing element with an XSS payload → persisted value
+        // is sanitized.
+        $controller = $this->controller();
+        $req = $this->writeRequest('PUT');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/settings';
+        $req->set_param('props', [
+            'caption' => '<img src=x onerror="alert(1)">',
+            'content' => '<script>alert("XSS-A5")</script>safe text',
+        ]);
+
+        $resp = $controller->update_settings($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        $persistedContent = $stored['layout']['children'][1]['props']['content'] ?? '';
+        $persistedCaption = $stored['layout']['children'][1]['props']['caption'] ?? '';
+        self::assertStringNotContainsString('<script', $persistedContent);
+        self::assertStringNotContainsString('onerror', $persistedCaption);
+    }
+
+    public function test_update_settings_merge_strips_script_in_nested_source(): void
+    {
+        // Multi-Items bindings deep-merge into `props.source.props.<field>`.
+        // The sanitizer must recurse so a payload buried at depth-3 is
+        // still neutralised on persistence.
+        $controller = $this->controller();
+        $GLOBALS['ytb_test_options']['yootheme']['templates']['tpl']['layout']['children'][1]['props']
+            = [
+                'source' => [
+                    'query' => ['name' => 'posts.singlePost'],
+                    'props' => ['title' => 'safe'],
+                ],
+            ];
+
+        $req = $this->writeRequest('PUT');
+        $req['template_id'] = 'tpl';
+        $req['element_path'] = 'templates/tpl/layout/children/1/settings';
+        $req->set_param('props', [
+            'source' => [
+                'props' => [
+                    'title' => '<script>alert("nested-xss")</script>',
+                ],
+            ],
+        ]);
+        $req->set_param('merge', true);
+
+        $resp = $controller->update_settings($req);
+        self::assertInstanceOf(\WP_REST_Response::class, $resp);
+
+        $stored = (new LayoutReader())->readTemplate('tpl');
+        self::assertNotNull($stored);
+        $title = $stored['layout']['children'][1]['props']['source']['props']['title'] ?? '';
+        self::assertStringNotContainsString('<script', $title);
+        // Sibling keys preserved by merge.
+        self::assertSame('posts.singlePost', $stored['layout']['children'][1]['props']['source']['query']['name']);
+    }
+
     public function test_writes_invoke_cache_delete(): void
     {
         // Wave-6 Fix 14: cache invalidation is now scoped wp_cache_delete
@@ -422,6 +563,8 @@ final class WriteOpsTest extends TestCase
         $req = $this->writeRequest('DELETE');
         $req['template_id'] = 'tpl';
         $req['element_path'] = 'templates/tpl/layout/children/1';
+        // Wave-1 C-3: confirm:true required for the mutation to land.
+        $req->set_param('confirm', true);
         $controller->delete_element($req);
 
         $keys = array_column($GLOBALS['ytb_test_cache_delete_calls'], 'key');
@@ -435,6 +578,7 @@ final class WriteOpsTest extends TestCase
         $req = $this->writeRequest('DELETE');
         $req['template_id'] = 'tpl';
         $req['element_path'] = 'templates/tpl/layout/children/1';
+        $req->set_param('confirm', true);
         /** @var \WP_REST_Response $resp */
         $resp = $controller->delete_element($req);
         $data = $resp->get_data();
@@ -820,8 +964,10 @@ final class WriteOpsTest extends TestCase
 
         self::assertNotSame($etagA, $etagB, 'A→B etag must differ.');
 
-        // Step 3: delete the just-added element.
-        $delReq = $this->writeRequest('DELETE');
+        // Step 3: delete the just-added element. Use the fresh post-add
+        // ETag so the If-Match precondition matches the current state.
+        $delReq = new \WP_REST_Request('DELETE', '/');
+        $delReq->set_header('If-Match', (new LayoutReader())->etag());
         $delReq['template_id'] = 'tpl';
         // Strip the leading '/templates/tpl/elements/' framing: the
         // controller stores element_path as a JSON-Pointer rooted at the
@@ -832,6 +978,8 @@ final class WriteOpsTest extends TestCase
             'element_path',
             ltrim((string) $newPath, '/'),
         );
+        // Wave-1 C-3: confirm:true required for the mutation to land.
+        $delReq->set_param('confirm', true);
         /** @var \WP_REST_Response $delResp */
         $delResp = $controller->delete_element($delReq);
         $delData = $delResp->get_data();

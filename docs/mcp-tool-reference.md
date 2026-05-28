@@ -40,7 +40,7 @@ fields differ (`wp_version` vs Joomla version, storage target).
   "yootheme_loaded": true,
   "schema_version": 1,
   "available_endpoints_count": 25,
-  "available_endpoints": ["/v1/yt-builder-mcp/health", "/v1/yt-builder-mcp/pages", "..."]
+  "available_endpoints": ["/yt-builder-mcp/v1/health", "/yt-builder-mcp/v1/pages", "..."]
 }
 ```
 

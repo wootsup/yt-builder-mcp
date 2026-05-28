@@ -198,10 +198,20 @@ final class SettingsPage
     }
 
     /**
-     * Header CTA row — native wp-admin buttons. "Generate Key" deep-links to
-     * the Keys tab + scrolls to the generate form; "Documentation" is a plain
+     * Header CTA row — native wp-admin buttons. "Documentation" is a plain
      * secondary `.button`; "wootsup.com" is the prominent primary CTA to the
      * product site (the only link to the product home anywhere on the surface).
+     *
+     * Task #37 (2026-05-28): the redundant "Generate Key" header CTA was
+     * removed — the Bearer Keys tab is already a primary navigation surface,
+     * and the form below has its own "Generate Key" submit button. Two buttons
+     * with the same label but different semantics (navigation vs submit) was
+     * a UX-collision flagged by the operator. The Keys-tab deep-link anchor
+     * `#ytb-mcp-generate` remains on the form heading for any external links.
+     *
+     * Task #37 also fixes the `dashicons-external` baseline alignment in the
+     * "wootsup.com" button: `vertical-align:middle` + `line-height:1` on the
+     * icon prevents it from hanging below the text inside the flex container.
      *
      * W11-T6 (2026-05-24): the native redesign dropped the original brand CTA
      * row; this restores it with native components + adds the prominent
@@ -209,13 +219,10 @@ final class SettingsPage
      */
     private function render_header_cta_row(): void
     {
-        $keysUrl = \add_query_arg(['page' => self::SLUG], \admin_url('admin.php')) . '#ytb-mcp-generate';
-
         echo '<p style="margin:12px 0 4px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">';
-        echo '<a class="button button-primary" href="' . \esc_url($keysUrl) . '">' . \esc_html__('Generate Key', 'yt-builder-mcp') . '</a>';
         echo '<a class="button" href="' . \esc_url(self::DOCS_URL) . '" target="_blank" rel="noopener noreferrer">' . \esc_html__('Documentation', 'yt-builder-mcp') . '</a>';
         echo '<a class="button button-primary" href="' . \esc_url(self::HOME_URL) . '" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:4px;">';
-        echo '<span class="dashicons dashicons-external" aria-hidden="true"></span>';
+        echo '<span class="dashicons dashicons-external" aria-hidden="true" style="vertical-align:middle;line-height:1;"></span>';
         echo \esc_html__('wootsup.com', 'yt-builder-mcp');
         echo '</a>';
         echo '</p>';
@@ -272,7 +279,11 @@ final class SettingsPage
         // exactly once — the settings_errors() helper auto-clears on render.
         $fallbackToken = $this->consume_fallback_token();
 
-        echo '<h2 style="margin-top:0;">' . \esc_html__('Bearer Keys', 'yt-builder-mcp') . '</h2>';
+        // Task #37 (2026-05-28): the inner `<h2>Bearer Keys</h2>` title was
+        // removed — the active tab in the nav-tab-wrapper above already
+        // identifies the current page section. A spacer keeps breathing room
+        // between the tab-bar and the first content element.
+        echo '<div style="margin-top:20px;"></div>';
 
         $displayToken = $revealedToken ?? $fallbackToken;
         if ($displayToken !== null && $displayToken !== '') {
@@ -585,7 +596,12 @@ final class SettingsPage
             $endpoints,
         );
 
-        echo '<h2 style="margin-top:0;">' . \esc_html__('Diagnostics', 'yt-builder-mcp') . '</h2>';
+        // Task #37 (2026-05-28): the inner `<h2>Diagnostics</h2>` title was
+        // removed — the active tab in the nav-tab-wrapper above already
+        // identifies the current page section. The description paragraph
+        // remains as the lead-in. A spacer keeps breathing room between the
+        // tab-bar and the description.
+        echo '<div style="margin-top:20px;"></div>';
         echo '<p class="description">' . \esc_html__('Snapshot of the plugin\'s runtime state. Useful when reporting an issue — copy the markdown below and paste it into the GitHub Issue.', 'yt-builder-mcp') . '</p>';
 
         // Copy button + screen-reader-only confirmation. We put the
@@ -657,7 +673,12 @@ final class SettingsPage
     {
         $pluginVersion = defined('YTB_MCP_VERSION') ? (string) \YTB_MCP_VERSION : 'dev';
 
-        echo '<h2 style="margin-top:0;">' . \esc_html__('About YT Builder MCP for YOOtheme Pro (unofficial)', 'yt-builder-mcp') . '</h2>';
+        // Task #37 (2026-05-28): inner-tab title kept (it carries more context
+        // than just the tab name — it includes the unofficial-third-party
+        // legal note). Added top-spacer for breathing room between the tab-bar
+        // and the title — the previous `margin-top:0` placed it flush against
+        // the nav-tab-wrapper.
+        echo '<h2 style="margin-top:20px;">' . \esc_html__('About YT Builder MCP for YOOtheme Pro (unofficial)', 'yt-builder-mcp') . '</h2>';
 
         echo '<p>' . \esc_html__('Model Context Protocol (MCP) is an open standard that lets AI assistants talk to tools and data. YT Builder MCP exposes a Bearer-authenticated REST dialect of your YOOtheme Pro page builder; the companion NPM server, run locally next to your AI client, translates AI tool-calls into REST requests.', 'yt-builder-mcp') . '</p>';
 

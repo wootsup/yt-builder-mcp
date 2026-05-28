@@ -167,4 +167,183 @@ final class MultiItemsInspectorTest extends TestCase
             $this->inspector()->inspect('tpl', '/templates/tpl/layout/children/99'),
         );
     }
+
+    /**
+     * H-9 regression: pre-fix readers underreported `current_binding_level=none`
+     * for elements whose source shape carries the GraphQL field selector via
+     * `source.query.field.name` (e.g. relatedPosts under posts). Mirrors the
+     * Maria-Audit-v3 finding that drove the BindingSerializer rewrite.
+     */
+    public function test_item_with_nested_query_field_name_detects_item_level(): void
+    {
+        $GLOBALS['ytb_test_options'] = [
+            'yootheme' => [
+                'templates' => [
+                    'tpl' => [
+                        'layout' => [
+                            'type' => 'layout',
+                            'children' => [
+                                [
+                                    'type' => 'grid',
+                                    'props' => [],
+                                    'children' => [
+                                        [
+                                            'type' => 'grid_item',
+                                            'props' => [
+                                                'source' => [
+                                                    'query' => [
+                                                        // No top-level `name` — only nested field.name.
+                                                        'field' => ['name' => 'relatedPosts'],
+                                                    ],
+                                                ],
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $report = $this->inspector()->inspect(
+            'tpl',
+            '/templates/tpl/layout/children/0/children/0',
+        );
+
+        $this->assertSame('grid_item', $report['element_type']);
+        $this->assertTrue($report['is_item']);
+        $this->assertSame('item', $report['current_binding_level']);
+    }
+
+    /**
+     * H-9 second shape: binding carries no `query.*` at all, only
+     * `props.<el>.name` field mappings (the F-01-Rest canonical post-template
+     * read where YT4 expands `props.source.props.content.name=metaString`).
+     * Must still register as a binding.
+     */
+    public function test_item_with_only_field_mappings_detects_item_level(): void
+    {
+        $GLOBALS['ytb_test_options'] = [
+            'yootheme' => [
+                'templates' => [
+                    'tpl' => [
+                        'layout' => [
+                            'type' => 'layout',
+                            'children' => [
+                                [
+                                    'type' => 'grid',
+                                    'props' => [],
+                                    'children' => [
+                                        [
+                                            'type' => 'grid_item',
+                                            'props' => [
+                                                'source' => [
+                                                    'props' => [
+                                                        'content' => [
+                                                            'name' => 'metaString',
+                                                            'filters' => [],
+                                                        ],
+                                                    ],
+                                                ],
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $report = $this->inspector()->inspect(
+            'tpl',
+            '/templates/tpl/layout/children/0/children/0',
+        );
+
+        $this->assertSame('item', $report['current_binding_level']);
+    }
+
+    /**
+     * H-9 container-side mirror: container carrying a nested field.name
+     * binding must still surface as `container` (the WRONG pattern) plus
+     * warning/recommended_fix.
+     */
+    public function test_container_with_nested_query_field_name_surfaces_warning(): void
+    {
+        $GLOBALS['ytb_test_options'] = [
+            'yootheme' => [
+                'templates' => [
+                    'tpl' => [
+                        'layout' => [
+                            'type' => 'layout',
+                            'children' => [
+                                [
+                                    'type' => 'grid',
+                                    'props' => [
+                                        'source' => [
+                                            'query' => [
+                                                'field' => ['name' => 'relatedPosts'],
+                                            ],
+                                        ],
+                                    ],
+                                    'children' => [
+                                        ['type' => 'grid_item', 'props' => []],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $report = $this->inspector()->inspect(
+            'tpl',
+            '/templates/tpl/layout/children/0',
+        );
+
+        $this->assertSame('grid', $report['element_type']);
+        $this->assertTrue($report['is_container']);
+        $this->assertSame('container', $report['current_binding_level']);
+        $this->assertArrayHasKey('warning', $report);
+        $this->assertArrayHasKey('recommended_fix', $report);
+        $this->assertStringContainsString('grid_item', (string) $report['recommended_fix']);
+    }
+
+    /**
+     * Negative control: empty source object (no name, no field, no props)
+     * must NOT be treated as a binding.
+     */
+    public function test_empty_source_object_classifies_as_none(): void
+    {
+        $GLOBALS['ytb_test_options'] = [
+            'yootheme' => [
+                'templates' => [
+                    'tpl' => [
+                        'layout' => [
+                            'type' => 'layout',
+                            'children' => [
+                                [
+                                    'type' => 'grid_item',
+                                    'props' => [
+                                        'source' => ['query' => []],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $report = $this->inspector()->inspect(
+            'tpl',
+            '/templates/tpl/layout/children/0',
+        );
+
+        $this->assertSame('none', $report['current_binding_level']);
+    }
 }

@@ -57,15 +57,19 @@ $esc = static fn (string $v): string => htmlspecialchars($v, ENT_QUOTES, 'UTF-8'
         </div>
     </div>
 
-    <?php // Header CTA row — native Bootstrap buttons. "Generate Key" deep-links
-          // to the Keys tab + scrolls to the generate form; Documentation is a
+    <?php // Header CTA row — native Bootstrap buttons. Documentation is a
           // secondary outline button; wootsup.com is the prominent product-site
-          // CTA (the only link to the product home anywhere on the surface). ?>
+          // CTA (the only link to the product home anywhere on the surface).
+          //
+          // Task #37 (2026-05-28): the redundant "Generate Key" header CTA was
+          // removed for parity with the WP SettingsPage. The Bearer Keys tab is
+          // already a primary navigation surface, and the form below carries
+          // its own "Generate Key" submit button. Two buttons with the same
+          // label but different semantics (navigation deep-link vs form submit)
+          // was a UX-collision flagged by the operator. The Keys-tab deep-link
+          // anchor `#ytb-mcp-generate` remains on the generate form for any
+          // external links that still target it. ?>
     <div class="d-flex flex-wrap gap-2 mb-4">
-        <a class="btn btn-primary" href="index.php?option=com_ytbmcp&amp;tab=keys#ytb-mcp-generate">
-            <span class="icon-key" aria-hidden="true"></span>
-            <?php echo Text::_('COM_YTBMCP_GENERATE_KEY'); ?>
-        </a>
         <a class="btn btn-outline-secondary" href="<?php echo $esc(HtmlView::DOCS_URL); ?>" target="_blank" rel="noopener noreferrer">
             <?php echo Text::_('COM_YTBMCP_DOCUMENTATION'); ?>
         </a>

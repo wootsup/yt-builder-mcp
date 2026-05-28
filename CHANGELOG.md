@@ -5,7 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project follows [Semantic Versioning](https://semver.org/).
 
-## [1.1.6] `Latest` - 2026-05-26
+## [1.1.7] `Latest` - 2026-05-28
+
+### Fixed
+
+- **Element edits are safer under concurrent AI use. A clear retry signal replaces silent overwrites when another change landed first.**
+- **Element deletes now require explicit confirmation. AI agents see a preview (path, type, child count) before anything is removed.**
+- **Concurrent-write conflicts return a clean retry signal instead of a generic 500.**
+- **Incompatible element nesting (e.g. a grid-item placed under a slider) is rejected with a clear reason instead of failing silently.**
+- **Settings page polish on WordPress and Joomla: icon alignment fixed, duplicate titles removed, top-row button no longer collides with the form submit.**
+- **Joomla install auto-enables both required plugins, pinned by tests so future refactors cannot drop it.**
+- **Plugin version numbers across all 11 packaging files stay in sync. No more mismatched numbers in admin vs file headers.**
+- **MCP tool reference docs use the current plugin slug throughout.**
+- **YOOtheme Pro 5 verified end-to-end on WordPress and Joomla 6. Fixed a Joomla 6 + YT 5 boot error where the rate-limiter wiring used the wrong cache adapter, which previously broke even unauthenticated endpoints.**
+
+### Security
+
+- **Rate-limit responses include a retry header and a dedicated audit event. WordPress and Joomla now respond identically under load.**
+
+## [1.1.6] - 2026-05-26
 
 ### Changed
 
@@ -266,7 +284,8 @@ and this project follows [Semantic Versioning](https://semver.org/).
 - **Fixed** - Bug fixes
 - **Security** - Security updates
 
-[1.1.6]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.5...HEAD
+[1.1.7]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.6...HEAD
+[1.1.6]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.4...v1.1.5
 [1.1.4]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.3...v1.1.4
 [1.1.3]: https://github.com/wootsup/yt-builder-mcp/compare/v1.1.2...v1.1.3
